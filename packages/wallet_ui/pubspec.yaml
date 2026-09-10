@@ -1,0 +1,32 @@
+name: wallet_ui
+description: "Shared Flutter widgets built on the wallet engine (e.g. the tx-details dialog). Kept separate so non-UI consumers don't pull in Material. Strings are injected by the app; no l10n dependency."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  intl: any
+  flutter_svg: 2.2.3
+  qr_flutter: 4.1.0
+  camera: 0.12.0
+  flutter_zxing: 2.3.0
+  wallet_domain:
+    path: ../wallet_domain
+  wallet_infra:
+    path: ../wallet_infra
+  wallet_fiat:
+    path: ../wallet_fiat
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  assets:
+    - assets/icons/

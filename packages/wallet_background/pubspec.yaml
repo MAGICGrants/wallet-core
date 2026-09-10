@@ -1,0 +1,24 @@
+name: wallet_background
+description: "Background sync + incoming-tx notification orchestration: WorkManager, iOS BGTaskScheduler, Android foreground service. Kept separate so an app without background sync never compiles WorkManager or flutter_foreground_task."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  wallet_domain:
+    path: ../wallet_domain
+  wallet_infra:
+    path: ../wallet_infra
+
+  workmanager: 0.9.0+3
+  flutter_foreground_task: 8.17.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

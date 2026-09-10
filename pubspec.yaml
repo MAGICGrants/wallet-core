@@ -1,0 +1,48 @@
+name: wallet_core_workspace
+description: "Shared wallet packages for Skylight Wallet and Spice Wallet."
+publish_to: "none"
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+# Dart pub workspaces (Dart >=3.6). One shared lockfile, one `flutter pub get`
+# at the root, packages resolve each other by name without path deps.
+workspace:
+  - packages/wallet_infra
+  - packages/wallet_domain
+  - packages/wallet_openalias
+  - packages/wallet_monero
+  - packages/wallet_bitcoin
+  - packages/wallet_ethereum
+  - packages/wallet_background
+  - packages/wallet_fiat
+  - packages/wallet_ui
+
+dependency_overrides:
+  # Spice overrides web3dart with Cake's fork; pinned to a SHA here.
+  web3dart:
+    git:
+      url: https://github.com/cake-tech/web3dart.git
+      ref: aa3f932dbf54eda651b7bd01ad00204acf998bd0 # cake
+  intl: any
+
+  # bitcoin_base names blockchain_utils by BRANCH, so our own SHA pin on it
+  # conflicts with bitcoin_base's constraint. An override is the only way to fix
+  # the revision short of forking bitcoin_base — and like hashlib it does
+  # not transit package boundaries, so consuming apps must repeat it.
+  blockchain_utils:
+    git:
+      url: https://github.com/cake-tech/blockchain_utils
+      ref: 59fdf29d72068e0522a96a8953ed7272833a9f57 # cake-update-v2
+
+  # polyseed 0.0.7 calls the two-argument `crc32code(bytes, encoding)`, which
+  # hashlib dropped after 1.19.2. Without this pin the legacy word-list encoder
+  # fails to compile, which takes out every BIP39->legacy Monero seed
+  # conversion. Both app repos already carry the same override; it has to be
+  # repeated here because dependency_overrides do not transit package
+  # boundaries — a consumer of wallet_domain must also declare it.
+  hashlib: 1.19.2
+
+dev_dependencies:
+  flutter_lints: 6.0.0

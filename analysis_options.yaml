@@ -1,0 +1,28 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    # Vendored cargokit build tooling — irondash's, not ours, and it does not
+    # pass our lints. Vendored rather than submoduled because pub clones a git
+    # dependency without initialising submodules, so a submodule would reach
+    # consuming apps empty and the native build would fail; cypherstack/tor,
+    # which this workspace already depends on, vendors it for the same reason.
+    - packages/wallet_openalias/cargokit/**
+  language:
+    strict-casts: true
+    strict-raw-types: true
+  errors:
+    # Shared code is consumed by two apps; an unused element here is usually a
+    # half-finished port, not dead weight to ignore.
+    unused_element: warning
+    unused_field: warning
+
+linter:
+  rules:
+    # The whole point of this repo is that behaviour differences are injected,
+    # never branched on. Public API needs to be legible to both consumers.
+    public_member_api_docs: false
+    prefer_final_locals: true
+
+formatter:
+  page_width: 100

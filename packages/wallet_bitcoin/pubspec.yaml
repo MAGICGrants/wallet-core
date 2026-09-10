@@ -1,0 +1,42 @@
+name: wallet_bitcoin
+description: "Bitcoin CryptoWallet implementation: Electrum, branch-and-bound coin selection."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  wallet_domain:
+    path: ../wallet_domain
+  wallet_infra:
+    path: ../wallet_infra
+
+  # Cake Tech forks. Pinned to SHAs, not the branch names Spice uses — a branch
+  # ref means a rebuild of an old tag pulls whatever that branch has become,
+  # which is the same reproducibility hole the tor pin closes.
+  bitcoin_base:
+    git:
+      url: https://github.com/cake-tech/bitcoin_base
+      ref: bda0e2904effa799ec835b4578cc3fc5d31caa78 # cake-update-v11
+  # Declared because both wallets import it directly. The BRANCH ref matches
+  # bitcoin_base's own constraint so resolution doesn't conflict; the workspace
+  # override pins the actual revision to a SHA.
+  blockchain_utils:
+    git:
+      url: https://github.com/cake-tech/blockchain_utils
+      ref: cake-update-v2
+  # Same Cypher Stack fork as the rest of the workspace — upstream's
+  # nextInt(255) makes 0xff unreachable in generated entropy.
+  bip39:
+    git:
+      url: https://github.com/cypherstack/stack-bip39
+      ref: 0cd6d54e2860bea68fc50c801cb9db2a760192fb
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

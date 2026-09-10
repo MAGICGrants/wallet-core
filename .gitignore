@@ -1,0 +1,24 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+build/
+**/pubspec_overrides.yaml
+**/.flutter-plugins-dependencies
+
+# pubspec.lock is deliberately COMMITTED here, against the usual library
+# convention. `build-moneroc.sh` reads the monero_c commit out of a lockfile
+# and `build-moneroc-ci.sh` reads the clone URL from the same entry, so this
+# file is the authority for which native library our published artifacts
+# correspond to. It does not constrain consuming apps — they resolve their
+# own. See docs/decisions.md D14.
+
+# Test fixtures are large binary wallet files; see docs/testing.md for how to
+# regenerate them. Only the manifest is tracked.
+test_fixtures/wallets/**
+!test_fixtures/wallets/MANIFEST.json
+
+# Editors / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store

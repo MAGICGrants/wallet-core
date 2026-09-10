@@ -1,0 +1,21 @@
+name: wallet_fiat
+description: "Fiat exchange-rate model (Kraken, over Tor or clearnet), multicoin. Kept separate so an app without a fiat display doesn't pull it in."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  wallet_domain:
+    path: ../wallet_domain
+  wallet_infra:
+    path: ../wallet_infra
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

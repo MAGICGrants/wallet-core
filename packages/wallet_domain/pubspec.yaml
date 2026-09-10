@@ -1,0 +1,40 @@
+name: wallet_domain
+description: "Coin-agnostic wallet domain: CryptoWallet, WalletManager, seed and cache stores."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  wallet_infra:
+    path: ../wallet_infra
+
+  # Seed handling lives here, not in wallet_monero, so that SeedPolicy can
+  # classify and validate a mnemonic before any coin is involved. `polyseed`
+  # is a Monero-flavoured standard but the package is pure Dart and small.
+  # dart-bitcoin/bip39 has an unresolved bug that produces LOWER SEED ENTROPY
+  # than intended (dart-bitcoin/bip39#23) and is no longer maintained. Cypher
+  # Stack (Stack Wallet) maintain a fork with the fix, so we use theirs.
+  #
+  # The bug is in generation, not derivation — `mnemonicToSeed` and
+  # `validateMnemonic` are unaffected — so the known-answer vectors in
+  # wallet_monero/test/bip39_legacy_test.dart must not move when this pin
+  # changes. If they do, something other than entropy generation changed and
+  # the change is wrong.
+  bip39:
+    git:
+      url: https://github.com/cypherstack/stack-bip39
+      ref: 0cd6d54e2860bea68fc50c801cb9db2a760192fb # master @ 2023-06-07, includes the entropy fix
+  bip32: 2.0.0
+  polyseed: 0.0.7
+
+  http: 1.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Keep in step with the `environment:` block in the package pubspecs.
+env:
+  FLUTTER_VERSION: 3.41.7
+
+jobs:
+  analyze:
+    name: Analyze and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - run: flutter analyze --no-pub
+
+      # Our own source only. `dart format` reads `page_width` out of
+      # analysis_options.yaml but ignores its `exclude:`, so a bare
+      # `dart format .` reformats the vendored cargokit build tool under
+      # wallet_openalias — 17 files of irondash's code, rewritten to our style,
+      # in a diff that has nothing to do with the change being reviewed.
+      - run: dart format --output=none --set-exit-if-changed packages/*/lib packages/*/test packages/*/tool
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # Deliberately a separate step per package: a workspace-wide `flutter test`
+      # does not exist, and looping in one step hides which package failed.
+      - name: wallet_infra
+        working-directory: packages/wallet_infra
+        run: flutter test --no-pub
+
+      - name: wallet_domain
+        working-directory: packages/wallet_domain
+        run: flutter test --no-pub
+
+      # The record grammar and the adapter onto wallet_domain's AliasResolver.
+      # Pure Dart: the FFI seam returns TXT records rather than an address
+      # precisely so everything above it runs here, with no Rust in the job.
+      - name: wallet_openalias
+        working-directory: packages/wallet_openalias
+        run: flutter test --no-pub
+
+      - name: wallet_bitcoin
+        working-directory: packages/wallet_bitcoin
+        run: flutter test --no-pub
+
+      - name: wallet_ethereum
+        working-directory: packages/wallet_ethereum
+        run: flutter test --no-pub
+
+      # The corpus fixtures that need no monero_c — plaintext prefs and the two
+      # corruption cases — so they gate every push rather than only the nightly.
+      # The wallet-file fixtures are skipped here and covered by native.yml.
+      - name: Generate the FFI-free fixture corpus
+        working-directory: packages/wallet_monero
+        run: dart run tool/make_fixtures.dart
+
+      # Runs without monero_c: the L3 cases skip themselves when MONERO_LIB_PATH
+      # is unset, leaving the L1/L2 tiers. native.yml is what builds the library
+      # and turns those skips into failures (REQUIRE_MONERO_FFI=1).
+      - name: wallet_monero
+        working-directory: packages/wallet_monero
+        env:
+          REQUIRE_FIXTURE_CORPUS: '1'
+        run: flutter test --no-pub
+
+  openalias-rust:
+    name: OpenAlias resolver (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # Nothing else in CI compiles this crate: the unit job is pure Dart by
+      # design, and native.yml builds monero_c, not this. So without this step
+      # the answer-acceptance rules in `secure_txt_answers` — the code that
+      # decides whether a DNSSEC-signed answer is an answer to the question we
+      # asked — are tested by nothing.
+      #
+      # No Flutter and no cargokit needed; `cargo test` builds for the host, and
+      # rust-toolchain.toml pins the channel for rustup to fetch. `--locked`
+      # because a resolver's dependency tree is not something to let drift.
+      - name: cargo test
+        working-directory: packages/wallet_openalias/rust
+        run: cargo test --locked
+
+  native-crypto:
+    name: Native crypto (webcrypto BoringSSL)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # `dart run webcrypto:setup` builds BoringSSL for the host.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build golang-go
+
+      - run: flutter pub get
+
+      - name: Build BoringSSL for the host
+        run: dart run webcrypto:setup
+
+      # This job is NOT optional. The unit tier substitutes the pure-Dart
+      # PointyCastlePbkdf2 for the production WebCryptoPbkdf2 (package:webcrypto
+      # cannot resolve its symbols under `flutter test` without the build above).
+      # These tests are the only place that substitution is shown to be sound —
+      # without them the fast tests prove something about a backend we do not
+      # ship. See docs/testing.md.
+      #
+      # REQUIRE_NATIVE_CRYPTO=1 makes the tests FAIL rather than skip when the
+      # backend is unavailable, so a broken setup step can't turn this job green
+      # by quietly skipping everything.
+      - name: wallet_infra (production KDF)
+        working-directory: packages/wallet_infra
+        env:
+          REQUIRE_NATIVE_CRYPTO: '1'
+        run: flutter test --no-pub

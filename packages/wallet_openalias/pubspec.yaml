@@ -1,0 +1,53 @@
+name: wallet_openalias
+description: "OpenAlias v1/v2 resolution with end-to-end DNSSEC validation, over Tor. Rust (hickory) FFI behind wallet_domain's AliasResolver."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # For `ResolvedAlias`, `AliasResolver` and `NotAnAliasException`. The
+  # dependency runs this way — resolver depends on policy, never the reverse —
+  # so an app can take the wallet layer without the Rust toolchain that comes
+  # with this package.
+  wallet_domain:
+    path: ../wallet_domain
+
+  ffi: 2.1.4
+  plugin_platform_interface: 2.1.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # Test-only. `alias_resolver_test.dart` needs `MemoryPreferenceStore` and
+  # `TorSettingsService` to stand a real `CryptoWallet` up without a device. It
+  # arrives transitively through wallet_domain either way, but a package that
+  # imports it must say so.
+  wallet_infra:
+    path: ../wallet_infra
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true
+      linux:
+        ffiPlugin: true
+      macos:
+        ffiPlugin: true
+      windows:
+        ffiPlugin: true
+
+# `ffigen` was a dev dependency here in both apps, with an `ffigen.yaml` pointing
+# at `rust/target/openalias_ffi.h`. Neither app ever ran it and neither has a
+# generated bindings file — the three symbols this package uses are looked up by
+# hand. Both are dropped rather than carried: a generator config nobody runs,
+# naming a header that only exists mid-build, reads as though the bindings are
+# generated and reviewed when they are written and reviewed by hand.

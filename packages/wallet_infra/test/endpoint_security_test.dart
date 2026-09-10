@@ -1,0 +1,184 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_infra/wallet_infra.dart';
+
+/// The three plaintext cases the old `uri.scheme == 'https'` test could not
+/// tell apart are the reason this file exists, so each has its own group. The
+/// property under test is not "is this https"; it is "may a secret cross this".
+void main() {
+  group('TLS', () {
+    test('https is confidential', () {
+      expect(classifyEndpoint(Uri.parse('http://example.com')), ChannelConfidentiality.none);
+      expect(classifyEndpoint(Uri.parse('https://example.com')), ChannelConfidentiality.tls);
+      expect(classifyEndpoint(Uri.parse('HTTPS://example.com')), ChannelConfidentiality.tls);
+      expect(classifyEndpoint(Uri.parse('wss://example.com')), ChannelConfidentiality.tls);
+    });
+  });
+
+  group('onion', () {
+    // A v3 address is 56 base32 characters. Content is irrelevant to the shape
+    // check, so this is 'a' * 51 + '234567': valid base32, right length.
+    const v3 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567';
+    const v2 = 'abcdefghij234567';
+
+    test('plaintext to a v3 onion is confidential', () {
+      expect(v3.length, 56);
+      expect(classifyEndpoint(Uri.parse('http://$v3.onion:18090')), ChannelConfidentiality.onion);
+      expect(classifyEndpoint(Uri.parse('http://$v3.onion')), ChannelConfidentiality.onion);
+    });
+
+    test('the retired v2 shape still classifies', () {
+      expect(v2.length, 16);
+      expect(classifyEndpoint(Uri.parse('http://$v2.onion')), ChannelConfidentiality.onion);
+    });
+
+    test('a subdomain of an onion is still that onion service', () {
+      expect(classifyEndpoint(Uri.parse('http://sub.$v3.onion')), ChannelConfidentiality.onion);
+    });
+
+    test('a trailing root dot does not defeat the match', () {
+      expect(classifyEndpoint(Uri.parse('http://$v3.onion./x')), ChannelConfidentiality.onion);
+    });
+
+    test('a mistyped onion is NOT promoted to confidential', () {
+      // The whole risk of a suffix test: `myserver.onion` looks like an onion,
+      // will never resolve, and must not be treated as protecting a view key.
+      expect(classifyEndpoint(Uri.parse('http://myserver.onion')), ChannelConfidentiality.none);
+      // Right length, wrong alphabet (base32 has no '0', '1', '8' or '9').
+      const bad = '00000000000000000000000000000000000000000000000000234567';
+      expect(bad.length, 56);
+      expect(classifyEndpoint(Uri.parse('http://$bad.onion')), ChannelConfidentiality.none);
+    });
+
+    test('.onion as a non-final label does not count', () {
+      // `evil.com` is the host that is actually contacted here.
+      expect(classifyEndpoint(Uri.parse('http://$v3.onion.evil.com')), ChannelConfidentiality.none);
+    });
+  });
+
+  group('local', () {
+    test('loopback by name and by literal', () {
+      for (final host in ['localhost', 'foo.localhost', '127.0.0.1', '127.1.2.3', '[::1]']) {
+        expect(
+          classifyEndpoint(Uri.parse('http://$host:18081')),
+          ChannelConfidentiality.local,
+          reason: host,
+        );
+      }
+    });
+
+    test('RFC 1918 and link-local', () {
+      for (final host in [
+        '10.0.0.1',
+        '172.16.0.1',
+        '172.31.255.254',
+        '192.168.1.1',
+        '169.254.1.1',
+        '[fd00::1]', // IPv6 unique-local
+        '[fe80::1]', // IPv6 link-local
+      ]) {
+        expect(
+          classifyEndpoint(Uri.parse('http://$host:18081')),
+          ChannelConfidentiality.local,
+          reason: host,
+        );
+      }
+    });
+
+    test('an IPv4-mapped IPv6 private address resolves to its IPv4 form', () {
+      expect(
+        classifyEndpoint(Uri.parse('http://[::ffff:192.168.1.10]:18081')),
+        ChannelConfidentiality.local,
+      );
+    });
+
+    test('an mDNS .local name is a LAN name, not a routable host', () {
+      // A self-hosted node advertised over Bonjour/Avahi. Before this, `.local`
+      // fell through to `none` and got forced to https, breaking the plaintext
+      // port such a node serves.
+      for (final host in ['mynode.local', 'monerod.local']) {
+        expect(
+          classifyEndpoint(Uri.parse('http://$host:18081')),
+          ChannelConfidentiality.local,
+          reason: host,
+        );
+        expect(requiresSecureTransport(host), isFalse, reason: host);
+      }
+    });
+
+    test('near-misses outside the private ranges are not local', () {
+      for (final host in [
+        '172.15.0.1', // below 172.16/12
+        '172.32.0.1', // above 172.16/12
+        '11.0.0.1',
+        '192.169.1.1',
+        '8.8.8.8',
+        '100.64.0.1', // CGNAT: routable inside a carrier network, shared
+      ]) {
+        expect(
+          classifyEndpoint(Uri.parse('http://$host:18081')),
+          ChannelConfidentiality.none,
+          reason: host,
+        );
+      }
+    });
+  });
+
+  group('fails closed', () {
+    test('a schemeless host:port is not confidential', () {
+      // The trap this guards: connection addresses are stored as a bare
+      // `host:port`, and `Uri.parse` puts the host in `scheme` and leaves
+      // `host` empty. A caller that forgot the scheme must be refused.
+      final uri = Uri.parse('example.com:18090');
+      expect(uri.host, isEmpty);
+      expect(classifyEndpoint(uri), ChannelConfidentiality.none);
+    });
+
+    test('an empty URI is not confidential', () {
+      expect(classifyEndpoint(Uri.parse('')), ChannelConfidentiality.none);
+    });
+  });
+
+  group('requireConfidentialChannel', () {
+    test('throws for plaintext clearnet, and names neither the secret nor the path', () {
+      Object? caught;
+      try {
+        requireConfidentialChannel(
+          Uri.parse('http://lws.example.com:18090/upsert_subaddrs?token=abc'),
+          carrying: 'the private view key',
+        );
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught, isA<InsecureChannelException>());
+      final text = caught.toString();
+      expect(text, contains('the private view key'));
+      expect(text, contains('lws.example.com:18090'));
+      // The path and query are not this exception's business to repeat.
+      expect(text, isNot(contains('upsert_subaddrs')));
+      expect(text, isNot(contains('token')));
+    });
+
+    test('permits each confidential shape', () {
+      const v3 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567';
+      for (final url in [
+        'https://lws.example.com/upsert_subaddrs',
+        'http://$v3.onion/upsert_subaddrs',
+        'http://127.0.0.1:18090/upsert_subaddrs',
+        'http://192.168.1.50:18090/upsert_subaddrs',
+      ]) {
+        expect(
+          () => requireConfidentialChannel(Uri.parse(url), carrying: 'the private view key'),
+          returnsNormally,
+          reason: url,
+        );
+      }
+    });
+  });
+
+  test('isConfidential is the one question a secret-holder asks', () {
+    expect(ChannelConfidentiality.tls.isConfidential, isTrue);
+    expect(ChannelConfidentiality.onion.isConfidential, isTrue);
+    expect(ChannelConfidentiality.local.isConfidential, isTrue);
+    expect(ChannelConfidentiality.none.isConfidential, isFalse);
+  });
+}

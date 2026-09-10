@@ -1,0 +1,41 @@
+name: wallet_infra
+description: "Transport, storage and logging primitives shared by MAGIC Grants wallets. No coin or app knowledge."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # PINNED to a SHA. `ref: main` in the apps was a reproducible-build and
+  # supply-chain hole: an F-Droid rebuild of an old tag would pull whatever
+  # main happened to be. Bump this deliberately, never implicitly.
+  tor_ffi_plugin:
+    git:
+      url: https://github.com/cypherstack/tor
+      ref: c2706eeb66174273a4a98113d7a8cd910ba124e6
+
+  path_provider: 2.1.5
+  shared_preferences: 2.5.3
+  flutter_secure_storage: 9.2.4
+  share_plus: 11.1.0
+  screen_protector: 1.5.2
+  # ui/biometric_auth.dart — app-lock device authentication.
+  local_auth: 2.3.0
+  # ui/notification_service.dart — local incoming-tx notifications.
+  flutter_local_notifications: 19.5.0
+  path: 1.9.1
+
+  # WalletFileCrypto: AES-256-GCM (pointycastle) keyed by PBKDF2-HMAC-SHA256
+  # (webcrypto -> BoringSSL via FFI, ~10-50x faster than pure Dart).
+  pointycastle: 3.9.1
+  webcrypto: 0.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

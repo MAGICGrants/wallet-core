@@ -1,0 +1,5 @@
+<!-- No `package` attribute: AGP 8 takes the namespace from build.gradle, and a
+     manifest that also declares one is an error when the two differ. It did
+     differ after the plugin was renamed to wallet_openalias. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+</manifest>
