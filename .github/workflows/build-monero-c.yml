@@ -363,4 +363,4 @@ jobs:
             `${{ steps.pin.outputs.commit }}`, pinned in wallet-core's `pubspec.lock`.
           branch: update-moneroc-libs
           delete-branch: true
-          reviewers: SamsungGalaxyPlayer,Keeqler
+          reviewers: SamsungGalaxyPlayer
