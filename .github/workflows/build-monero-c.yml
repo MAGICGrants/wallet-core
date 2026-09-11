@@ -164,7 +164,7 @@ jobs:
           git config --global --add safe.directory '*'
           git config --global user.email "info@magicgrants.org"
           git config --global user.name "MAGIC Grants"
-          git clone https://github.com/vtnerd/monero_c.git /tmp/monero_c
+          git clone https://github.com/magicgrants/monero_c.git /tmp/monero_c
           cd /tmp/monero_c
           git checkout "$MONEROC_COMMIT"
           git submodule update --init --recursive
