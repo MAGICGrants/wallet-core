@@ -214,6 +214,29 @@ void main() {
       expect(wallet.unusedSubaddressIndex, 1);
     });
 
+    test('switching to a node clears a stale not-supported flag', () async {
+      // An LWS that has run out of subaddresses persists isSupported: false. The
+      // index is shared across both modes, so after the switch it often has not
+      // moved -- and the unchanged-index early return must not be allowed to
+      // carry that false into node mode, or the receive screen warns about a
+      // subaddress limit that only a light-wallet server can have.
+      await openWallet();
+      wallet.postJson = (url, body) async => throw const SocketException('out of subaddresses');
+      await wallet.loadUnusedSubaddressIndex();
+      await wallet.setUnusedSubaddressIndex(1, isSupported: false);
+      expect(wallet.unusedSubaddressIndexIsSupported, isFalse);
+
+      await openWallet(type: 'node');
+      await wallet.loadUnusedSubaddressIndex();
+
+      expect(
+        wallet.unusedSubaddressIndexIsSupported,
+        isTrue,
+        reason: 'a node has no subaddress limit',
+      );
+      expect(wallet.unusedSubaddressIndex, 1, reason: 'the index itself is unchanged');
+    });
+
     test('an unchanged index does not re-probe the server', () async {
       await openWallet();
       await wallet.loadUnusedSubaddressIndex();

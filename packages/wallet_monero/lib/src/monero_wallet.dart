@@ -1692,13 +1692,24 @@ class MoneroWallet extends CryptoWallet {
       nextSubaddrIndex = current;
     }
 
-    if (_unusedSubaddressIndex == nextSubaddrIndex) return;
-
-    // A node provisions nothing; every index is already scannable.
+    // A node provisions nothing; every index is already scannable. Asserted
+    // *before* the unchanged-index early return below, because the index and
+    // the supported flag have different lifetimes: the index is deliberately
+    // shared across LWS and node, while the flag describes one server. An LWS
+    // that ran out of subaddresses leaves `isSupported: false` persisted, and
+    // if the index happens not to move across the switch, an early return here
+    // would carry that `false` into node mode -- where the receive screen shows
+    // "you have reached the maximum number of subaddresses supported by this
+    // server" about a node that has no such limit.
     if (_isNodeMode) {
-      await setUnusedSubaddressIndex(nextSubaddrIndex, isSupported: true);
+      if (_unusedSubaddressIndex != nextSubaddrIndex ||
+          _unusedSubaddressIndexIsSupported != true) {
+        await setUnusedSubaddressIndex(nextSubaddrIndex, isSupported: true);
+      }
       return;
     }
+
+    if (_unusedSubaddressIndex == nextSubaddrIndex) return;
 
     try {
       final isSupported = await isSubaddressSupported(nextSubaddrIndex);
