@@ -60,5 +60,16 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(await SharedPreferencesService.get<String>(SettingsKeys.language), 'en');
     });
+
+    test('setLanguage notifies synchronously, without waiting on the write', () {
+      final model = LanguageModel();
+      var notified = false;
+      model.addListener(() => notified = true);
+
+      model.setLanguage('pt');
+
+      expect(notified, isTrue, reason: 'listeners must fire before the persist await');
+      expect(model.language, 'pt');
+    });
   });
 }
