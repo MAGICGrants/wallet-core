@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:wallet_infra/wallet_infra.dart' show LogFileInfo, exportLogFiles;
 
+import 'design/toast.dart';
+
 /// Translated strings for [ExportLogsDialog]. The app builds this from its own
 /// l10n and passes it in; the package carries no localization of its own.
 class ExportLogsLabels {
@@ -40,7 +42,7 @@ class ExportLogsDialog {
                   // Capture before pop: the tile's context is defunct afterward.
                   // The RenderBox rect anchors the iPad share popover; without it
                   // the share throws on iPad and looks like nothing happening.
-                  final messenger = ScaffoldMessenger.of(context);
+                  final toast = BrandToast.of(context);
                   final box = context.findRenderObject() as RenderBox?;
                   final origin = box != null && box.hasSize
                       ? box.localToGlobal(Offset.zero) & box.size
@@ -49,7 +51,7 @@ class ExportLogsDialog {
                   try {
                     await exportLogFiles([file], sharePositionOrigin: origin);
                   } catch (_) {
-                    messenger.showSnackBar(SnackBar(content: Text(labels.exportError)));
+                    toast.show(labels.exportError);
                   }
                 },
                 leading: const Icon(Icons.description_outlined),

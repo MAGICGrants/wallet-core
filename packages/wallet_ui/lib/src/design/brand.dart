@@ -316,6 +316,13 @@ ThemeData _brandTheme(Brightness brightness) {
     secondary: BrandColors.primaryDeep,
     surface: BrandColors.paper,
     onSurface: BrandColors.ink,
+    // Pinned, not left to the seed. Material reaches for the inverse pair for
+    // SnackBars, tooltips and selection chrome, and `fromSeed` derives it from
+    // the primary hue -- which is orange in both apps, so every app got a warm
+    // brown chip regardless of the palette's own `inverseSurface`, and a *light*
+    // one in dark mode. The palettes define the token; Material should use it.
+    inverseSurface: BrandColors.inverseSurface,
+    onInverseSurface: BrandColors.onPrimary,
   );
   return ThemeData(
     colorScheme: scheme,

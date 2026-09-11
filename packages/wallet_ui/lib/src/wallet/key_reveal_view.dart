@@ -8,20 +8,14 @@ import '../design/brand_screen_header.dart';
 import '../design/section_header.dart';
 
 /// One labelled value in a [KeyRevealView] — an address, key, seed phrase or
-/// height. [sensitive] is forwarded to the copy callback; [revealable] blurs the
-/// value behind a tap-to-reveal overlay (used for secret keys / seeds).
+/// height. [revealable] blurs the value behind a tap-to-reveal overlay (used
+/// for secret keys / seeds).
 class KeyRevealField {
   final String label;
   final String value;
-  final bool sensitive;
   final bool revealable;
 
-  const KeyRevealField({
-    required this.label,
-    required this.value,
-    this.sensitive = true,
-    this.revealable = false,
-  });
+  const KeyRevealField({required this.label, required this.value, this.revealable = false});
 }
 
 /// A read-only screen of labelled value cards, each with a copy chip and an
@@ -35,7 +29,7 @@ class KeyRevealView extends StatefulWidget {
   final String revealLabel;
   final String? warning;
   final Widget? headerIcon;
-  final void Function(String value, {required bool sensitive}) onCopy;
+  final void Function(String value) onCopy;
   final VoidCallback? onBack;
   final Widget? footer;
 
@@ -119,10 +113,7 @@ class _KeyRevealViewState extends State<KeyRevealView> {
                           _KeyField(
                             label: widget.fields[i].label,
                             value: widget.fields[i].value,
-                            onCopy: () => widget.onCopy(
-                              widget.fields[i].value,
-                              sensitive: widget.fields[i].sensitive,
-                            ),
+                            onCopy: () => widget.onCopy(widget.fields[i].value),
                             revealLabel: widget.revealLabel,
                             hidden: widget.fields[i].revealable && !_revealed.contains(i),
                             onReveal: widget.fields[i].revealable

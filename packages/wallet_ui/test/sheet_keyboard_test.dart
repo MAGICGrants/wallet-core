@@ -33,7 +33,7 @@ void main() {
 
     final dpr = tester.view.devicePixelRatio;
     final screenHeight = tester.view.physicalSize.height / dpr;
-    final fieldBottom = () => tester.getBottomLeft(find.byKey(const Key('field'))).dy;
+    double fieldBottom() => tester.getBottomLeft(find.byKey(const Key('field'))).dy;
 
     // No keyboard: the sheet sits against the bottom edge as usual.
     expect(fieldBottom(), greaterThan(screenHeight - _keyboard));
