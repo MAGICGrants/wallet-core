@@ -199,7 +199,13 @@ class EthereumExplorerClient implements EthereumExplorerApi {
     // the exit. Mirrors the Monero view-key upload (monero_wallet.dart); `probe`
     // reaches it too, so an insecure explorer is refused at setup rather than
     // saved and silently failing every fetch afterwards.
-    requireConfidentialChannel(Uri.parse(url), carrying: 'your wallet address');
+    // See [EthereumRpcClient]: a configured SOCKS port is Tor whenever the
+    // connection uses Tor, and a non-Tor proxy cannot reach `.onion` anyway.
+    requireConfidentialChannel(
+      Uri.parse(url),
+      carrying: 'your wallet address',
+      viaTor: socksPort != null && socksPort > 0,
+    );
     if (socksPort != null && socksPort > 0) {
       final uri = Uri.parse(url);
       final socket = await SOCKSSocket.create(

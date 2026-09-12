@@ -405,14 +405,38 @@ void main() {
       expect(posts.single.url.scheme, 'https');
     });
 
-    test('an onion service is used in the clear — the address is the key', () async {
+    test('an onion reached over Tor is used in the clear — the address is the key', () async {
       await openWallet();
       const v3 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567';
-      connect(address: '$v3.onion:18090');
+      await TorSettingsService.sharedInstance.save(torMode: TorMode.disabled);
+      connect(address: '$v3.onion:18090', useTor: true);
 
-      expect(await wallet.isSubaddressSupported(1), isTrue);
-      expect(posts.single.url.scheme, 'http');
-      expect(posts.single.url.host, '$v3.onion');
+      // No Tor proxy is listening here, so this cannot reach the point of
+      // sending. What it does prove is *which* refusal fires: the confidential
+      // channel gate passed (an onion carried by Tor needs no TLS) and the
+      // request stopped later, on the missing proxy. An InsecureChannelException
+      // would mean the gate had rejected a legitimately protected route.
+      await expectLater(
+        wallet.isSubaddressSupported(1),
+        throwsA(isNot(isA<InsecureChannelException>())),
+      );
+      expect(posts, isEmpty);
+    });
+
+    test('an onion with Tor off is refused before the key is read (audit M-01)', () async {
+      await openWallet();
+      const v3 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567';
+      // The reachable bad state: global Tor disabled, so the connection form
+      // forces useTor false, and an onion address saves anyway. The scheme
+      // derivation leaves this on plaintext http, and before the route was
+      // threaded into the gate the view key went out on an unproxied socket.
+      connect(address: '$v3.onion:18090', useTor: false);
+
+      await expectLater(
+        wallet.isSubaddressSupported(1),
+        throwsA(isA<InsecureChannelException>()),
+      );
+      expect(posts, isEmpty, reason: 'the key must not reach a socket at all');
     });
 
     test('a LAN server is used in the clear', () async {

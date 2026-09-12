@@ -1744,7 +1744,13 @@ class MoneroWallet extends CryptoWallet {
     // `secretViewKey`, so a refused request never pulls the key out of the native
     // wallet. Both callers ([loadSubaddressSupport], [loadUnusedSubaddressIndex])
     // catch and fall back to the primary address.
-    requireConfidentialChannel(url, carrying: 'the private view key');
+    //
+    // [viaTor] is what closes the onion-without-Tor hole: an onion address can
+    // be saved with Tor off (the connection form forces `useTor` false when Tor
+    // is globally disabled), and the scheme derivation above leaves it on
+    // plaintext http. Passing the real route means that combination is refused
+    // here instead of being waved through on the strength of the hostname.
+    requireConfidentialChannel(url, carrying: 'the private view key', viaTor: connectionUseTor);
 
     final body = jsonEncode({
       'address': getPrimaryAddress(),

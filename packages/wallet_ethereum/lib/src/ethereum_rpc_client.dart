@@ -85,8 +85,18 @@ class EthereumRpcClient implements EthereumRpcApi {
     // opened; local and onion endpoints pass, plaintext-clearnet is refused. The
     // scheme is normally https already (configure defaults to it), so this
     // catches an explicit `http://` the user typed.
-    requireConfidentialChannel(Uri.parse(url), carrying: 'your wallet address');
+    //
+    // `CryptoWallet` hands this layer Tor's own port whenever the connection
+    // uses Tor, so a configured proxy is the only way an onion RPC has ever
+    // reached anything here. A user-supplied non-Tor proxy cannot resolve
+    // `.onion` at all, so it fails to connect rather than leaking: the hostname
+    // reaches the user's own proxy and no further.
     final socksPort = _socksPort;
+    requireConfidentialChannel(
+      Uri.parse(url),
+      carrying: 'your wallet address',
+      viaTor: socksPort != null && socksPort > 0,
+    );
     if (socksPort != null && socksPort > 0) {
       // Bounded inside the read rather than by a `.timeout()` around it: the
       // wrapper completed this future while the socket kept filling a buffer
