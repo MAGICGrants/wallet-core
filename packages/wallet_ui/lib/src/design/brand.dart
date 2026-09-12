@@ -323,6 +323,26 @@ ThemeData _brandTheme(Brightness brightness) {
     // one in dark mode. The palettes define the token; Material should use it.
     inverseSurface: BrandColors.inverseSurface,
     onInverseSurface: BrandColors.onPrimary,
+    // The surface *container* ramp, pinned for the same reason. Material 3
+    // paints dialogs, menus, chips and bottom sheets from these rather than
+    // from [surface], and `fromSeed` tints them from the primary hue -- which
+    // is orange in both apps. Skylight's ramp came out byte-identical to
+    // Spice's (#FCEAE4, #F6E4DE, #F1DFD9) against a cool #F2F6FA surface, so
+    // its Export Logs dialog rendered cream inside a blue app.
+    surfaceContainerLowest: BrandColors.paper,
+    surfaceContainerLow: BrandColors.card,
+    surfaceContainer: BrandColors.surfaceSunken,
+    surfaceContainerHigh: BrandColors.surfaceTinted,
+    surfaceContainerHighest: BrandColors.surfaceMuted,
+    // Secondary text, dividers and outlines on those surfaces.
+    onSurfaceVariant: BrandColors.inkMuted,
+    outline: BrandColors.border,
+    outlineVariant: BrandColors.hairline,
+    // Material's default error red is a generic #BA1A1A, not the brand's.
+    error: BrandColors.error,
+    onError: BrandColors.onPrimary,
+    errorContainer: BrandColors.errorBg,
+    onErrorContainer: BrandColors.error,
   );
   return ThemeData(
     colorScheme: scheme,
