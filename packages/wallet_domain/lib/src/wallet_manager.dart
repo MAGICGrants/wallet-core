@@ -127,6 +127,20 @@ class WalletManager with ChangeNotifier {
   /// Clears the in-memory password, e.g. on background with app lock enabled.
   void clearPassword() => _password = null;
 
+  /// Arms the App Lock re-lock as the app goes to the background.
+  ///
+  /// Returns whether the next resume should show the lock screen, and drops the
+  /// in-memory password on the way out so a resumed app cannot decrypt anything
+  /// until the user authenticates again.
+  Future<bool> armAppLockRelock() async {
+    final enabled =
+        await SharedPreferencesService.get<bool>(DomainPreferenceKeys.appLockEnabled) ?? false;
+    if (!enabled) return false;
+    if (!await hasAnyExistingWallet()) return false;
+    clearPassword();
+    return true;
+  }
+
   Future<void> persistMobileWalletPassword() async {
     final password = _password;
     if (password == null) throw StateError('Cannot persist password: none set');

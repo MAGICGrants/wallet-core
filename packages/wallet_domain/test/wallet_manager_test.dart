@@ -71,6 +71,47 @@ void main() {
 
   WalletManager manager(List<CryptoWallet> coins) => WalletManager(coins: () => coins);
 
+  group('armAppLockRelock', () {
+    Future<void> setAppLock(bool on) =>
+        SharedPreferencesService.set<bool>(DomainPreferenceKeys.appLockEnabled, on);
+
+    test('with the lock on and a wallet present, drops the password and arms', () async {
+      installSkylight();
+      await setAppLock(true);
+      final m = manager([FakeWallet('XMR')..existing = true])..useGeneratedPassword();
+      expect(m.hasPassword, isTrue);
+
+      expect(await m.armAppLockRelock(), isTrue);
+      expect(m.hasPassword, isFalse, reason: 'a resumed app must not decrypt anything');
+    });
+
+    test('with the lock off, the password survives backgrounding', () async {
+      installSkylight();
+      await setAppLock(false);
+      final m = manager([FakeWallet('XMR')..existing = true])..useGeneratedPassword();
+
+      expect(await m.armAppLockRelock(), isFalse);
+      expect(m.hasPassword, isTrue);
+    });
+
+    test('no wallet yet: onboarding is never interrupted by a lock screen', () async {
+      installSkylight();
+      await setAppLock(true);
+      final m = manager([FakeWallet('XMR')..existing = false])..useGeneratedPassword();
+
+      expect(await m.armAppLockRelock(), isFalse);
+      expect(m.hasPassword, isTrue, reason: 'a half-created wallet must stay usable');
+    });
+
+    test('unset preference is treated as off', () async {
+      installSpice();
+      final m = manager([FakeWallet('XMR')..existing = true])..useGeneratedPassword();
+
+      expect(await m.armAppLockRelock(), isFalse);
+      expect(m.hasPassword, isTrue);
+    });
+  });
+
   group('coin registry is app-supplied', () {
     test('registers exactly what the app passes', () {
       installSpice();
