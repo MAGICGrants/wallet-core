@@ -111,7 +111,16 @@ Future<void> exportLogFiles(List<LogFileInfo> files, {Rect? sharePositionOrigin}
   }
 
   final xFiles = files.map((f) => XFile(f.path)).toList();
-  await SharePlus.instance.share(
+  final result = await SharePlus.instance.share(
     ShareParams(files: xFiles, sharePositionOrigin: sharePositionOrigin),
+  );
+
+  // A share sheet that never appears is not an exception -- share_plus reports
+  // it as a status. Recorded because this is the log-export path: a silent
+  // failure here leaves nothing behind to explain itself with.
+  log(
+    result.status == ShareResultStatus.success ? LogLevel.info : LogLevel.warn,
+    'Log export share sheet: ${result.status.name} (${xFiles.length} file(s), '
+    'origin=${sharePositionOrigin ?? 'none'})',
   );
 }

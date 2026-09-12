@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:wallet_infra/wallet_infra.dart' show LogFileInfo, exportLogFiles;
+import 'package:wallet_infra/wallet_infra.dart'
+    show LogFileInfo, LogLevel, exportLogFiles, log;
 
 import 'design/toast.dart';
 
@@ -12,6 +13,24 @@ class ExportLogsLabels {
   final String exportError;
 
   const ExportLogsLabels({required this.title, required this.cancel, required this.exportError});
+}
+
+/// The tapped row's rect in global coordinates, or null if it cannot be
+/// measured.
+///
+/// Only iPad needs it -- it anchors the share popover -- so failing to get one
+/// must never cost the user the export. The previous `as RenderBox?` was an
+/// unguarded cast on the result of `findRenderObject()`, which throws rather
+/// than yielding null whenever the render object is anything else.
+Rect? _anchorRect(BuildContext context) {
+  try {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  } catch (error) {
+    log(LogLevel.warn, 'Could not anchor the share sheet: $error');
+    return null;
+  }
 }
 
 /// Lists the app's log files; tapping one shares it via the system share sheet.
@@ -39,18 +58,24 @@ class ExportLogsDialog {
 
               return ListTile(
                 onTap: () async {
-                  // Capture before pop: the tile's context is defunct afterward.
-                  // The RenderBox rect anchors the iPad share popover; without it
-                  // the share throws on iPad and looks like nothing happening.
+                  // Captured before the pop: this tile's context is defunct
+                  // afterward. The rect anchors the iPad share popover.
                   final toast = BrandToast.of(context);
-                  final box = context.findRenderObject() as RenderBox?;
-                  final origin = box != null && box.hasSize
-                      ? box.localToGlobal(Offset.zero) & box.size
-                      : null;
+                  final origin = _anchorRect(context);
+
+                  // Unconditionally, and before anything that can fail. An
+                  // exception raised while still inside this handler used to
+                  // leave the dialog open with the tap doing nothing at all --
+                  // no close, no share, no message.
                   Navigator.of(context).pop();
+
                   try {
                     await exportLogFiles([file], sharePositionOrigin: origin);
-                  } catch (_) {
+                  } catch (error) {
+                    // Recorded, not swallowed. `catch (_)` here discarded the
+                    // one explanation for a failure in the very feature whose
+                    // job is to hand over the logs.
+                    log(LogLevel.error, 'Log export failed: $error');
                     toast.show(labels.exportError);
                   }
                 },
