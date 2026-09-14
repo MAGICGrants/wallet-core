@@ -1702,8 +1702,7 @@ class MoneroWallet extends CryptoWallet {
     // "you have reached the maximum number of subaddresses supported by this
     // server" about a node that has no such limit.
     if (_isNodeMode) {
-      if (_unusedSubaddressIndex != nextSubaddrIndex ||
-          _unusedSubaddressIndexIsSupported != true) {
+      if (_unusedSubaddressIndex != nextSubaddrIndex || _unusedSubaddressIndexIsSupported != true) {
         await setUnusedSubaddressIndex(nextSubaddrIndex, isSupported: true);
       }
       return;

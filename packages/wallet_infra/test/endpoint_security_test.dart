@@ -7,10 +7,22 @@ import 'package:wallet_infra/wallet_infra.dart';
 void main() {
   group('TLS', () {
     test('https is confidential', () {
-      expect(classifyEndpoint(Uri.parse('http://example.com'), viaTor: true), ChannelConfidentiality.none);
-      expect(classifyEndpoint(Uri.parse('https://example.com'), viaTor: true), ChannelConfidentiality.tls);
-      expect(classifyEndpoint(Uri.parse('HTTPS://example.com'), viaTor: true), ChannelConfidentiality.tls);
-      expect(classifyEndpoint(Uri.parse('wss://example.com'), viaTor: true), ChannelConfidentiality.tls);
+      expect(
+        classifyEndpoint(Uri.parse('http://example.com'), viaTor: true),
+        ChannelConfidentiality.none,
+      );
+      expect(
+        classifyEndpoint(Uri.parse('https://example.com'), viaTor: true),
+        ChannelConfidentiality.tls,
+      );
+      expect(
+        classifyEndpoint(Uri.parse('HTTPS://example.com'), viaTor: true),
+        ChannelConfidentiality.tls,
+      );
+      expect(
+        classifyEndpoint(Uri.parse('wss://example.com'), viaTor: true),
+        ChannelConfidentiality.tls,
+      );
     });
   });
 
@@ -22,21 +34,36 @@ void main() {
 
     test('plaintext to a v3 onion is confidential', () {
       expect(v3.length, 56);
-      expect(classifyEndpoint(Uri.parse('http://$v3.onion:18090'), viaTor: true), ChannelConfidentiality.onion);
-      expect(classifyEndpoint(Uri.parse('http://$v3.onion'), viaTor: true), ChannelConfidentiality.onion);
+      expect(
+        classifyEndpoint(Uri.parse('http://$v3.onion:18090'), viaTor: true),
+        ChannelConfidentiality.onion,
+      );
+      expect(
+        classifyEndpoint(Uri.parse('http://$v3.onion'), viaTor: true),
+        ChannelConfidentiality.onion,
+      );
     });
 
     test('the retired v2 shape still classifies', () {
       expect(v2.length, 16);
-      expect(classifyEndpoint(Uri.parse('http://$v2.onion'), viaTor: true), ChannelConfidentiality.onion);
+      expect(
+        classifyEndpoint(Uri.parse('http://$v2.onion'), viaTor: true),
+        ChannelConfidentiality.onion,
+      );
     });
 
     test('a subdomain of an onion is still that onion service', () {
-      expect(classifyEndpoint(Uri.parse('http://sub.$v3.onion'), viaTor: true), ChannelConfidentiality.onion);
+      expect(
+        classifyEndpoint(Uri.parse('http://sub.$v3.onion'), viaTor: true),
+        ChannelConfidentiality.onion,
+      );
     });
 
     test('a trailing root dot does not defeat the match', () {
-      expect(classifyEndpoint(Uri.parse('http://$v3.onion./x'), viaTor: true), ChannelConfidentiality.onion);
+      expect(
+        classifyEndpoint(Uri.parse('http://$v3.onion./x'), viaTor: true),
+        ChannelConfidentiality.onion,
+      );
     });
 
     test('an onion reached WITHOUT Tor is not confidential (audit M-01)', () {
@@ -86,16 +113,25 @@ void main() {
     test('a mistyped onion is NOT promoted to confidential', () {
       // The whole risk of a suffix test: `myserver.onion` looks like an onion,
       // will never resolve, and must not be treated as protecting a view key.
-      expect(classifyEndpoint(Uri.parse('http://myserver.onion'), viaTor: true), ChannelConfidentiality.none);
+      expect(
+        classifyEndpoint(Uri.parse('http://myserver.onion'), viaTor: true),
+        ChannelConfidentiality.none,
+      );
       // Right length, wrong alphabet (base32 has no '0', '1', '8' or '9').
       const bad = '00000000000000000000000000000000000000000000000000234567';
       expect(bad.length, 56);
-      expect(classifyEndpoint(Uri.parse('http://$bad.onion'), viaTor: true), ChannelConfidentiality.none);
+      expect(
+        classifyEndpoint(Uri.parse('http://$bad.onion'), viaTor: true),
+        ChannelConfidentiality.none,
+      );
     });
 
     test('.onion as a non-final label does not count', () {
       // `evil.com` is the host that is actually contacted here.
-      expect(classifyEndpoint(Uri.parse('http://$v3.onion.evil.com'), viaTor: true), ChannelConfidentiality.none);
+      expect(
+        classifyEndpoint(Uri.parse('http://$v3.onion.evil.com'), viaTor: true),
+        ChannelConfidentiality.none,
+      );
     });
   });
 
@@ -212,7 +248,11 @@ void main() {
         'http://192.168.1.50:18090/upsert_subaddrs',
       ]) {
         expect(
-          () => requireConfidentialChannel(Uri.parse(url), carrying: 'the private view key', viaTor: true),
+          () => requireConfidentialChannel(
+            Uri.parse(url),
+            carrying: 'the private view key',
+            viaTor: true,
+          ),
           returnsNormally,
           reason: url,
         );

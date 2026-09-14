@@ -85,11 +85,7 @@ class _BrandToastCard extends StatefulWidget {
   final Duration duration;
   final VoidCallback onDismissed;
 
-  const _BrandToastCard({
-    required this.message,
-    required this.duration,
-    required this.onDismissed,
-  });
+  const _BrandToastCard({required this.message, required this.duration, required this.onDismissed});
 
   @override
   State<_BrandToastCard> createState() => _BrandToastCardState();
@@ -134,9 +130,10 @@ class _BrandToastCardState extends State<_BrandToastCard> with SingleTickerProvi
       child: FadeTransition(
         opacity: _fade,
         child: SlideTransition(
-          position: Tween(begin: const Offset(0, 0.35), end: Offset.zero).animate(
-            CurvedAnimation(parent: _fade, curve: Curves.easeOutCubic),
-          ),
+          position: Tween(
+            begin: const Offset(0, 0.35),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: _fade, curve: Curves.easeOutCubic)),
           child: Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),

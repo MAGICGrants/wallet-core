@@ -432,10 +432,7 @@ void main() {
       // threaded into the gate the view key went out on an unproxied socket.
       connect(address: '$v3.onion:18090', useTor: false);
 
-      await expectLater(
-        wallet.isSubaddressSupported(1),
-        throwsA(isA<InsecureChannelException>()),
-      );
+      await expectLater(wallet.isSubaddressSupported(1), throwsA(isA<InsecureChannelException>()));
       expect(posts, isEmpty, reason: 'the key must not reach a socket at all');
     });
 

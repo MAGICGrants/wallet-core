@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:wallet_infra/wallet_infra.dart'
-    show LogFileInfo, LogLevel, exportLogFiles, log;
+import 'package:wallet_infra/wallet_infra.dart' show LogFileInfo, LogLevel, exportLogFiles, log;
 
 import 'design/toast.dart';
 
