@@ -10,6 +10,10 @@ import 'design/toast.dart';
 class ExportLogsLabels {
   final String title;
   final String cancel;
+
+  /// Shown when the export itself fails. Not the "no logs to export" message --
+  /// this dialog only opens with files to show, and saying the list is empty
+  /// while the user is looking at it explains nothing.
   final String exportError;
 
   const ExportLogsLabels({required this.title, required this.cancel, required this.exportError});
@@ -38,33 +42,40 @@ class ExportLogsDialog {
                   '${file.modified.year}-${file.modified.month.toString().padLeft(2, '0')}-${file.modified.day.toString().padLeft(2, '0')}';
               final sizeKb = (file.size / 1024).toStringAsFixed(1);
 
-              return ListTile(
-                onTap: () async {
-                  // Captured before the pop: this tile's context is defunct
-                  // afterward. The rect anchors the iPad share popover.
-                  final toast = BrandToast.of(context);
-                  final origin = shareAnchorRect(context);
+              // The `Builder` is what makes the tile measurable. An
+              // itemBuilder's context is the *sliver's*, not the row's, so
+              // `findRenderObject()` on it yields a RenderSliverList and
+              // [shareAnchorRect] gives back null -- which iOS then rejects the
+              // share over, since it has nothing to anchor the popover to.
+              return Builder(
+                builder: (context) => ListTile(
+                  onTap: () async {
+                    // Captured before the pop: this tile's context is defunct
+                    // afterward. The rect anchors the iOS share popover.
+                    final toast = BrandToast.of(context);
+                    final origin = shareAnchorRect(context);
 
-                  // Unconditionally, and before anything that can fail. An
-                  // exception raised while still inside this handler used to
-                  // leave the dialog open with the tap doing nothing at all --
-                  // no close, no share, no message.
-                  Navigator.of(context).pop();
+                    // Unconditionally, and before anything that can fail. An
+                    // exception raised while still inside this handler used to
+                    // leave the dialog open with the tap doing nothing at all --
+                    // no close, no share, no message.
+                    Navigator.of(context).pop();
 
-                  try {
-                    await exportLogFiles([file], sharePositionOrigin: origin);
-                  } catch (error) {
-                    // Recorded, not swallowed. `catch (_)` here discarded the
-                    // one explanation for a failure in the very feature whose
-                    // job is to hand over the logs.
-                    log(LogLevel.error, 'Log export failed: $error');
-                    toast.show(labels.exportError);
-                  }
-                },
-                leading: const Icon(Icons.description_outlined),
-                title: Text(file.name),
-                subtitle: Text('$dateStr • $sizeKb KB'),
-                trailing: const Icon(Icons.ios_share),
+                    try {
+                      await exportLogFiles([file], sharePositionOrigin: origin);
+                    } catch (error) {
+                      // Recorded, not swallowed. `catch (_)` here discarded the
+                      // one explanation for a failure in the very feature whose
+                      // job is to hand over the logs.
+                      log(LogLevel.error, 'Log export failed: $error');
+                      toast.show(labels.exportError);
+                    }
+                  },
+                  leading: const Icon(Icons.description_outlined),
+                  title: Text(file.name),
+                  subtitle: Text('$dateStr • $sizeKb KB'),
+                  trailing: const Icon(Icons.ios_share),
+                ),
               );
             },
           ),
