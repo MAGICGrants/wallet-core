@@ -10,6 +10,7 @@ export 'src/amounts.dart';
 export 'src/app_config.dart';
 export 'src/background_sync_mode.dart';
 export 'src/crypto_wallet.dart';
+export 'src/seed/restore_qr.dart';
 export 'src/seed/seed.dart';
 export 'src/seed/seed_policy.dart';
 export 'src/stores/seed_store.dart';

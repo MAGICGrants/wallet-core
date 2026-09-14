@@ -5,8 +5,9 @@ import 'dart:io' show InternetAddress, InternetAddressType;
 /// The question is "may this request carry a secret", not "should we do a TLS
 /// handshake". Three plaintext cases the URL scheme cannot tell apart:
 ///
-///   - `http://` to a `.onion`: fine; the address is the key and there is no
-///     exit node in the path;
+///   - `http://` to a `.onion` *carried inside Tor*: fine; the address is the
+///     key and there is no exit node in the path. Outside Tor the same URL is
+///     an ordinary plaintext request, so the route has to be passed in;
 ///   - `http://` to loopback or LAN: fine; the bytes never leave;
 ///   - `http://` to a routable host through Tor: unsafe; an exit node the user
 ///     did not choose reads and can rewrite every byte.
@@ -18,10 +19,13 @@ enum ChannelConfidentiality {
   /// TLS to the endpoint: confidential, and authenticated by a certificate.
   tls,
 
-  /// A Tor onion service: confidential and authenticated end-to-end by the
-  /// address itself, because the `.onion` name is derived from the service's
-  /// public key. Plaintext HTTP inside the circuit is not exposed to an exit,
-  /// because there is no exit.
+  /// A Tor onion service, reached through Tor: confidential and authenticated
+  /// end-to-end by the address itself, because the `.onion` name is derived
+  /// from the service's public key. Plaintext HTTP inside the circuit is not
+  /// exposed to an exit, because there is no exit.
+  ///
+  /// Only ever returned when the caller says the request travels inside Tor.
+  /// The protection comes from the circuit, not from the spelling of the host.
   ///
   /// Never describe this to a user as "TLS" or "SSL". No certificate is
   /// involved and no CA vouches for it; the guarantee has a different shape.
@@ -48,13 +52,24 @@ enum ChannelConfidentiality {
 /// stored in this repo as a bare `host:port`; `Uri.parse('example.com:18090')`
 /// puts `example.com` in `scheme` and leaves `host` empty, so a caller that
 /// forgot to prepend a scheme must be refused rather than waved through.
-ChannelConfidentiality classifyEndpoint(Uri uri) {
+/// [viaTor] must say whether this request will actually be carried inside Tor.
+/// It is required, not defaulted, because the answer cannot be derived from
+/// [uri]: an onion address is confidential because of the circuit it travels
+/// in, and a caller that does not route through Tor gets no protection from
+/// the hostname alone. Defaulting it either way would let a call site inherit
+/// a guarantee it never checked.
+ChannelConfidentiality classifyEndpoint(Uri uri, {required bool viaTor}) {
   if (uri.host.isEmpty) return ChannelConfidentiality.none;
 
   final scheme = uri.scheme.toLowerCase();
   if (scheme == 'https' || scheme == 'wss') return ChannelConfidentiality.tls;
 
-  if (isOnionHost(uri.host)) return ChannelConfidentiality.onion;
+  // Route first, then host. Without Tor this is a plaintext request whose
+  // hostname goes to the system resolver: it normally fails to resolve, but a
+  // resolver that answers anyway (ISP redirect pages, captive portals) points
+  // it at a stranger, and the query alone reveals which service was wanted.
+  if (viaTor && isOnionHost(uri.host)) return ChannelConfidentiality.onion;
+
   if (isLocalHost(uri.host)) return ChannelConfidentiality.local;
 
   return ChannelConfidentiality.none;
@@ -81,15 +96,16 @@ class InsecureChannelException implements Exception {
   String toString() =>
       'InsecureChannelException: refusing to send $carrying to $endpoint over an '
       'unauthenticated plaintext channel. Enable SSL for this endpoint, use its '
-      'onion address, or point it at a host on your own network.';
+      'onion address *with Tor enabled*, or point it at a host on your own '
+      'network.';
 }
 
 /// Throws [InsecureChannelException] unless [uri] protects what is sent to it.
 ///
 /// Call this *before* reading the secret out of wherever it lives, so a refused
 /// request never materialises the value at all.
-void requireConfidentialChannel(Uri uri, {required String carrying}) {
-  if (classifyEndpoint(uri).isConfidential) return;
+void requireConfidentialChannel(Uri uri, {required String carrying, required bool viaTor}) {
+  if (classifyEndpoint(uri, viaTor: viaTor).isConfidential) return;
   final authority = uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
   throw InsecureChannelException(endpoint: '${uri.scheme}://$authority', carrying: carrying);
 }

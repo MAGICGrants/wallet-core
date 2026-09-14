@@ -18,14 +18,17 @@ Future<T?> showBrandSheet<T>({
     isScrollControlled: isScrollControlled,
     backgroundColor: Colors.transparent,
     constraints: const BoxConstraints(maxWidth: 520),
-    builder: (context) => Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: BrandColors.paper,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: BrandShadows.sheet,
+    builder: (context) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: BrandColors.paper,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: BrandShadows.sheet,
+        ),
+        child: builder(context),
       ),
-      child: builder(context),
     ),
   );
 }

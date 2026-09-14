@@ -35,7 +35,7 @@ class LwsKeysView extends StatelessWidget {
   final String secretViewKey;
   final String restoreHeight;
   final Widget? headerIcon;
-  final void Function(String value, {required bool sensitive}) onCopy;
+  final void Function(String value) onCopy;
   final VoidCallback? onBack;
   final Widget? footer;
   final bool largeTitle;
@@ -68,7 +68,7 @@ class LwsKeysView extends StatelessWidget {
       fields: [
         KeyRevealField(label: labels.primaryAddressLabel, value: primaryAddress),
         KeyRevealField(label: labels.viewKeyLabel, value: secretViewKey, revealable: true),
-        KeyRevealField(label: labels.restoreHeightLabel, value: restoreHeight, sensitive: false),
+        KeyRevealField(label: labels.restoreHeightLabel, value: restoreHeight),
       ],
     );
   }

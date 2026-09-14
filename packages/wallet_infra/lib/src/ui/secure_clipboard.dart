@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../logging.dart';
@@ -27,6 +28,35 @@ class SecureClipboard {
   static const channelName = 'org.magicgrants.wallet/secure_clipboard';
 
   static const _channel = MethodChannel(channelName);
+
+  static Future<bool>? _systemConfirms;
+
+  /// Whether the OS shows its own confirmation when something is copied.
+  ///
+  /// Android 13 (API 33) added a standard clipboard confirmation, and Google's
+  /// copy/paste guidance is to drop the app's own so the user is not told the
+  /// same thing twice. Everywhere else -- iOS, desktop, older Android -- the
+  /// system says nothing and the app has to confirm it itself.
+  ///
+  /// Asked once and cached; the answer cannot change while the process lives.
+  static Future<bool> get systemConfirmsCopy => _systemConfirms ??= _askSystemConfirmsCopy();
+
+  /// Test seam: pin the answer without a platform channel.
+  @visibleForTesting
+  static set systemConfirmsCopyForTesting(bool? value) =>
+      _systemConfirms = value == null ? null : Future.value(value);
+
+  static Future<bool> _askSystemConfirmsCopy() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('systemConfirmsCopy') ?? false;
+    } catch (e) {
+      // An older host build without the method. Assume nothing is shown: a
+      // duplicate confirmation is a far smaller failure than none at all.
+      log(LogLevel.warn, 'secure clipboard capability probe failed: $e');
+      return false;
+    }
+  }
 
   static Future<void> copy(String text, {Duration clearAfter = const Duration(seconds: 60)}) async {
     var nativeHandled = false;

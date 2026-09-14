@@ -127,9 +127,16 @@ class _ScanQrViewState extends State<ScanQrView> {
                 alignment: Alignment.topCenter,
                 child: BrandScreenHeader(
                   onBack: widget.onBack,
-                  center: Text(
-                    widget.title,
-                    style: BrandText.appBar.copyWith(fontSize: 16, color: BrandColors.paper),
+                  center: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: BrandColors.inverseSurface.withValues(alpha: 0.88),
+                      borderRadius: BrandRadii.rPill,
+                    ),
+                    child: Text(
+                      widget.title,
+                      style: BrandText.appBar.copyWith(fontSize: 16, color: BrandColors.onPrimary),
+                    ),
                   ),
                 ),
               ),

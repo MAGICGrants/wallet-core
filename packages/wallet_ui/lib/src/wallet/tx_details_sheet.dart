@@ -6,6 +6,7 @@ import 'package:wallet_domain/wallet_domain.dart'
 import 'package:wallet_infra/wallet_infra.dart' show SecureClipboard;
 
 import '../design/brand.dart';
+import '../design/toast.dart';
 import '../design/brand_button.dart';
 import '../design/brand_card.dart';
 import '../design/sheet.dart';
@@ -116,7 +117,7 @@ class _TxDetailsSheet extends StatelessWidget {
 
   void _copy(BuildContext context, String text) {
     SecureClipboard.copy(text);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(labels.copied)));
+    showCopyToast(context, labels.copied);
   }
 
   String _fmtAmount(BigInt units) => formatAmount(

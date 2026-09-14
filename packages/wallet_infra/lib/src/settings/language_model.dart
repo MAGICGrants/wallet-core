@@ -24,7 +24,7 @@ class LanguageModel with ChangeNotifier {
   void setLanguage(String? newLanguage) async {
     if (newLanguage == null) return;
     _language = newLanguage;
-    await SharedPreferencesService.set<String>(SettingsKeys.language, newLanguage);
     notifyListeners();
+    await SharedPreferencesService.set<String>(SettingsKeys.language, newLanguage);
   }
 }
