@@ -78,6 +78,32 @@ void main() {
     });
   });
 
+  group('names on shipped devices that are not namespaced at all', () {
+    test('the wallet password key is the one 1.0.x wrote', () async {
+      // Not namer-derived: one global key, shared by both apps because each is
+      // a separate install. That puts it outside every guard in this file, and
+      // outside the one in `tx_notification_store_test.dart`, even though it is
+      // the highest-consequence name of the three.
+      //
+      // Rename it and an upgraded wallet cannot find the password it minted for
+      // itself. On mobile with app lock off the app auto-loads that password to
+      // open the wallet, so the wallet file is intact and unreachable, and the
+      // user has no password to type because they were never shown one.
+      //
+      // The literal is asserted rather than the constant: `wallet_manager_test`
+      // already uses `walletPasswordStorageKey` as a variable, which passes
+      // whatever the constant happens to say.
+      expect(walletPasswordStorageKey, 'walletPassword');
+
+      // And it is the key the store actually reaches for, not just a constant
+      // sitting next to one; the same reasoning as this file's header.
+      WalletSecrets.store = secrets;
+      await storeMobileWalletPassword('minted-at-restore');
+      expect(secrets.values.keys, ['walletPassword']);
+      expect(await getMobileWalletPassword(), 'minted-at-restore');
+    });
+  });
+
   group('the shipped preference layouts', () {
     test('the namers are the schemes each app already shipped', () {
       // The cheap half of the guard, and the one that reads as documentation:
