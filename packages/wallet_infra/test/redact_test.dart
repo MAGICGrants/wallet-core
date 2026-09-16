@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_infra/wallet_infra.dart';
 
@@ -51,6 +53,24 @@ void main() {
       final a = Redact.id('4AAAA');
       final b = Redact.id('4AAAB');
       expect(a, isNot(b));
+    });
+
+    test('a different process fingerprints the same address differently', () async {
+      // The salt is the point of the whole helper, and every other test here
+      // passes without it: an unsalted SHA-256 is still stable, still distinct
+      // per value, still the right shape, and still leaks no substring. What it
+      // is not is one-way in practice -- anyone holding a log line and a
+      // candidate address confirms the match by hashing it. That matters here
+      // because Export Logs puts these files in support threads.
+      //
+      // Statics are per-isolate, so a spawned one builds a fresh salt: as close
+      // to "the next launch" as a single test run gets.
+      final here = Redact.id(_address);
+      final elsewhere = await Isolate.run(() => Redact.id(_address));
+
+      expect(elsewhere, isNot(here), reason: 'the fingerprint is not salted per process');
+      // Still a fingerprint on the other side, not an accident of it failing.
+      expect(elsewhere, matches(RegExp(r'^#[0-9a-f]{8}$')));
     });
   });
 
