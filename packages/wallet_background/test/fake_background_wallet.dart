@@ -163,8 +163,12 @@ class FakeBackgroundWallet extends CryptoWallet {
   @override
   List<String> get connectionTypeOptions => const ['', 'node'];
 
+  /// Counted so the delete-teardown test can assert the wallets were actually
+  /// wiped, not just that the preferences were cleared.
+  int deleteFilesCount = 0;
+
   @override
-  Future<void> deleteFiles() async {}
+  Future<void> deleteFiles() async => deleteFilesCount++;
   @override
   Future<bool> getIsConnected() async => connected;
   @override

@@ -552,4 +552,49 @@ void main() {
       expect(isWalletFullySynced(unsynced), isFalse);
     });
   });
+
+  group('stopSyncAndDeleteWallets', () {
+    // The plugin calls (stopService, WorkManager cancel) are out of reach here,
+    // as everywhere else in this file; what is reachable is the decision that
+    // outlives the tap. Leaving these three set is what re-registers the
+    // background task on the next launch, so a deleted wallet would keep waking
+    // the device to find out it has nothing to sync.
+    test('clears the sync preferences and deletes the wallets', () async {
+      for (final key in [
+        SettingsKeys.backgroundSyncEnabled,
+        SettingsKeys.foregroundSyncEnabled,
+        SettingsKeys.notificationsEnabled,
+      ]) {
+        await SharedPreferencesService.set<bool>(key, true);
+      }
+
+      final registry = _Registry([const WalletSpec('XMR'), const WalletSpec('BTC')]);
+      final manager = WalletManager(coins: registry.build);
+      addTearDown(manager.dispose);
+
+      await stopSyncAndDeleteWallets(manager);
+
+      for (final key in [
+        SettingsKeys.backgroundSyncEnabled,
+        SettingsKeys.foregroundSyncEnabled,
+        SettingsKeys.notificationsEnabled,
+      ]) {
+        expect(await SharedPreferencesService.get<bool>(key), isFalse, reason: key);
+      }
+      expect(registry.last('XMR').deleteFilesCount, 1);
+      expect(registry.last('BTC').deleteFilesCount, 1);
+    });
+
+    test('passes the app\'s own pref keys through to deleteAll', () async {
+      await SharedPreferencesService.set<String>('skylight_contacts', 'x');
+
+      final registry = _Registry([const WalletSpec('XMR')]);
+      final manager = WalletManager(coins: registry.build);
+      addTearDown(manager.dispose);
+
+      await stopSyncAndDeleteWallets(manager, extraPrefKeys: ['skylight_contacts']);
+
+      expect(await SharedPreferencesService.get<String>('skylight_contacts'), isNull);
+    });
+  });
 }

@@ -1307,4 +1307,21 @@ void main() {
       );
     },
   );
+
+  test('delete forgets the wallet address it had cached', () async {
+    backend.defaultAddress = '4${'c' * 94}';
+    connect();
+    backend.existingWalletPaths.add(await pathFor('lws'));
+    await wallet.openExisting(password: 'pw');
+    await wallet.loadPrimaryAddress();
+    expect(wallet.getPrimaryAddress(), backend.defaultAddress);
+
+    await wallet.delete();
+
+    // Both getters are synchronous and have no liveness check, so a cached
+    // address outlives the keys it came from: the receive screen would show a
+    // deleted wallet's address, which the user can no longer spend from.
+    expect(wallet.getPrimaryAddress(), isEmpty);
+    expect(wallet.getReceiveAddress(), isNull);
+  });
 }

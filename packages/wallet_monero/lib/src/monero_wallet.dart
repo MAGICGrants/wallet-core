@@ -856,6 +856,8 @@ class MoneroWallet extends CryptoWallet {
     _serverSupportsSubaddresses = null;
     _unusedSubaddressIndex = null;
     _unusedSubaddressIndexIsSupported = null;
+    _primaryAddress = '';
+    _subaddressCache = null;
   }
 
   @override
