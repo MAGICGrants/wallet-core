@@ -127,6 +127,26 @@ void requireConfidentialChannel(Uri uri, {required String carrying, required boo
 /// false (plaintext is fine); everything else returns true.
 bool requiresSecureTransport(String host) => !(isOnionHost(host) || isLocalHost(host));
 
+/// Whether a bare `host:port` [address] names an onion service that nothing will
+/// carry to it.
+///
+/// The narrow half of [requireConfidentialChannel], for a caller that knows the
+/// route but not the scheme. Connection addresses are stored in this repo as a
+/// bare `host:port`, and whether the transport ends up TLS is the coin's
+/// business; the onion rule needs neither, so it can be applied once at the
+/// point a connection is established instead of per-request.
+///
+/// [viaProxy] is true when the request will be handed to a SOCKS proxy: Tor's
+/// own, or one the user configured. A non-Tor proxy cannot resolve `.onion`
+/// either, so it fails to connect rather than leaking; the hostname reaches the
+/// user's own proxy and no further. The Ethereum request-level gates apply that
+/// same rule, and the two layers must agree or a connection that established
+/// fine would be refused on its first real request.
+bool isUnroutedOnion(String address, {required bool viaProxy}) {
+  if (viaProxy) return false;
+  return isOnionHost(Uri.parse('http://$address').host);
+}
+
 /// Whether [host] is a Tor onion service.
 ///
 /// The label before `.onion` must be a real onion address; 56 base32

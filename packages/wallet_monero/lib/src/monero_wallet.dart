@@ -930,6 +930,16 @@ class MoneroWallet extends CryptoWallet {
     final daemonAddress = '${useSsl ? 'https://' : 'http://'}$address';
     final proxyAddress = (proxyPort != null && proxyPort.isNotEmpty) ? '127.0.0.1:$proxyPort' : '';
 
+    // Extra check to require Tor or a SOCKS proxy for LWS connections since they
+    // carry the view key
+    if (!_isNodeMode) {
+      requireConfidentialChannel(
+        Uri.parse(daemonAddress),
+        carrying: 'the private view key',
+        viaTor: proxyPort != null && proxyPort.isNotEmpty,
+      );
+    }
+
     walletLog(LogLevel.info, 'Connecting: ssl=$useSsl lightWallet=${!_isNodeMode}');
 
     await _backend.init(
@@ -967,6 +977,12 @@ class MoneroWallet extends CryptoWallet {
     // only for an onion or local one.
     final useSsl = _addressRequiresSsl(address);
     final url = '${useSsl ? 'https' : 'http'}://$address$path';
+
+    // Require Tor or a SOCKS proxy for .onion connection setup
+    final viaProxy = useTor || (proxyPort != null && proxyPort.isNotEmpty);
+    if (isUnroutedOnion(address, viaProxy: viaProxy)) {
+      throw Exception('An onion address needs Tor. Please go back and enable it.');
+    }
 
     walletLog(LogLevel.info, 'Probing ${isNode ? 'node' : 'LWS'} (tor=$useTor)');
 
@@ -1773,21 +1789,15 @@ class MoneroWallet extends CryptoWallet {
     final proto = _addressRequiresSsl(connectionAddress) ? 'https' : 'http';
     final url = Uri.parse('$proto://$connectionAddress/upsert_subaddrs');
 
-    // Defence in depth on the most sensitive request in this class; it carries
-    // the private view key, which cannot be rotated without moving every coin.
-    // The derivation above already picks a confidential scheme, so this asserts
-    // that invariant rather than catching a user's plaintext choice; it still
-    // fails closed if the derivation is ever bypassed. Checked before
-    // `secretViewKey`, so a refused request never pulls the key out of the native
-    // wallet. Both callers ([loadSubaddressSupport], [loadUnusedSubaddressIndex])
-    // catch and fall back to the primary address.
-    //
-    // [viaTor] is what closes the onion-without-Tor hole: an onion address can
-    // be saved with Tor off (the connection form forces `useTor` false when Tor
-    // is globally disabled), and the scheme derivation above leaves it on
-    // plaintext http. Passing the real route means that combination is refused
-    // here instead of being waved through on the strength of the hostname.
-    requireConfidentialChannel(url, carrying: 'the private view key', viaTor: connectionUseTor);
+    // Carries the private view key, so check before `secretViewKey` reads it.
+    // `viaTor` must be the route actually taken — Tor's port or the custom SOCKS
+    // proxy resolved below — not just `connectionUseTor`. Both callers read a
+    // throw as "no subaddress support" and fall back to the primary address.
+    requireConfidentialChannel(
+      url,
+      carrying: 'the private view key',
+      viaTor: connectionUseTor || connectionProxyPort.isNotEmpty,
+    );
 
     final body = jsonEncode({
       'address': getPrimaryAddress(),

@@ -1091,11 +1091,20 @@ abstract class CryptoWallet with ChangeNotifier {
       torProxyPort = proxyInfo.port.toString();
     }
 
+    final proxyPort = torProxyPort ?? _connectionProxyPort;
+
+    // Require onion addresses to go through Tor or a SOCKS proxy
+    if (isUnroutedOnion(_connectionAddress, viaProxy: proxyPort.isNotEmpty)) {
+      walletLog(LogLevel.warn, 'onion address with no Tor route; skipping connect');
+      _torRequirementBroken = true;
+      _isConnected = false;
+      _connectFailures++;
+      notifyListeners();
+      return;
+    }
+
     try {
-      await connectToDaemonImpl(
-        address: _connectionAddress,
-        proxyPort: torProxyPort ?? _connectionProxyPort,
-      );
+      await connectToDaemonImpl(address: _connectionAddress, proxyPort: proxyPort);
     } catch (e) {
       _connectFailures++;
       rethrow;
