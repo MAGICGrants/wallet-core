@@ -246,10 +246,15 @@ class MoneroWallet extends CryptoWallet {
       'switching the connection type to match.',
     );
 
+    // The adopted mode's *own* server, never the current one. Carrying the
+    // address across the mode change is what pointed a light-wallet session at
+    // the user's node and POSTed the view key to it; the node address stays
+    // parked under `node` until a node wallet file exists to go with it.
+    final adopted = await getPersistedConnectionForType(otherType);
     setConnection(
-      address: connectionAddress,
-      proxyPort: connectionProxyPort,
-      useTor: connectionUseTor,
+      address: adopted.address,
+      proxyPort: adopted.proxyPort,
+      useTor: adopted.useTor,
       connectionType: otherType,
     );
     // Persisted, not just in memory: callers reload the connection right after.
@@ -1788,6 +1793,14 @@ class MoneroWallet extends CryptoWallet {
     // plaintext only for an onion or local one.
     final proto = _addressRequiresSsl(connectionAddress) ? 'https' : 'http';
     final url = Uri.parse('$proto://$connectionAddress/upsert_subaddrs');
+
+    // Node mode has no light-wallet server to talk to and no reason to send the
+    // key anywhere, so refuse rather than trusting the address to be an LWS one.
+    // The mode and the address are bound together now, but this is the request
+    // that pays for a mismatch, so it asserts the mode rather than assuming it.
+    if (_isNodeMode) {
+      throw StateError('Refusing to send the view key: this wallet is in node mode.');
+    }
 
     // Carries the private view key, so check before `secretViewKey` reads it.
     // `viaTor` must be the route actually taken — Tor's port or the custom SOCKS

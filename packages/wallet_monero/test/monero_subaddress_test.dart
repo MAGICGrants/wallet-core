@@ -381,6 +381,18 @@ void main() {
       expect(posts, isEmpty);
     });
 
+    test('node mode refuses to send the view key at all (audit H-02)', () async {
+      await openWallet(type: 'node');
+      // Handed an LWS-looking address while in node mode, which is the shape an
+      // interrupted switch used to leave behind. A node-mode wallet has no
+      // light-wallet server to log in to, so the mode is checked rather than
+      // the address being trusted to match it.
+      connect(type: 'node', address: 'lws.example.com:18090');
+
+      await expectLater(wallet.isSubaddressSupported(1), throwsA(isA<StateError>()));
+      expect(posts, isEmpty);
+    });
+
     test('a wallet that is not open cannot probe', () async {
       connect();
       expect(wallet.isSubaddressSupported(1), throwsA(isA<StateError>()));

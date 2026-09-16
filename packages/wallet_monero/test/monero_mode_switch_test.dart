@@ -82,6 +82,84 @@ void main() {
     backend.existingWalletPaths.add(await pathFor(mode));
   }
 
+  group('an interrupted switch never points one mode at the other server (audit H-02)', () {
+    // The form persists the new type *before* `_rebuildForConnectionType` writes
+    // a file for it, and that rebuild reads a seed, closes the wallet and
+    // derives keys — so an ordinary failure, not only a crash, can leave the
+    // type saved with no file behind it. `hasExistingWallet` then adopts the
+    // mode that does have one. It used to carry the current address across,
+    // which left a light-wallet session pointed at the user's node.
+    Future<MoneroWallet> freshWallet() async {
+      final w = MoneroWallet(backend: backend);
+      addTearDown(w.dispose);
+      return w;
+    }
+
+    /// Saves [address] under [type], leaving it the active type.
+    Future<void> save(String type, String address) async {
+      wallet.setConnection(address: address, proxyPort: '', useTor: false, connectionType: type);
+      await wallet.persistCurrentConnection();
+    }
+
+    test('adopting the other mode loads that mode own server', () async {
+      await save('lws', 'lws.example.com:18090');
+      await save('node', 'node.example.com:18081');
+
+      // The node rebuild never wrote its file; only the LWS one exists.
+      await File(await pathFor('lws')).writeAsString('wallet');
+      backend.existingWalletPaths.add(await pathFor('lws'));
+
+      final fresh = await freshWallet();
+      expect(await fresh.hasExistingWallet(), isTrue);
+
+      expect(fresh.connectionType, 'lws');
+      expect(
+        fresh.connectionAddress,
+        'lws.example.com:18090',
+        reason: 'the node address stays parked under node until a node file exists',
+      );
+    });
+
+    test('with no server saved for the adopted mode it is unconfigured, not wrong', () async {
+      await save('node', 'node.example.com:18081');
+      await File(await pathFor('lws')).writeAsString('wallet');
+      backend.existingWalletPaths.add(await pathFor('lws'));
+
+      final fresh = await freshWallet();
+      expect(await fresh.hasExistingWallet(), isTrue);
+
+      expect(fresh.connectionType, 'lws');
+      expect(fresh.connectionAddress, isEmpty);
+      // Nothing to connect to is the honest answer; the setup form is next.
+      expect(fresh.isActive, isFalse);
+    });
+
+    test('the adopted type is persisted, so the next launch agrees', () async {
+      await save('lws', 'lws.example.com:18090');
+      await save('node', 'node.example.com:18081');
+      await File(await pathFor('lws')).writeAsString('wallet');
+      backend.existingWalletPaths.add(await pathFor('lws'));
+
+      await (await freshWallet()).hasExistingWallet();
+
+      final next = await freshWallet();
+      await next.loadPersistedConnection();
+      expect(next.connectionType, 'lws');
+      expect(next.connectionAddress, 'lws.example.com:18090');
+    });
+
+    test('nothing is adopted when the active mode does have its file', () async {
+      await save('node', 'node.example.com:18081');
+      await targetFileExists('node');
+
+      final fresh = await freshWallet();
+      expect(await fresh.hasExistingWallet(), isTrue);
+
+      expect(fresh.connectionType, 'node');
+      expect(fresh.connectionAddress, 'node.example.com:18081');
+    });
+  });
+
   group('the target file already exists — re-open, never recover', () {
     test('LWS to node', () async {
       await openIn('lws');

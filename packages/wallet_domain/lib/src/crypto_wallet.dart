@@ -547,7 +547,9 @@ abstract class CryptoWallet with ChangeNotifier {
     _connectionAddress = address;
     _connectionProxyPort = proxyPort;
     _connectionUseTor = useTor;
-    _connectionType = connectionType;
+    // Canonicalised on the way in, so the in-memory type and the type the pref
+    // keys are named after cannot differ.
+    _connectionType = canonicalConnectionType(connectionType);
     _torRequirementBroken = false;
     _isConnected = false;
     // The new server hasn't been synced to yet; clear stale sync state so the
@@ -572,21 +574,135 @@ abstract class CryptoWallet with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> persistCurrentConnection() async {
-    await SharedPreferencesService.set(connPrefKey('connectionAddress'), _connectionAddress);
-    await SharedPreferencesService.set(connPrefKey('connectionProxyPort'), _connectionProxyPort);
-    await SharedPreferencesService.set(connPrefKey('connectionUseTor'), _connectionUseTor);
-    await SharedPreferencesService.set(connPrefKey('connectionType'), _connectionType);
+  /// The type a bare or unrecognised persisted value means.
+  ///
+  /// `''` and anything not in [connectionTypeOptions] resolve to the first
+  /// option, so Monero's `''` and `'lws'` are one server rather than two. This
+  /// has to be total: the per-type key names are built from it, and two
+  /// spellings of one mode would be two stored servers.
+  ///
+  /// A coin that declares no options has nothing to canonicalise against and
+  /// gets its type back untouched. It has exactly one slot either way, so the
+  /// value is informational there and [_connKey] keeps the flat keys.
+  @protected
+  String canonicalConnectionType(String type) {
+    final options = connectionTypeOptions;
+    if (options.isEmpty) return type;
+    return options.contains(type) ? type : options.first;
   }
 
-  Future<WalletConnectionDetails> getPersistedConnection() async => WalletConnectionDetails(
-    address: await SharedPreferencesService.get<String>(connPrefKey('connectionAddress')) ?? '',
-    proxyPort: await SharedPreferencesService.get<String>(connPrefKey('connectionProxyPort')) ?? '',
-    useTor: await SharedPreferencesService.get<bool>(connPrefKey('connectionUseTor')) ?? false,
-    connectionType: await SharedPreferencesService.get<String>(connPrefKey('connectionType')) ?? '',
+  /// The active connection type, never `''` for a coin that has a toggle.
+  String get activeConnectionType => canonicalConnectionType(_connectionType);
+
+  /// Pref key for [name] under [type]'s own slot.
+  ///
+  /// The server is stored **per type**, which is what makes an LWS connection to
+  /// a node unrepresentable rather than merely guarded against. Two consequences
+  /// worth knowing:
+  ///
+  ///  - selecting a mode selects that mode's server; neither can inherit the
+  ///    other's, however the type came to change;
+  ///  - a torn write is harmless. A stale type reads its own address, so the
+  ///    pair is always self-consistent even if it is out of date, and
+  ///    [persistCurrentConnection] needs no atomicity across keys.
+  String _connKey(String name, String type) {
+    // One slot, so the flat keys the coin shipped with are kept and there is
+    // nothing to migrate. Only a coin with a toggle gains suffixed keys.
+    if (connectionTypeOptions.isEmpty) return connPrefKey(name);
+    return connPrefKey('${name}_${canonicalConnectionType(type)}');
+  }
+
+  Future<void> persistCurrentConnection() async {
+    final type = activeConnectionType;
+    await SharedPreferencesService.set(_connKey('connectionAddress', type), _connectionAddress);
+    await SharedPreferencesService.set(_connKey('connectionProxyPort', type), _connectionProxyPort);
+    await SharedPreferencesService.set(_connKey('connectionUseTor', type), _connectionUseTor);
+    // Last: everything it selects is already on disk, so a crash before this
+    // leaves the previous type pointing at its own unchanged server.
+    await SharedPreferencesService.set(connPrefKey('connectionType'), type);
+  }
+
+  /// The stored server for [type], regardless of which type is active.
+  ///
+  /// A mode with nothing stored reads back empty rather than borrowing another
+  /// mode's server; `isActive` then treats the wallet as unconfigured, which is
+  /// the honest answer and sends the user to the setup form.
+  Future<WalletConnectionDetails> getPersistedConnectionForType(String type) async {
+    final t = canonicalConnectionType(type);
+    final address = await SharedPreferencesService.get<String>(_connKey('connectionAddress', t));
+    if (address != null) {
+      return WalletConnectionDetails(
+        address: address,
+        proxyPort:
+            await SharedPreferencesService.get<String>(_connKey('connectionProxyPort', t)) ?? '',
+        useTor: await SharedPreferencesService.get<bool>(_connKey('connectionUseTor', t)) ?? false,
+        connectionType: t,
+      );
+    }
+
+    // Pre-split install: one flat record whose own `connectionType` says which
+    // slot it belongs in. Migrating it into the wrong slot is exactly the
+    // mismatch this split exists to prevent, so a record for the other mode is
+    // left alone and this mode reads back unconfigured.
+    final legacyType = canonicalConnectionType(
+      await SharedPreferencesService.get<String>(connPrefKey('connectionType')) ?? '',
+    );
+    if (legacyType != t) {
+      return WalletConnectionDetails(address: '', proxyPort: '', useTor: false, connectionType: t);
+    }
+    return WalletConnectionDetails(
+      address: await SharedPreferencesService.get<String>(connPrefKey('connectionAddress')) ?? '',
+      proxyPort:
+          await SharedPreferencesService.get<String>(connPrefKey('connectionProxyPort')) ?? '',
+      useTor: await SharedPreferencesService.get<bool>(connPrefKey('connectionUseTor')) ?? false,
+      connectionType: t,
+    );
+  }
+
+  Future<WalletConnectionDetails> getPersistedConnection() async => getPersistedConnectionForType(
+    await SharedPreferencesService.get<String>(connPrefKey('connectionType')) ?? '',
   );
 
+  /// Copies a pre-split flat record into its own type's slot, once.
+  ///
+  /// Reads find it without this, but only while the active type still matches
+  /// the type it was saved under. The first mode switch moves `connectionType`,
+  /// and the record becomes unreachable: an upgrading user would lose the server
+  /// they had been using the moment they tried the other mode. Copying it on
+  /// first load is what makes "each mode remembers its own server" true for an
+  /// existing install and not just a fresh one.
+  ///
+  /// The flat keys are left in place. The per-type key takes precedence from
+  /// here on, so they are inert, and deleting a user's only copy of their
+  /// server to save three preferences is a bad trade.
+  Future<void> _migrateLegacyConnection() async {
+    // No toggle means one slot, which is the flat keys themselves.
+    if (connectionTypeOptions.isEmpty) return;
+
+    final legacyType = canonicalConnectionType(
+      await SharedPreferencesService.get<String>(connPrefKey('connectionType')) ?? '',
+    );
+    final alreadySplit = await SharedPreferencesService.get<String>(
+      _connKey('connectionAddress', legacyType),
+    );
+    if (alreadySplit != null) return;
+
+    final address = await SharedPreferencesService.get<String>(connPrefKey('connectionAddress'));
+    if (address == null || address.isEmpty) return;
+
+    await SharedPreferencesService.set(_connKey('connectionAddress', legacyType), address);
+    await SharedPreferencesService.set(
+      _connKey('connectionProxyPort', legacyType),
+      await SharedPreferencesService.get<String>(connPrefKey('connectionProxyPort')) ?? '',
+    );
+    await SharedPreferencesService.set(
+      _connKey('connectionUseTor', legacyType),
+      await SharedPreferencesService.get<bool>(connPrefKey('connectionUseTor')) ?? false,
+    );
+  }
+
   Future<void> loadPersistedConnection() async {
+    await _migrateLegacyConnection();
     final c = await getPersistedConnection();
     setConnection(
       address: c.address,
