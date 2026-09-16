@@ -809,9 +809,57 @@ abstract class CryptoWallet with ChangeNotifier {
   /// refreshed first, whether or not it announced anything. That belongs to
   /// [notifyNewIncomingTxs], which the app calls from wherever it wants
   /// notifications to come from.
+  /// [fresh], with the two fields a rescan cannot reproduce taken from what
+  /// this wallet already held.
+  ///
+  /// Who an outgoing transaction paid, and its secret key, are recorded by the
+  /// wallet that *built* it; Monero puts neither on chain in a form a wallet
+  /// can read back. So the wallet rebuilt for an LWS<->node switch rescans, and
+  /// reports the same transactions with no destinations and no keys. The plain
+  /// assignment below would take that at face value -- and [loadAllStats]
+  /// persists what it produces, so the copy this app had would go with it,
+  /// on disk as well as on screen.
+  ///
+  /// Keyed on the transaction hash, and it only ever fills a gap. A hash names
+  /// one transaction, so who it paid and what its key is are facts about it,
+  /// not values that can legitimately become empty. A wallet that has the
+  /// fields always wins; nothing here can overwrite a fresh reading.
+  ///
+  /// This recovers only what this install saw while in the other mode. A wallet
+  /// restored straight onto a node has nothing to carry, and still shows no
+  /// destinations for transactions it did not send.
+  List<TxDetails> _withCarriedFields(List<TxDetails> fresh) {
+    if (_txHistory.isEmpty || fresh.isEmpty) return fresh;
+
+    Map<String, TxDetails>? previous;
+    var out = fresh;
+
+    for (var i = 0; i < fresh.length; i++) {
+      final tx = fresh[i];
+      final wantsRecipients = tx.recipients.isEmpty;
+      final wantsKey = tx.key.isEmpty;
+      if (!wantsRecipients && !wantsKey) continue;
+
+      previous ??= {for (final old in _txHistory) old.hash: old};
+      final old = previous[tx.hash];
+      if (old == null) continue;
+
+      final recipients = wantsRecipients && old.recipients.isNotEmpty ? old.recipients : null;
+      final key = wantsKey && old.key.isNotEmpty ? old.key : null;
+      if (recipients == null && key == null) continue;
+
+      // Copied only once something is actually carried, so the common refresh
+      // (every transaction complete) allocates nothing.
+      if (identical(out, fresh)) out = List.of(fresh);
+      out[i] = tx.copyWith(recipients: recipients, key: key);
+    }
+
+    return out;
+  }
+
   Future<void> loadTxHistory({bool persistCount = true}) async {
     final previousLength = _txHistory.length;
-    final newHistory = readTxHistory();
+    final newHistory = _withCarriedFields(readTxHistory());
 
     final hasPendingTx =
         newHistory.isNotEmpty && newHistory.first.confirmations < requiredConfirmations;

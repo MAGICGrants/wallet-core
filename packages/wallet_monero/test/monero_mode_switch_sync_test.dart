@@ -32,6 +32,31 @@ NativeTxInfo _tx(String hash) => NativeTxInfo(
   txKey: '',
 );
 
+/// An outgoing transaction as the mode that *sent* it knows it: with the
+/// destinations it recorded when building it, and its secret key.
+NativeTxInfo _sent({
+  required String hash,
+  List<({String address, BigInt amount})> destinations = const [],
+  String txKey = '',
+}) => NativeTxInfo(
+  direction: txDirectionOutgoing,
+  hash: hash,
+  amount: BigInt.from(1000000000000),
+  fee: BigInt.from(30000000),
+  timestamp: 1700000000,
+  blockHeight: 2900000,
+  confirmations: 20,
+  subaddrAccount: 0,
+  subaddrIndex: '0',
+  isPending: false,
+  isFailed: false,
+  paymentId: '',
+  txKey: txKey,
+  destinations: destinations,
+);
+
+final _paid = '4${'p' * 94}';
+
 void main() {
   late Directory tmp;
   late FakeMoneroBackend backend;
@@ -214,5 +239,113 @@ void main() {
     await wallet.pollSyncStatus();
 
     expect(wallet.isSynced, isTrue);
+  });
+
+  group('what a rescan cannot reproduce', () {
+    /// Drives the wallet to the point where the node has caught up and pulled
+    /// its own history, which is where the replacement used to happen.
+    Future<void> switchToSyncedNode() async {
+      backend.synchronizedValue = true;
+      backend.walletHeight = 3000000;
+      backend.chainHeight = 3000000;
+      connect('node');
+      await wallet.applyConnectionChange(password: _password);
+      await wallet.pollSyncStatus();
+      await Future<void>.delayed(Duration.zero);
+      await wallet.pollSyncStatus();
+    }
+
+    test('an outgoing tx keeps its destination and key across the switch', () async {
+      connect('lws');
+      await wallet.restoreFromSeed(
+        seed: MoneroLegacySeed(_legacy25),
+        from: RestorePoint.height(2800000),
+        password: _password,
+      );
+      final path = await wallet.walletPathForType('lws');
+      await File(path).writeAsString('wallet');
+      backend.existingWalletPaths.add(path);
+
+      // LWS built this transaction, so it holds both.
+      backend.synchronizedValue = true;
+      backend.walletHeight = 3000000;
+      backend.chainHeight = 3000000;
+      backend.balanceValue = BigInt.from(5000000000000);
+      backend.unlockedBalanceValue = BigInt.from(5000000000000);
+      backend.transactions = [
+        _sent(
+          hash: 'sent-1',
+          destinations: [(address: _paid, amount: BigInt.from(1000000000000))],
+          txKey: 'the-tx-secret-key',
+        ),
+      ];
+      await wallet.load();
+      expect(wallet.txHistory.single.recipients.single.address, _paid);
+      expect(wallet.txHistory.single.key, 'the-tx-secret-key');
+
+      // The node file rescans the chain: same transaction, and neither field,
+      // because neither is on the chain to be read back.
+      backend.transactions = [_sent(hash: 'sent-1')];
+      await switchToSyncedNode();
+
+      expect(
+        wallet.txHistory.single.recipients.single.address,
+        _paid,
+        reason: 'the rescan dropped who the transaction paid',
+      );
+      expect(
+        wallet.txHistory.single.key,
+        'the-tx-secret-key',
+        reason: 'the rescan dropped the transaction secret key',
+      );
+      // Everything the chain *can* reproduce still comes from the wallet.
+      expect(wallet.txHistory.single.confirmations, 20);
+    });
+
+    test('a wallet that has the fields always wins over the carried copy', () async {
+      await syncedOnLws();
+      backend.transactions = [
+        _sent(
+          hash: 'sent-1',
+          destinations: [(address: _paid, amount: BigInt.from(1000000000000))],
+          txKey: 'old-key',
+        ),
+      ];
+      await wallet.load();
+
+      backend.transactions = [
+        _sent(
+          hash: 'sent-1',
+          destinations: [(address: '4${'z' * 94}', amount: BigInt.from(1000000000000))],
+          txKey: 'fresh-key',
+        ),
+      ];
+      await wallet.loadTxHistory();
+
+      expect(wallet.txHistory.single.recipients.single.address, '4${'z' * 94}');
+      // Not asserted for the key: `_txKeyCache` answers from the first reading
+      // and never asks the wallet again, so a *different* fresh key for a hash
+      // already seen is unreachable by design. The carry only ever fills an
+      // empty one, which is the same branch the recipients above exercise.
+    });
+
+    test('nothing is invented for a transaction never seen before', () async {
+      await syncedOnLws();
+      backend.transactions = [
+        _sent(
+          hash: 'sent-1',
+          destinations: [(address: _paid, amount: BigInt.from(1000000000000))],
+          txKey: 'k',
+        ),
+      ];
+      await wallet.load();
+
+      backend.transactions = [_sent(hash: 'sent-2')];
+      await wallet.loadTxHistory();
+
+      expect(wallet.txHistory.single.hash, 'sent-2');
+      expect(wallet.txHistory.single.recipients, isEmpty);
+      expect(wallet.txHistory.single.key, isEmpty);
+    });
   });
 }

@@ -551,6 +551,10 @@ class FakeMoneroBackend extends MoneroBackend {
     isFailed: tx.isFailed,
     paymentId: tx.paymentId,
     txKey: key,
+    // Carried, not dropped. Rebuilding without this quietly emptied the
+    // destinations of every transaction whose key was already cached, which is
+    // every transaction after the first read.
+    destinations: tx.destinations,
   );
 
   /// Hashes the transaction key was read for. The key comes off the wallet
