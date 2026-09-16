@@ -61,6 +61,12 @@ class MoneroWallet extends CryptoWallet {
   bool _daemonInitialised = false;
 
   int? _daemonTargetHeight;
+
+  /// Last `Wallet_synchronized` reading, before [_syncedGivenHeights] narrows
+  /// it. Kept so a daemon height that arrives later can re-decide without
+  /// waiting for the next poll -- which, if the flag wrongly said synced, is
+  /// the 20s backed-off tick rather than the 3s syncing one.
+  bool _reportedSynchronized = false;
   DateTime? _lastDaemonHeightFetch;
 
   bool? _serverSupportsSubaddresses;
@@ -792,6 +798,7 @@ class MoneroWallet extends CryptoWallet {
     _history = null;
     _loadedKind = null;
     _daemonInitialised = false;
+    _reportedSynchronized = false;
     _isBackgroundWallet = false;
     // Keyed on the handle, and a freed handle's address can be reused by the
     // next allocation. Cake keys its equivalent cache on the FFI address alone
@@ -1081,7 +1088,7 @@ class MoneroWallet extends CryptoWallet {
   Future<void> loadIsSynced() async {
     final wallet = _wallet;
     if (wallet == null || !_daemonInitialised) return;
-    setIsSynced(await _backend.synchronized(wallet));
+    _applySyncedFlag(await _backend.synchronized(wallet));
   }
 
   @override
@@ -1131,6 +1138,9 @@ class MoneroWallet extends CryptoWallet {
       final height = await _backend.daemonBlockChainHeight(wallet);
       if (height > 0) {
         _daemonTargetHeight = height;
+        // Re-decide now that there is something to compare against, rather than
+        // leaving a wrong "synced" up until the next poll.
+        _applySyncedFlag(_reportedSynchronized);
         notifyListeners();
       }
     } catch (e) {
@@ -1191,6 +1201,31 @@ class MoneroWallet extends CryptoWallet {
   /// debounces into a rebuild of every screen watching it; on a 3-second tick
   /// during a multi-hour scan that is a rebuild every 3 seconds to redraw
   /// identical numbers. Cake's tick opens with the same check.
+  /// monero_c's `Wallet_synchronized`, narrowed by what the heights say.
+  ///
+  /// The flag is raised once the refresh thread has completed a pass, which in
+  /// node mode is not the same as the scan having reached the chain -- and a
+  /// wallet rebuilt for an LWS->node switch sits at its restore height when it
+  /// first goes up. Reporting "Synced" there is untrue, and it also hides the
+  /// evidence: [syncBlocksRemaining] returns null once synced, so the block
+  /// countdown that would have contradicted it disappears too.
+  ///
+  /// Only ever demotes, and only on positive evidence. An unknown daemon height
+  /// leaves the flag as reported, so a node whose height read fails still
+  /// reaches "synced" exactly as before.
+  bool _syncedGivenHeights(bool reported) {
+    if (!reported || !_isNodeMode) return reported;
+    final target = _daemonTargetHeight;
+    final scanned = syncedHeight;
+    if (target == null || scanned == null) return true;
+    return scanned >= target;
+  }
+
+  void _applySyncedFlag(bool reported) {
+    _reportedSynchronized = reported;
+    setIsSynced(_syncedGivenHeights(reported));
+  }
+
   @override
   Future<void> pollSyncStatus() async {
     final wallet = _wallet;
@@ -1200,11 +1235,12 @@ class MoneroWallet extends CryptoWallet {
     final previousHeight = syncedHeight;
 
     final stats = await _backend.walletStats(wallet);
-    setIsSynced(stats.synchronized);
+    // Height first: the narrowing in [_applySyncedFlag] reads it.
     setSyncedHeight(stats.blockChainHeight);
+    _applySyncedFlag(stats.synchronized);
     _refreshDaemonHeightIfBehind();
 
-    if (stats.synchronized != wasSynced || stats.blockChainHeight != previousHeight) {
+    if (isSynced != wasSynced || stats.blockChainHeight != previousHeight) {
       notifyListeners();
     }
 

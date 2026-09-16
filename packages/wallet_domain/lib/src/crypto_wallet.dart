@@ -930,6 +930,15 @@ abstract class CryptoWallet with ChangeNotifier {
     if (!isActive) return;
     await connectToDaemon();
     await refresh();
+    // The same gate [refreshTask] applies, and for a sharper reason here. This
+    // is the path an LWS->node switch lands on, and the wallet it lands on was
+    // rebuilt from the seed moments ago: it has scanned nothing. Reading stats
+    // from it yields a zero balance and an empty history, and [loadAllStats]
+    // does not merely display those -- it persists them over the cached
+    // snapshot, so the balance and the transactions stay gone. While the scan
+    // runs, the last known figures are the honest ones; [pollSyncStatus] pulls
+    // real ones the moment the wallet has actually caught up.
+    if (deferStatsUntilSynced && !_isSynced) return;
     await loadAllStats();
   }
 
