@@ -146,63 +146,62 @@ class _ScanFromSheetState extends State<_ScanFromSheet> {
     final locale = labels.locale;
     final now = DateTime.now();
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            BrandSpacing.xl,
-            BrandSpacing.md,
-            BrandSpacing.xl,
-            BrandSpacing.lg,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SheetHandle(),
-              Text(labels.title, style: BrandText.sheetTitle),
-              const SizedBox(height: BrandSpacing.sm),
-              Text(labels.description, style: BrandText.bodyMuted),
-              const SizedBox(height: BrandSpacing.lg),
-              _SheetOption(
-                selected: _pickMonth,
-                title: labels.pickMonth,
-                onTap: () => setState(() => _pickMonth = true),
-                expanded: Row(
-                  children: [
-                    Expanded(
-                      child: _ScanDropdown<int>(
-                        value: _month,
-                        items: [for (var m = 1; m <= 12; m++) m],
-                        label: (m) => DateFormat.MMMM(locale).format(DateTime(2000, m)),
-                        onChanged: (m) => setState(() => _month = m),
-                      ),
+    // No keyboard padding here: showBrandSheet applies it once for the whole
+    // sheet, and a second one lifts this clear off the keyboard.
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          BrandSpacing.xl,
+          BrandSpacing.md,
+          BrandSpacing.xl,
+          BrandSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SheetHandle(),
+            Text(labels.title, style: BrandText.sheetTitle),
+            const SizedBox(height: BrandSpacing.sm),
+            Text(labels.description, style: BrandText.bodyMuted),
+            const SizedBox(height: BrandSpacing.lg),
+            _SheetOption(
+              selected: _pickMonth,
+              title: labels.pickMonth,
+              onTap: () => setState(() => _pickMonth = true),
+              expanded: Row(
+                children: [
+                  Expanded(
+                    child: _ScanDropdown<int>(
+                      value: _month,
+                      items: [for (var m = 1; m <= 12; m++) m],
+                      label: (m) => DateFormat.MMMM(locale).format(DateTime(2000, m)),
+                      onChanged: (m) => setState(() => _month = m),
                     ),
-                    const SizedBox(width: BrandSpacing.sm),
-                    Expanded(
-                      child: _ScanDropdown<int>(
-                        value: _year,
-                        items: [for (var y = now.year; y >= 2014; y--) y],
-                        label: (y) => '$y',
-                        onChanged: (y) => setState(() => _year = y),
-                      ),
+                  ),
+                  const SizedBox(width: BrandSpacing.sm),
+                  Expanded(
+                    child: _ScanDropdown<int>(
+                      value: _year,
+                      items: [for (var y = now.year; y >= 2014; y--) y],
+                      label: (y) => '$y',
+                      onChanged: (y) => setState(() => _year = y),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(height: BrandSpacing.md),
-              _SheetOption(
-                selected: !_pickMonth,
-                title: labels.notSure,
-                description: labels.notSureDesc,
-                onTap: () => setState(() => _pickMonth = false),
-              ),
-              const SizedBox(height: BrandSpacing.lg),
-              BrandButton(label: labels.done, onPressed: _done),
-            ],
-          ),
+            ),
+            const SizedBox(height: BrandSpacing.md),
+            _SheetOption(
+              selected: !_pickMonth,
+              title: labels.notSure,
+              description: labels.notSureDesc,
+              onTap: () => setState(() => _pickMonth = false),
+            ),
+            const SizedBox(height: BrandSpacing.lg),
+            BrandButton(label: labels.done, onPressed: _done),
+          ],
         ),
       ),
     );

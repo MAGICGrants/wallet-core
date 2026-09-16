@@ -117,104 +117,102 @@ class _ContactPickerSheetState<T> extends State<_ContactPickerSheet<T>> {
     // Fixed height so filtering the results — or getting none — never shrinks the
     // sheet. Capped to the space above the keyboard, and below the status bar
     // (viewPadding.top, since padding.top reads 0 inside a modal sheet).
-    final available = mq.size.height - mq.viewInsets.bottom - mq.viewPadding.top - 40;
-    final height = math.min(mq.size.height * 0.72, available);
+    final height = math.min(mq.size.height * 0.72, maxSheetHeight(context, fraction: 1) - 40);
 
     final results = widget.search(_query);
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: height,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SheetHandle(),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          widget.headerIcon,
-                          const SizedBox(width: 11),
-                          Expanded(child: Text(labels.title, style: BrandText.sheetTitle)),
-                        ],
-                      ),
-                      if (labels.subtitle != null) ...[
-                        const SizedBox(height: 7),
-                        Text(
-                          labels.subtitle!,
-                          style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
-                        ),
+    // No keyboard padding here: showBrandSheet applies it once for the whole
+    // sheet, and a second one lifts this clear off the keyboard.
+    return SafeArea(
+      top: false,
+      child: SizedBox(
+        height: height,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SheetHandle(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 0, 22, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        widget.headerIcon,
+                        const SizedBox(width: 11),
+                        Expanded(child: Text(labels.title, style: BrandText.sheetTitle)),
                       ],
+                    ),
+                    if (labels.subtitle != null) ...[
+                      const SizedBox(height: 7),
+                      Text(
+                        labels.subtitle!,
+                        style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+                child: BrandCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      Icon(Icons.search, size: 18, color: BrandColors.inkFaint),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (q) => setState(() => _query = q),
+                          textInputAction: TextInputAction.search,
+                          style: TextStyle(fontSize: 13.5, color: BrandColors.ink),
+                          decoration: InputDecoration(
+                            isCollapsed: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                            border: InputBorder.none,
+                            hintText: labels.searchHint,
+                            hintStyle: TextStyle(fontSize: 13.5, color: BrandColors.inkFaint),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
-                  child: BrandCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: Row(
-                      children: [
-                        Icon(Icons.search, size: 18, color: BrandColors.inkFaint),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            onChanged: (q) => setState(() => _query = q),
-                            textInputAction: TextInputAction.search,
-                            style: TextStyle(fontSize: 13.5, color: BrandColors.ink),
-                            decoration: InputDecoration(
-                              isCollapsed: true,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                              border: InputBorder.none,
-                              hintText: labels.searchHint,
-                              hintStyle: TextStyle(fontSize: 13.5, color: BrandColors.inkFaint),
-                            ),
+              ),
+              Expanded(
+                child: results.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+                          child: Text(
+                            _query.isEmpty ? labels.noContacts : labels.noResults,
+                            style: BrandText.bodyMuted.copyWith(fontSize: 13),
+                            textAlign: TextAlign.center,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: results.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
-                            child: Text(
-                              _query.isEmpty ? labels.noContacts : labels.noResults,
-                              style: BrandText.bodyMuted.copyWith(fontSize: 13),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 22),
-                          itemCount: results.length,
-                          itemBuilder: (context, index) => _ContactPickRow<T>(
-                            entry: results[index],
-                            onTap: () => Navigator.of(context).pop(results[index].value),
-                          ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 22),
+                        itemCount: results.length,
+                        itemBuilder: (context, index) => _ContactPickRow<T>(
+                          entry: results[index],
+                          onTap: () => Navigator.of(context).pop(results[index].value),
                         ),
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 16, 22, 8),
+                child: BrandButton.ghost(
+                  label: labels.cancel,
+                  color: BrandColors.inkMuted,
+                  onPressed: () => Navigator.pop(context),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 16, 22, 8),
-                  child: BrandButton.ghost(
-                    label: labels.cancel,
-                    color: BrandColors.inkMuted,
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

@@ -149,6 +149,7 @@ Future<void> startForegroundSyncIfEnabled() async {
       await SharedPreferencesService.get<bool>(SettingsKeys.foregroundSyncEnabled) ?? false;
   if (enabled) await startForegroundSync();
 }
+
 Future<void> stopSyncAndDeleteWallets(
   WalletManager manager, {
   List<String> extraPrefKeys = const [],
