@@ -1091,9 +1091,22 @@ abstract class CryptoWallet with ChangeNotifier {
     }
   }
 
+  /// Wipes the wallet: its files, its native handle, and everything persisted
+  /// under its namespace.
+  ///
+  /// Held under [runWithSyncSuspended] for the same reason the LWS<->node
+  /// rebuild is: [deleteFiles] closes the native wallet, and a refresh or
+  /// connection tick inside its native section when the handle is freed is a
+  /// use-after-free -- a SIGSEGV, not a catchable Dart error. The window is
+  /// wide open here, because nothing has told the timers to stand down yet:
+  /// `_isLoaded` is still true throughout the close, so `isActive` is true, and
+  /// a tick that finds `_isConnected` false will happily `init` the wallet and
+  /// restart its scan thread while the object underneath is being destroyed.
   Future<void> delete() async {
-    await deleteFiles();
-    await clearPersistedState();
+    await runWithSyncSuspended(() async {
+      await deleteFiles();
+      await clearPersistedState();
+    });
     setIsLoaded(false);
   }
 

@@ -100,6 +100,12 @@ class FakeMoneroBackend extends MoneroBackend {
   Completer<void>? pauseNextClose;
   Completer<void>? closeStarted;
 
+  /// The same pair for [walletStats], the native call the connection tick sits
+  /// in while a wallet syncs: lets a test pin a tick *inside* its native
+  /// section and check that a close waits for it to come out.
+  Completer<void>? pauseNextWalletStats;
+  Completer<void>? walletStatsStarted;
+
   void _record(String name) => calls.add(name);
 
   bool called(String name) => calls.contains(name);
@@ -123,6 +129,8 @@ class FakeMoneroBackend extends MoneroBackend {
     transactions = [];
     pauseNextClose = null;
     closeStarted = null;
+    pauseNextWalletStats = null;
+    walletStatsStarted = null;
     backgroundSyncTypes.clear();
     backgroundSyncSetups.clear();
     backgroundWalletPaths.clear();
@@ -295,6 +303,14 @@ class FakeMoneroBackend extends MoneroBackend {
   @override
   Future<NativeWalletStats> walletStats(NativeHandle wallet, {int accountIndex = 0}) async {
     _record('walletStats');
+    if (walletStatsStarted != null && !walletStatsStarted!.isCompleted) {
+      walletStatsStarted!.complete();
+    }
+    final gate = pauseNextWalletStats;
+    if (gate != null) {
+      pauseNextWalletStats = null;
+      await gate.future;
+    }
     return NativeWalletStats(
       synchronized: synchronizedValue,
       blockChainHeight: walletHeight,
