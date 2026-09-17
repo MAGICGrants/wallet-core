@@ -128,7 +128,7 @@ void main() {
     expect(address, startsWith('4'));
   });
 
-  test('the real validator rejects an address with the right shape (audit M-10)', () {
+  test('the real validator rejects an address with the right shape', () {
     final wm = _ensureAvailable();
     if (wm == null) return;
 

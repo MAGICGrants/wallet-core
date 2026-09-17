@@ -96,9 +96,16 @@ void main() {
       expect(proxy.host.address, '127.0.0.1');
     });
 
-    test('a non-numeric external port throws rather than connecting to 0', () async {
-      await settings.save(torMode: TorMode.external, socksPort: 'not-a-port');
-      expect(settings.getProxy(), throwsFormatException);
+    test('an unusable external port reads as Tor unavailable', () async {
+      for (final bad in ['not-a-port', '', '  ', '0', '-1', '70000', '90.5']) {
+        await settings.save(torMode: TorMode.external, socksPort: bad);
+        expect(await settings.getProxy(), isNull, reason: 'port "$bad"');
+      }
+    });
+
+    test('a usable external port still resolves', () async {
+      await settings.save(torMode: TorMode.external, socksPort: ' 9150 ');
+      expect((await settings.getProxy())?.port, 9150, reason: 'surrounding space is tolerated');
     });
   });
 

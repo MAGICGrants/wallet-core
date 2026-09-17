@@ -82,7 +82,7 @@ void main() {
     backend.existingWalletPaths.add(await pathFor(mode));
   }
 
-  group('an interrupted switch never points one mode at the other server (audit H-02)', () {
+  group('an interrupted switch never points one mode at the other server', () {
     // The form persists the new type *before* `_rebuildForConnectionType` writes
     // a file for it, and that rebuild reads a seed, closes the wallet and
     // derives keys — so an ordinary failure, not only a crash, can leave the

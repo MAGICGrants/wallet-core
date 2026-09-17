@@ -66,7 +66,7 @@ void main() {
       );
     });
 
-    test('an onion reached WITHOUT Tor is not confidential (audit M-01)', () {
+    test('an onion reached WITHOUT Tor is not confidential', () {
       // The hole this parameter closes. An onion address can be saved with Tor
       // off -- the connection form forces `useTor` false when Tor is globally
       // disabled -- and the old hostname-only test then waved the view-key

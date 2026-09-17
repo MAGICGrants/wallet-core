@@ -305,11 +305,11 @@ void main() {
     });
 
     test('does not fall back to v1 when the v2 lookup established nothing', () {
-      // The distinction M-02 is about. A reset connection, a timeout, a SERVFAIL
-      // or a denial that failed to validate leaves the v2 side unknown, and
-      // "unknown" is not "publishes none". Falling back here would let anyone
-      // able to break one connection force a possibly-superseded v1 address,
-      // which needs no forgery and would leave no trace.
+      // The distinction that matters here. A reset connection, a timeout, a
+      // SERVFAIL or a denial that failed to validate leaves the v2 side
+      // unknown, and "unknown" is not "publishes none". Falling back here would
+      // let anyone able to break one connection force a possibly-superseded v1
+      // address, which needs no forgery and would leave no trace.
       expect(
         () => resolve(
           const OpenAliasLookups(oa1Records: [oa1Xmr], paymentProblem: 'lookup failed: timed out'),

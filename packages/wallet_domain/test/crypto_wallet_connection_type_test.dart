@@ -226,6 +226,53 @@ void main() {
       expect(w.connectionAddress, 'new-lws.example.com:18090');
     });
 
+    test('mode adoption cannot relabel the flat record', () async {
+      // The flat record's type and the *active* type were the same preference,
+      // so adopting a mode rewrote the label on the leftover record. A node
+      // user whose node wallet file went missing adopted LWS, and the next
+      // launch migrated the node address into the LWS slot — where the
+      // light-wallet login sends the private view key. Durably, this time.
+      await legacyRecord(address: 'node.example.com:18081', type: 'node');
+
+      final first = typed();
+      await first.loadPersistedConnection();
+      expect(first.connectionType, 'node');
+
+      // What `_adoptModeWithExistingWallet` does: only the active type.
+      await SharedPreferencesService.set<String>('xmr_connectionType', 'lws');
+
+      final next = typed();
+      await next.loadPersistedConnection();
+
+      expect(next.connectionType, 'lws');
+      expect(next.connectionAddress, isEmpty, reason: 'the node address must not follow the mode');
+      expect(
+        await SharedPreferencesService.get<String>('xmr_connectionAddress_lws'),
+        isNull,
+        reason: 'and must not be written into the LWS slot',
+      );
+      // Still where it belongs.
+      expect((await next.getPersistedConnectionForType('node')).address, 'node.example.com:18081');
+    });
+
+    test('the migration runs once, so a later type change moves nothing', () async {
+      await legacyRecord(address: 'lws.example.com:18090', type: 'lws');
+      final w = typed();
+      await w.loadPersistedConnection();
+
+      // Flip the active type back and forth; the flat record is retired.
+      for (final t in ['node', 'lws', 'node']) {
+        await SharedPreferencesService.set<String>('xmr_connectionType', t);
+        await typed().loadPersistedConnection();
+      }
+
+      expect(await SharedPreferencesService.get<String>('xmr_connectionAddress_node'), isNull);
+      expect(
+        await SharedPreferencesService.get<String>('xmr_connectionAddress_lws'),
+        'lws.example.com:18090',
+      );
+    });
+
     test('re-saving moves it to the per-type key and stops consulting the old one', () async {
       await legacyRecord(address: 'old-lws.example.com:18090', type: 'lws');
       final w = typed();

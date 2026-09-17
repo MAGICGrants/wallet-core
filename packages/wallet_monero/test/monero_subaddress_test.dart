@@ -381,7 +381,7 @@ void main() {
       expect(posts, isEmpty);
     });
 
-    test('node mode refuses to send the view key at all (audit H-02)', () async {
+    test('node mode refuses to send the view key at all', () async {
       await openWallet(type: 'node');
       // Handed an LWS-looking address while in node mode, which is the shape an
       // interrupted switch used to leave behind. A node-mode wallet has no
@@ -439,7 +439,7 @@ void main() {
       expect(posts, isEmpty);
     });
 
-    test('an onion with Tor off is refused before the key is read (audit M-01)', () async {
+    test('an onion with Tor off is refused before the key is read', () async {
       await openWallet();
       const v3 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567';
       // The reachable bad state: global Tor disabled, so the connection form
@@ -471,7 +471,7 @@ void main() {
     });
   });
 
-  group('the connect that logs in is gated too (audit H-01)', () {
+  group('the connect that logs in is gated too', () {
     // `upsert_subaddrs` is not the only request carrying the view key. The LWS
     // login inside `Wallet_init` carries it too, and it is the request that
     // establishes the session, so it is the *first* thing to reach a hostile
@@ -486,8 +486,9 @@ void main() {
 
     test('an onion LWS address with Tor off is refused before init', () async {
       await openWallet();
-      // The reachable bad state, same as M-01's: global Tor disabled, so the
-      // connection form forces useTor false and an onion address saves anyway.
+      // The reachable bad state, the same one the upsert gate faces: global
+      // Tor is disabled, so the connection form forces useTor false and an
+      // onion address saves anyway.
       connect(address: onion, useTor: false);
 
       await expectLater(

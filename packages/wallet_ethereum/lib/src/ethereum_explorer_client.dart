@@ -201,12 +201,17 @@ class EthereumExplorerClient implements EthereumExplorerApi {
     // saved and silently failing every fetch afterwards.
     // See [EthereumRpcClient]: a configured SOCKS port is Tor whenever the
     // connection uses Tor, and a non-Tor proxy cannot reach `.onion` anyway.
-    requireConfidentialChannel(
-      Uri.parse(url),
-      carrying: 'your wallet address',
-      viaTor: socksPort != null && socksPort > 0,
-    );
-    if (socksPort != null && socksPort > 0) {
+    final viaProxy = socksPort != null && socksPort > 0;
+
+    if (isUnroutedOnion(Uri.parse(url).host, viaProxy: viaProxy)) {
+      throw InsecureChannelException(
+        endpoint: Uri.parse(url).host,
+        carrying: 'a request for your wallet address',
+      );
+    }
+
+    requireConfidentialChannel(Uri.parse(url), carrying: 'your wallet address', viaTor: viaProxy);
+    if (viaProxy) {
       final uri = Uri.parse(url);
       final socket = await SOCKSSocket.create(
         proxyHost: InternetAddress.loopbackIPv4.address,

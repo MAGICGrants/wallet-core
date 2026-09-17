@@ -163,4 +163,46 @@ void main() {
       }
     });
   });
+
+  group('a display double must never be compared against a parsed amount', () {
+    // `CryptoWallet.unlockedBalance` is `units.toDouble() / 1e12` — two
+    // roundings — while a field holding `baseUnitsToDecimalString(units)`
+    // parses to the nearest double in one. Above 2^53 piconero (~9007 XMR) the
+    // two disagree, and when the parse lands higher a Max button produces an
+    // "insufficient balance" error against the balance it just filled in
+    // The fix is to compare base units; this pins why.
+    double displayBalance(BigInt units) => units.toDouble() / BigInt.from(10).pow(12).toDouble();
+
+    test('the two agree below 2^53 piconero', () {
+      for (final units in [BigInt.one, BigInt.from(1000000), BigInt.two.pow(52)]) {
+        expect(
+          double.parse(baseUnitsToDecimalString(units, 12)),
+          displayBalance(units),
+          reason: '$units',
+        );
+      }
+    });
+
+    test('and disagree above it, which is where balances live', () {
+      // 2^53 + 1 piconero: representable exactly as a decimal string and as a
+      // BigInt, not as a double.
+      final units = BigInt.two.pow(53) + BigInt.one;
+      expect(baseUnitsToDecimalString(units, 12), '9007.199254740993');
+      expect(decimalToBaseUnits('9007.199254740993', 12), units);
+
+      // The comparison the send screen used to make, and why it was unsafe.
+      expect(
+        double.parse(baseUnitsToDecimalString(units, 12)) == displayBalance(units),
+        isFalse,
+        reason: 'two roundings against one',
+      );
+    });
+
+    test('base units compare exactly at the same magnitude', () {
+      final units = BigInt.two.pow(53) + BigInt.one;
+      final typed = decimalToBaseUnits(baseUnitsToDecimalString(units, 12), 12);
+      expect(typed, units);
+      expect(typed > units, isFalse, reason: 'Max must never read as over balance');
+    });
+  });
 }

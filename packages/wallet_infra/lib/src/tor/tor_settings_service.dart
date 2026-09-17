@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import '../logging.dart';
 import '../storage/preferences.dart';
 import 'tor_service.dart';
 
@@ -87,7 +89,18 @@ class TorSettingsService {
         if (!await TorService.sharedInstance.waitUntilConnected()) return null;
         return TorService.sharedInstance.getProxyInfo();
       case TorMode.external:
-        return (host: InternetAddress.loopbackIPv4, port: int.parse(_socksPort));
+        // `int.parse` threw here on an unusable saved port. That was inert
+        // while nothing loaded the persisted settings; now that something does,
+        // the throw escapes `_connectImpl` before it can latch
+        // `_torRequirementBroken`, so the reconnect timer retried forever with
+        // nothing shown to the user. Null is the "Tor unavailable" answer every
+        // caller already handles.
+        final port = int.tryParse(_socksPort.trim());
+        if (port == null || port < 1 || port > 65535) {
+          unawaited(log(LogLevel.error, 'External Tor SOCKS port is not usable: "$_socksPort"'));
+          return null;
+        }
+        return (host: InternetAddress.loopbackIPv4, port: port);
       case TorMode.disabled:
         return null;
     }
