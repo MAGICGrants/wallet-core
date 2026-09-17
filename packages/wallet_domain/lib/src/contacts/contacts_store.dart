@@ -11,9 +11,7 @@ import 'package:wallet_infra/wallet_infra.dart';
 /// Entries are the JSON strings [Contact] encodes, held as one JSON array,
 /// because secure storage stores strings and not lists.
 ///
-/// Reached through [WalletSecrets], which is the same platform keystore under
-/// the same key — so this reads what earlier builds wrote — and is injectable,
-/// so the migration below can be exercised without a plugin mock.
+/// Reached through [WalletSecrets], the platform keystore, under [_storageKey].
 const _storageKey = 'contacts';
 
 /// Reads the address book, or null if it could not be read.
@@ -34,7 +32,7 @@ Future<List<String>?> readEncodedContacts() async {
     return null;
   }
 
-  if (stored == null) return _migrateFromPreferences();
+  if (stored == null) return [];
 
   // Present but empty is a real empty address book.
   if (stored.isEmpty) return [];
@@ -60,33 +58,4 @@ Future<void> clearContacts() async {
   } catch (e) {
     unawaited(log(LogLevel.error, 'Could not clear contacts: $e'));
   }
-
-  // Also drop anything a build that predates the move to secure storage left
-  // behind, or deleting a wallet would leave a plaintext address book on disk.
-  await SharedPreferencesService.remove(SettingsKeys.contacts);
-}
-
-/// Moves an address book written by an earlier build out of shared preferences.
-///
-/// The plaintext copy is deleted only once the secure copy is safely written —
-/// if that fails the contacts are still returned and still in preferences, and
-/// the next launch tries again.
-///
-/// An app that never stored contacts in preferences finds nothing and gets an
-/// empty address book, which is the correct answer for a first run.
-Future<List<String>?> _migrateFromPreferences() async {
-  final legacy = await SharedPreferencesService.get<List<String>>(SettingsKeys.contacts);
-  if (legacy == null) return [];
-
-  try {
-    await writeEncodedContacts(legacy);
-  } catch (e) {
-    unawaited(log(LogLevel.error, 'Could not move contacts to secure storage: $e'));
-    return legacy;
-  }
-
-  await SharedPreferencesService.remove(SettingsKeys.contacts);
-  unawaited(log(LogLevel.info, 'Moved ${legacy.length} contacts out of shared preferences'));
-
-  return legacy;
 }

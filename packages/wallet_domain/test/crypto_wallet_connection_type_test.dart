@@ -34,8 +34,8 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('conn_type');
     SharedPreferencesService.store = MemoryPreferenceStore();
     WalletSecrets.store = MemorySecretStore();
-    // Spice namespaces prefs as `xmr_<key>`; the legacy/torn-write tests below
-    // have to name keys exactly, so the scheme matters.
+    // Spice namespaces prefs as `xmr_<key>`; the torn-write tests below have to
+    // name keys exactly, so the scheme matters.
     WalletAppConfig.install(WalletAppConfig.spice, directories: FixedDirectories(tmp));
   });
 
@@ -137,159 +137,8 @@ void main() {
     });
   });
 
-  group('a pre-split install migrates into the right slot', () {
-    /// The flat record shipped before the per-type split.
-    Future<void> legacyRecord({required String address, String? type, String proxy = ''}) async {
-      await SharedPreferencesService.set<String>('xmr_connectionAddress', address);
-      await SharedPreferencesService.set<String>('xmr_connectionProxyPort', proxy);
-      await SharedPreferencesService.set<bool>('xmr_connectionUseTor', false);
-      if (type != null) await SharedPreferencesService.set<String>('xmr_connectionType', type);
-    }
-
-    test('the server is kept, under the type it was saved with', () async {
-      await legacyRecord(address: 'old-lws.example.com:18090', type: 'lws', proxy: '1080');
-
-      final w = typed();
-      await w.loadPersistedConnection();
-
-      expect(w.connectionAddress, 'old-lws.example.com:18090');
-      expect(w.connectionProxyPort, '1080');
-      expect(w.connectionType, 'lws');
-    });
-
-    test('a node record does not migrate into the LWS slot', () async {
-      // Reading the flat record for whichever type asks would recreate the
-      // exact defect: an LWS mode holding a node address.
-      await legacyRecord(address: 'old-node.example.com:18081', type: 'node');
-
-      final w = typed();
-      expect((await w.getPersistedConnectionForType('lws')).address, isEmpty);
-      expect((await w.getPersistedConnectionForType('node')).address, 'old-node.example.com:18081');
-    });
-
-    test('a record with no type at all belongs to the default mode', () async {
-      // `''` was savable, and means the first option rather than a third mode.
-      await legacyRecord(address: 'legacy.example.com:18090');
-
-      final w = typed();
-      expect((await w.getPersistedConnectionForType('lws')).address, 'legacy.example.com:18090');
-      expect((await w.getPersistedConnectionForType('node')).address, isEmpty);
-    });
-
-    test('the old server survives a switch to the other mode and back', () async {
-      // The upgrade path in full, and the reason the copy happens on load rather
-      // than being left to the read fallback: that fallback only finds the flat
-      // record while `connectionType` still names its type, so the first switch
-      // to node would have stranded this user's LWS server for good.
-      await legacyRecord(address: 'old-lws.example.com:18090', type: 'lws', proxy: '1080');
-
-      final first = typed();
-      await first.loadPersistedConnection();
-
-      // Switch to a node and save.
-      first.setConnection(
-        address: 'node.example.com:18081',
-        proxyPort: '',
-        useTor: false,
-        connectionType: 'node',
-      );
-      await first.persistCurrentConnection();
-
-      // Both modes are now remembered independently.
-      expect((await first.getPersistedConnectionForType('node')).address, 'node.example.com:18081');
-      final lws = await first.getPersistedConnectionForType('lws');
-      expect(lws.address, 'old-lws.example.com:18090');
-      expect(lws.proxyPort, '1080');
-
-      // And switching back lands on the original server, not the node.
-      first.setConnection(
-        address: lws.address,
-        proxyPort: lws.proxyPort,
-        useTor: lws.useTor,
-        connectionType: 'lws',
-      );
-      await first.persistCurrentConnection();
-
-      final next = typed();
-      await next.loadPersistedConnection();
-      expect(next.connectionType, 'lws');
-      expect(next.connectionAddress, 'old-lws.example.com:18090');
-    });
-
-    test('the copy runs once and never overwrites a real per-type record', () async {
-      await legacyRecord(address: 'old-lws.example.com:18090', type: 'lws');
-      final w = typed();
-      await save(w, 'lws', 'new-lws.example.com:18090');
-
-      // A second load must not resurrect the stale flat record over the top.
-      await w.loadPersistedConnection();
-      expect(w.connectionAddress, 'new-lws.example.com:18090');
-    });
-
-    test('mode adoption cannot relabel the flat record', () async {
-      // The flat record's type and the *active* type were the same preference,
-      // so adopting a mode rewrote the label on the leftover record. A node
-      // user whose node wallet file went missing adopted LWS, and the next
-      // launch migrated the node address into the LWS slot — where the
-      // light-wallet login sends the private view key. Durably, this time.
-      await legacyRecord(address: 'node.example.com:18081', type: 'node');
-
-      final first = typed();
-      await first.loadPersistedConnection();
-      expect(first.connectionType, 'node');
-
-      // What `_adoptModeWithExistingWallet` does: only the active type.
-      await SharedPreferencesService.set<String>('xmr_connectionType', 'lws');
-
-      final next = typed();
-      await next.loadPersistedConnection();
-
-      expect(next.connectionType, 'lws');
-      expect(next.connectionAddress, isEmpty, reason: 'the node address must not follow the mode');
-      expect(
-        await SharedPreferencesService.get<String>('xmr_connectionAddress_lws'),
-        isNull,
-        reason: 'and must not be written into the LWS slot',
-      );
-      // Still where it belongs.
-      expect((await next.getPersistedConnectionForType('node')).address, 'node.example.com:18081');
-    });
-
-    test('the migration runs once, so a later type change moves nothing', () async {
-      await legacyRecord(address: 'lws.example.com:18090', type: 'lws');
-      final w = typed();
-      await w.loadPersistedConnection();
-
-      // Flip the active type back and forth; the flat record is retired.
-      for (final t in ['node', 'lws', 'node']) {
-        await SharedPreferencesService.set<String>('xmr_connectionType', t);
-        await typed().loadPersistedConnection();
-      }
-
-      expect(await SharedPreferencesService.get<String>('xmr_connectionAddress_node'), isNull);
-      expect(
-        await SharedPreferencesService.get<String>('xmr_connectionAddress_lws'),
-        'lws.example.com:18090',
-      );
-    });
-
-    test('re-saving moves it to the per-type key and stops consulting the old one', () async {
-      await legacyRecord(address: 'old-lws.example.com:18090', type: 'lws');
-      final w = typed();
-      await w.loadPersistedConnection();
-      await w.persistCurrentConnection();
-
-      // The flat key is now irrelevant: changing it must not move the wallet.
-      await SharedPreferencesService.set<String>('xmr_connectionAddress', 'attacker.example.com');
-
-      final fresh = typed();
-      await fresh.loadPersistedConnection();
-      expect(fresh.connectionAddress, 'old-lws.example.com:18090');
-    });
-  });
-
-  group('a coin with no server-kind toggle is untouched', () {
-    test('it keeps the flat keys, so nothing to migrate', () async {
+  group('a coin with no server-kind toggle uses the flat keys', () {
+    test('it saves and loads under the unsuffixed keys', () async {
       final btc = FakeWallet('BTC');
       addTearDown(btc.dispose);
       await save(btc, '', 'electrum.example.com:50002');

@@ -17,23 +17,13 @@ class Contact {
 
   Map<String, dynamic> toJson() => {'id': id, 'name': name, 'addresses': addresses};
 
-  /// Reads both the multi-address form and the single-address form earlier
-  /// Skylight builds wrote. The legacy entry is Monero by definition: it
-  /// predates any other chain being storable.
+  /// `addresses` maps an upper-cased coin symbol to its address.
   factory Contact.fromJson(Map<String, dynamic> json) {
-    if (json.containsKey('addresses')) {
-      final raw = json['addresses'] as Map<dynamic, dynamic>;
-      return Contact(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        addresses: raw.map((k, v) => MapEntry(k.toString().toUpperCase(), v.toString())),
-      );
-    }
-
+    final raw = json['addresses'] as Map<dynamic, dynamic>;
     return Contact(
       id: json['id'] as String,
       name: json['name'] as String,
-      addresses: {'XMR': json['address'] as String},
+      addresses: raw.map((k, v) => MapEntry(k.toString().toUpperCase(), v.toString())),
     );
   }
 
