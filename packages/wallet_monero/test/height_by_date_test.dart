@@ -19,6 +19,13 @@ void main() {
         DateTime(2013),
         DateTime(2013, 1, 1),
         DateTime(2010, 6, 15),
+        // The pre-genesis months the restore sheet actually offers: it lists
+        // every year back to 2014 and picks the first of the month, so these
+        // three are selectable and the guard has to cover them. They used to
+        // return heights from mid-2015, skipping a year of the user's history.
+        DateTime(2014, 1),
+        DateTime(2014, 2),
+        DateTime(2014, 3),
         DateTime(2014, 3, 31),
         DateTime(1970),
       ]) {
