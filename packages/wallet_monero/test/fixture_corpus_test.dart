@@ -193,7 +193,7 @@ void main() {
       WalletFileCrypto.kdf = const WebCryptoPbkdf2();
     });
 
-    test('skylight_plaintext_prefs reads back with no migration step', () async {
+    test('skylight_plaintext_prefs: pre-split connection is dropped, not migrated', () async {
       final spec = fixtures['skylight_plaintext_prefs'] as Map<String, dynamic>?;
       if (spec == null) return markTestSkipped('not in this corpus');
 
@@ -207,14 +207,13 @@ void main() {
         await SharedPreferencesService.set<Object>(e.key, e.value as Object);
       }
 
-      // Skylight's keys are bare, so a shipped v1.0.11 preferences file is read
-      // by the shared core unchanged. No migration, and
-      // therefore no migration to get wrong.
+      // No migration: the v1 flat `connectionAddress` isn't adopted into the
+      // per-type slot, so it reads back empty; bare type/height still read through.
       final wallet = MoneroWallet();
       addTearDown(wallet.dispose);
       await wallet.loadPersistedConnection();
 
-      expect(wallet.connectionAddress, prefs['connectionAddress']);
+      expect(wallet.connectionAddress, isEmpty);
       expect(wallet.connectionType, prefs['connectionType']);
       expect(await wallet.getRestoreHeight(), prefs['walletRestoreHeight']);
     });
