@@ -9,17 +9,34 @@ import 'package:screen_protector/screen_protector.dart';
 /// The display-side counterpart to `Redact`; the same value
 /// that must not reach a log should not reach the app switcher's screenshot.
 mixin SecureScreenMixin<T extends StatefulWidget> on State<T> {
+  /// seed-then-keys onboarding route this mixin exists for.
+  static int _mounted = 0;
+
   @override
   void initState() {
     super.initState();
-    ScreenProtector.preventScreenshotOn();
-    ScreenProtector.protectDataLeakageWithBlur();
+    if (_mounted++ == 0) {
+      ScreenProtector.preventScreenshotOn();
+      ScreenProtector.protectDataLeakageWithBlur();
+    }
   }
 
   @override
   void dispose() {
-    ScreenProtector.preventScreenshotOff();
-    ScreenProtector.protectDataLeakageWithBlurOff();
+    // Clamped: a dispose without a matching initState would otherwise drive the
+    // count negative and leave protection stuck on for the process.
+    _mounted = _mounted > 0 ? _mounted - 1 : 0;
+    if (_mounted == 0) {
+      ScreenProtector.preventScreenshotOff();
+      ScreenProtector.protectDataLeakageWithBlurOff();
+    }
     super.dispose();
   }
+
+  /// Test-only: the number of protected screens currently mounted.
+  @visibleForTesting
+  static int get mountedProtectedScreens => _mounted;
+
+  @visibleForTesting
+  static void resetForTesting() => _mounted = 0;
 }

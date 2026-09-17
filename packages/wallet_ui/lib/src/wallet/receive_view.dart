@@ -8,6 +8,7 @@ import '../design/brand_screen_header.dart';
 import '../design/brand_segmented.dart';
 import '../design/icon_circle_button.dart';
 import '../design/section_header.dart';
+import '../design/share_anchor.dart';
 import 'coin_mark.dart';
 
 /// Translated strings for [ReceiveView]. Injected so the view stays
@@ -30,7 +31,11 @@ class ReceiveView extends StatelessWidget {
   final VoidCallback onBack;
 
   /// Mobile share header action; null hides the header share button.
-  final VoidCallback? onShare;
+  ///
+  /// Receives the share button's global rect, which iOS needs to anchor the
+  /// share popover -- pass it through as `ShareParams.sharePositionOrigin`.
+  /// Null when the button could not be measured; see [shareAnchorRect].
+  final ValueChanged<Rect?>? onShare;
 
   /// Spinner while false (the address is still being resolved).
   final bool ready;
@@ -86,8 +91,16 @@ class ReceiveView extends StatelessWidget {
                   child: BrandScreenHeader(
                     onBack: onBack,
                     center: Text(labels.title, style: BrandText.appBar.copyWith(fontSize: 16)),
+                    // Builder so the rect handed to [onShare] is the share
+                    // button's own, not the whole screen's: it is what the iOS
+                    // share popover points at.
                     action: onShare != null
-                        ? IconCircleButton(icon: Icons.ios_share, onPressed: ready ? onShare : null)
+                        ? Builder(
+                            builder: (context) => IconCircleButton(
+                              icon: Icons.ios_share,
+                              onPressed: ready ? () => onShare!(shareAnchorRect(context)) : null,
+                            ),
+                          )
                         : null,
                   ),
                 ),

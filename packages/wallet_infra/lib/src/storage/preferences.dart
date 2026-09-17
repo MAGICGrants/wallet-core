@@ -99,7 +99,20 @@ class SharedPreferencesService {
   /// type is both shorter and total.
   static Future<T?> get<T>(String key) async {
     final value = await store.read(key);
-    return value is T ? value : null;
+    if (value is T) return value;
+
+    // A string list does not arrive as a `List<String>`. `shared_preferences`
+    // decodes it off the platform channel into a `List<dynamic>` and casts on
+    // the way out of `getStringList`, so `value is List<String>` is false for
+    // every list ever written — which silently turned "the user has contacts"
+    // into "the user has none". Casting here rather than at the call site keeps
+    // `get<List<String>>` meaning what it says.
+    if (value is List && <String>[] is T) {
+      final strings = value.whereType<String>().toList(growable: false);
+      return strings.length == value.length ? strings as T : null;
+    }
+
+    return null;
   }
 
   static Future<void> set<T>(String key, T value) async {

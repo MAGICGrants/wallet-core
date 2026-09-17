@@ -114,13 +114,29 @@ void main() {
       expect(wallet.connectivityCheckInterval, const Duration(seconds: 1));
     });
 
-    test('address validation accepts standard, subaddress and integrated forms', () {
-      expect(wallet.isAddressValid('4${'A' * 94}'), isTrue, reason: 'standard');
-      expect(wallet.isAddressValid('8${'A' * 94}'), isTrue, reason: 'subaddress');
-      expect(wallet.isAddressValid('4${'A' * 105}'), isTrue, reason: 'integrated');
-      expect(wallet.isAddressValid('5${'A' * 94}'), isFalse, reason: 'wrong network byte');
-      expect(wallet.isAddressValid('4${'A' * 50}'), isFalse, reason: 'wrong length');
+    test('validation asks monero_c rather than guessing from the shape', () {
+      expect(wallet.isAddressValid('4${'A' * 94}'), isFalse, reason: 'standard shape only');
+      expect(wallet.isAddressValid('8${'A' * 94}'), isFalse, reason: 'subaddress shape only');
+      expect(wallet.isAddressValid('4${'A' * 105}'), isFalse, reason: 'integrated shape only');
+
+      expect(
+        backend.addressValidCalls.map((c) => c.networkType).toSet(),
+        {0},
+        reason: 'checked against mainnet, the network the wallet is built for',
+      );
+    });
+
+    test('an address monero_c accepts is payable, whatever its shape', () {
+      // Length and leading character are monero_c's business now, not a list
+      // kept in step by hand here.
+      backend.addressValidator = (address, _) => address == 'accepted-by-monero-c';
+      expect(wallet.isAddressValid('accepted-by-monero-c'), isTrue);
+    });
+
+    test('an empty address is refused without troubling the validator', () {
+      backend.addressValidCalls.clear();
       expect(wallet.isAddressValid(''), isFalse);
+      expect(backend.addressValidCalls, isEmpty);
     });
   });
 
@@ -1307,4 +1323,21 @@ void main() {
       );
     },
   );
+
+  test('delete forgets the wallet address it had cached', () async {
+    backend.defaultAddress = '4${'c' * 94}';
+    connect();
+    backend.existingWalletPaths.add(await pathFor('lws'));
+    await wallet.openExisting(password: 'pw');
+    await wallet.loadPrimaryAddress();
+    expect(wallet.getPrimaryAddress(), backend.defaultAddress);
+
+    await wallet.delete();
+
+    // Both getters are synchronous and have no liveness check, so a cached
+    // address outlives the keys it came from: the receive screen would show a
+    // deleted wallet's address, which the user can no longer spend from.
+    expect(wallet.getPrimaryAddress(), isEmpty);
+    expect(wallet.getReceiveAddress(), isNull);
+  });
 }

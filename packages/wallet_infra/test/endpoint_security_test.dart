@@ -66,7 +66,7 @@ void main() {
       );
     });
 
-    test('an onion reached WITHOUT Tor is not confidential (audit M-01)', () {
+    test('an onion reached WITHOUT Tor is not confidential', () {
       // The hole this parameter closes. An onion address can be saved with Tor
       // off -- the connection form forces `useTor` false when Tor is globally
       // disabled -- and the old hostname-only test then waved the view-key
@@ -257,6 +257,46 @@ void main() {
           reason: url,
         );
       }
+    });
+  });
+
+  group('isUnroutedOnion', () {
+    // The rule a connection is gated on before any request exists, so it takes
+    // the bare `host:port` connection addresses are stored as, and answers only
+    // about the route. Everything else is [classifyEndpoint]'s job.
+    const v3 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567';
+    const v2 = 'aaaaaaaaaaaaaaaa';
+
+    test('an onion with nothing routing it is refused', () {
+      expect(isUnroutedOnion('$v3.onion:18090', viaProxy: false), isTrue);
+      expect(isUnroutedOnion('$v2.onion', viaProxy: false), isTrue);
+    });
+
+    test('any SOCKS route satisfies it', () {
+      // Tor's own port or the user's proxy. A non-Tor proxy cannot resolve
+      // `.onion`, so it fails to connect rather than leaking the name.
+      expect(isUnroutedOnion('$v3.onion:18090', viaProxy: true), isFalse);
+    });
+
+    test('a non-onion address is never its business', () {
+      for (final address in [
+        'lws.example.com:18090',
+        '127.0.0.1:18090',
+        '192.168.1.50:18090',
+        'node.local:18081',
+        // A typo that is not a real onion label; promoting it would be wrong in
+        // both directions, and here it must simply not match.
+        'myserver.onion:18090',
+      ]) {
+        expect(isUnroutedOnion(address, viaProxy: false), isFalse, reason: address);
+      }
+    });
+
+    test('a scheme the caller left on is tolerated, not silently mismatched', () {
+      // Addresses are stored bare, but the host is parsed rather than string
+      // matched, so a caller that kept a scheme still gets the right answer.
+      expect(isUnroutedOnion('$v3.onion:18090', viaProxy: false), isTrue);
+      expect(isUnroutedOnion('$v3.ONION:18090', viaProxy: false), isTrue);
     });
   });
 

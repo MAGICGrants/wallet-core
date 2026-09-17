@@ -29,6 +29,7 @@ export 'src/design/section_header.dart';
 export 'src/design/settings_picker_sheets.dart';
 export 'src/design/seed_grid.dart';
 export 'src/design/settings_group.dart';
+export 'src/design/share_anchor.dart';
 export 'src/design/sheet.dart';
 export 'src/design/status_pill.dart';
 export 'src/design/step_dots.dart';

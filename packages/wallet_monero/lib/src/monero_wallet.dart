@@ -61,6 +61,12 @@ class MoneroWallet extends CryptoWallet {
   bool _daemonInitialised = false;
 
   int? _daemonTargetHeight;
+
+  /// Last `Wallet_synchronized` reading, before [_syncedGivenHeights] narrows
+  /// it. Kept so a daemon height that arrives later can re-decide without
+  /// waiting for the next poll -- which, if the flag wrongly said synced, is
+  /// the 20s backed-off tick rather than the 3s syncing one.
+  bool _reportedSynchronized = false;
   DateTime? _lastDaemonHeightFetch;
 
   bool? _serverSupportsSubaddresses;
@@ -240,10 +246,15 @@ class MoneroWallet extends CryptoWallet {
       'switching the connection type to match.',
     );
 
+    // The adopted mode's *own* server, never the current one. Carrying the
+    // address across the mode change is what pointed a light-wallet session at
+    // the user's node and POSTed the view key to it; the node address stays
+    // parked under `node` until a node wallet file exists to go with it.
+    final adopted = await getPersistedConnectionForType(otherType);
     setConnection(
-      address: connectionAddress,
-      proxyPort: connectionProxyPort,
-      useTor: connectionUseTor,
+      address: adopted.address,
+      proxyPort: adopted.proxyPort,
+      useTor: adopted.useTor,
       connectionType: otherType,
     );
     // Persisted, not just in memory: callers reload the connection right after.
@@ -627,7 +638,7 @@ class MoneroWallet extends CryptoWallet {
           password: password,
           newWallet: isNewWallet,
           kdfRounds: 1,
-          networkType: MoneroConsts.mainnetNetworkType,
+          networkType: networkType,
         );
 
       case SeedFormat.bip39:
@@ -792,6 +803,7 @@ class MoneroWallet extends CryptoWallet {
     _history = null;
     _loadedKind = null;
     _daemonInitialised = false;
+    _reportedSynchronized = false;
     _isBackgroundWallet = false;
     // Keyed on the handle, and a freed handle's address can be reused by the
     // next allocation. Cake keys its equivalent cache on the FFI address alone
@@ -856,6 +868,8 @@ class MoneroWallet extends CryptoWallet {
     _serverSupportsSubaddresses = null;
     _unusedSubaddressIndex = null;
     _unusedSubaddressIndexIsSupported = null;
+    _primaryAddress = '';
+    _subaddressCache = null;
   }
 
   @override
@@ -921,6 +935,16 @@ class MoneroWallet extends CryptoWallet {
     final daemonAddress = '${useSsl ? 'https://' : 'http://'}$address';
     final proxyAddress = (proxyPort != null && proxyPort.isNotEmpty) ? '127.0.0.1:$proxyPort' : '';
 
+    // Extra check to require Tor or a SOCKS proxy for LWS connections since they
+    // carry the view key
+    if (!_isNodeMode) {
+      requireConfidentialChannel(
+        Uri.parse(daemonAddress),
+        carrying: 'the private view key',
+        viaTor: proxyPort != null && proxyPort.isNotEmpty,
+      );
+    }
+
     walletLog(LogLevel.info, 'Connecting: ssl=$useSsl lightWallet=${!_isNodeMode}');
 
     await _backend.init(
@@ -958,6 +982,12 @@ class MoneroWallet extends CryptoWallet {
     // only for an onion or local one.
     final useSsl = _addressRequiresSsl(address);
     final url = '${useSsl ? 'https' : 'http'}://$address$path';
+
+    // Require Tor or a SOCKS proxy for .onion connection setup
+    final viaProxy = useTor || (proxyPort != null && proxyPort.isNotEmpty);
+    if (isUnroutedOnion(address, viaProxy: viaProxy)) {
+      throw Exception('An onion address needs Tor. Please go back and enable it.');
+    }
 
     walletLog(LogLevel.info, 'Probing ${isNode ? 'node' : 'LWS'} (tor=$useTor)');
 
@@ -1079,7 +1109,7 @@ class MoneroWallet extends CryptoWallet {
   Future<void> loadIsSynced() async {
     final wallet = _wallet;
     if (wallet == null || !_daemonInitialised) return;
-    setIsSynced(await _backend.synchronized(wallet));
+    _applySyncedFlag(await _backend.synchronized(wallet));
   }
 
   @override
@@ -1129,6 +1159,9 @@ class MoneroWallet extends CryptoWallet {
       final height = await _backend.daemonBlockChainHeight(wallet);
       if (height > 0) {
         _daemonTargetHeight = height;
+        // Re-decide now that there is something to compare against, rather than
+        // leaving a wrong "synced" up until the next poll.
+        _applySyncedFlag(_reportedSynchronized);
         notifyListeners();
       }
     } catch (e) {
@@ -1189,6 +1222,31 @@ class MoneroWallet extends CryptoWallet {
   /// debounces into a rebuild of every screen watching it; on a 3-second tick
   /// during a multi-hour scan that is a rebuild every 3 seconds to redraw
   /// identical numbers. Cake's tick opens with the same check.
+  /// monero_c's `Wallet_synchronized`, narrowed by what the heights say.
+  ///
+  /// The flag is raised once the refresh thread has completed a pass, which in
+  /// node mode is not the same as the scan having reached the chain -- and a
+  /// wallet rebuilt for an LWS->node switch sits at its restore height when it
+  /// first goes up. Reporting "Synced" there is untrue, and it also hides the
+  /// evidence: [syncBlocksRemaining] returns null once synced, so the block
+  /// countdown that would have contradicted it disappears too.
+  ///
+  /// Only ever demotes, and only on positive evidence. An unknown daemon height
+  /// leaves the flag as reported, so a node whose height read fails still
+  /// reaches "synced" exactly as before.
+  bool _syncedGivenHeights(bool reported) {
+    if (!reported || !_isNodeMode) return reported;
+    final target = _daemonTargetHeight;
+    final scanned = syncedHeight;
+    if (target == null || scanned == null) return true;
+    return scanned >= target;
+  }
+
+  void _applySyncedFlag(bool reported) {
+    _reportedSynchronized = reported;
+    setIsSynced(_syncedGivenHeights(reported));
+  }
+
   @override
   Future<void> pollSyncStatus() async {
     final wallet = _wallet;
@@ -1198,11 +1256,12 @@ class MoneroWallet extends CryptoWallet {
     final previousHeight = syncedHeight;
 
     final stats = await _backend.walletStats(wallet);
-    setIsSynced(stats.synchronized);
+    // Height first: the narrowing in [_applySyncedFlag] reads it.
     setSyncedHeight(stats.blockChainHeight);
+    _applySyncedFlag(stats.synchronized);
     _refreshDaemonHeightIfBehind();
 
-    if (stats.synchronized != wasSynced || stats.blockChainHeight != previousHeight) {
+    if (isSynced != wasSynced || stats.blockChainHeight != previousHeight) {
       notifyListeners();
     }
 
@@ -1459,13 +1518,16 @@ class MoneroWallet extends CryptoWallet {
     return null;
   }
 
+  /// The network this wallet's addresses belong to.
+  ///
+  /// Both apps ship Monero mainnet only. Named so the wallet factory and the
+  /// address validator cannot disagree about it.
+  int get networkType => MoneroConsts.mainnetNetworkType;
+
   @override
   bool isAddressValid(String address) {
-    // Monero mainnet: 95-char standard (network byte 18 -> '4'), 106-char
-    // integrated (also '4'), 95-char subaddress (network byte 42 -> '8').
-    final length = address.length;
-    if (length != 95 && length != 106) return false;
-    return address.startsWith('4') || address.startsWith('8');
+    if (address.isEmpty) return false;
+    return _backend.addressValid(address, networkType);
   }
 
   /// `Wallet_estimateTransactionFee` exists only in `magicgrants/monero_c`,
@@ -1735,21 +1797,23 @@ class MoneroWallet extends CryptoWallet {
     final proto = _addressRequiresSsl(connectionAddress) ? 'https' : 'http';
     final url = Uri.parse('$proto://$connectionAddress/upsert_subaddrs');
 
-    // Defence in depth on the most sensitive request in this class; it carries
-    // the private view key, which cannot be rotated without moving every coin.
-    // The derivation above already picks a confidential scheme, so this asserts
-    // that invariant rather than catching a user's plaintext choice; it still
-    // fails closed if the derivation is ever bypassed. Checked before
-    // `secretViewKey`, so a refused request never pulls the key out of the native
-    // wallet. Both callers ([loadSubaddressSupport], [loadUnusedSubaddressIndex])
-    // catch and fall back to the primary address.
-    //
-    // [viaTor] is what closes the onion-without-Tor hole: an onion address can
-    // be saved with Tor off (the connection form forces `useTor` false when Tor
-    // is globally disabled), and the scheme derivation above leaves it on
-    // plaintext http. Passing the real route means that combination is refused
-    // here instead of being waved through on the strength of the hostname.
-    requireConfidentialChannel(url, carrying: 'the private view key', viaTor: connectionUseTor);
+    // Node mode has no light-wallet server to talk to and no reason to send the
+    // key anywhere, so refuse rather than trusting the address to be an LWS one.
+    // The mode and the address are bound together now, but this is the request
+    // that pays for a mismatch, so it asserts the mode rather than assuming it.
+    if (_isNodeMode) {
+      throw StateError('Refusing to send the view key: this wallet is in node mode.');
+    }
+
+    // Carries the private view key, so check before `secretViewKey` reads it.
+    // `viaTor` must be the route actually taken — Tor's port or the custom SOCKS
+    // proxy resolved below — not just `connectionUseTor`. Both callers read a
+    // throw as "no subaddress support" and fall back to the primary address.
+    requireConfidentialChannel(
+      url,
+      carrying: 'the private view key',
+      viaTor: connectionUseTor || connectionProxyPort.isNotEmpty,
+    );
 
     final body = jsonEncode({
       'address': getPrimaryAddress(),

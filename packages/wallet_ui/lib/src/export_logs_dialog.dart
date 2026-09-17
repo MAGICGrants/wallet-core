@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:wallet_infra/wallet_infra.dart' show LogFileInfo, LogLevel, exportLogFiles, log;
 
+import 'design/share_anchor.dart';
 import 'design/toast.dart';
 
 /// Translated strings for [ExportLogsDialog]. The app builds this from its own
@@ -9,27 +10,13 @@ import 'design/toast.dart';
 class ExportLogsLabels {
   final String title;
   final String cancel;
+
+  /// Shown when the export itself fails. Not the "no logs to export" message --
+  /// this dialog only opens with files to show, and saying the list is empty
+  /// while the user is looking at it explains nothing.
   final String exportError;
 
   const ExportLogsLabels({required this.title, required this.cancel, required this.exportError});
-}
-
-/// The tapped row's rect in global coordinates, or null if it cannot be
-/// measured.
-///
-/// Only iPad needs it -- it anchors the share popover -- so failing to get one
-/// must never cost the user the export. The previous `as RenderBox?` was an
-/// unguarded cast on the result of `findRenderObject()`, which throws rather
-/// than yielding null whenever the render object is anything else.
-Rect? _anchorRect(BuildContext context) {
-  try {
-    final box = context.findRenderObject();
-    if (box is! RenderBox || !box.hasSize) return null;
-    return box.localToGlobal(Offset.zero) & box.size;
-  } catch (error) {
-    log(LogLevel.warn, 'Could not anchor the share sheet: $error');
-    return null;
-  }
 }
 
 /// Lists the app's log files; tapping one shares it via the system share sheet.
@@ -55,33 +42,40 @@ class ExportLogsDialog {
                   '${file.modified.year}-${file.modified.month.toString().padLeft(2, '0')}-${file.modified.day.toString().padLeft(2, '0')}';
               final sizeKb = (file.size / 1024).toStringAsFixed(1);
 
-              return ListTile(
-                onTap: () async {
-                  // Captured before the pop: this tile's context is defunct
-                  // afterward. The rect anchors the iPad share popover.
-                  final toast = BrandToast.of(context);
-                  final origin = _anchorRect(context);
+              // The `Builder` is what makes the tile measurable. An
+              // itemBuilder's context is the *sliver's*, not the row's, so
+              // `findRenderObject()` on it yields a RenderSliverList and
+              // [shareAnchorRect] gives back null -- which iOS then rejects the
+              // share over, since it has nothing to anchor the popover to.
+              return Builder(
+                builder: (context) => ListTile(
+                  onTap: () async {
+                    // Captured before the pop: this tile's context is defunct
+                    // afterward. The rect anchors the iOS share popover.
+                    final toast = BrandToast.of(context);
+                    final origin = shareAnchorRect(context);
 
-                  // Unconditionally, and before anything that can fail. An
-                  // exception raised while still inside this handler used to
-                  // leave the dialog open with the tap doing nothing at all --
-                  // no close, no share, no message.
-                  Navigator.of(context).pop();
+                    // Unconditionally, and before anything that can fail. An
+                    // exception raised while still inside this handler used to
+                    // leave the dialog open with the tap doing nothing at all --
+                    // no close, no share, no message.
+                    Navigator.of(context).pop();
 
-                  try {
-                    await exportLogFiles([file], sharePositionOrigin: origin);
-                  } catch (error) {
-                    // Recorded, not swallowed. `catch (_)` here discarded the
-                    // one explanation for a failure in the very feature whose
-                    // job is to hand over the logs.
-                    log(LogLevel.error, 'Log export failed: $error');
-                    toast.show(labels.exportError);
-                  }
-                },
-                leading: const Icon(Icons.description_outlined),
-                title: Text(file.name),
-                subtitle: Text('$dateStr • $sizeKb KB'),
-                trailing: const Icon(Icons.ios_share),
+                    try {
+                      await exportLogFiles([file], sharePositionOrigin: origin);
+                    } catch (error) {
+                      // Recorded, not swallowed. `catch (_)` here discarded the
+                      // one explanation for a failure in the very feature whose
+                      // job is to hand over the logs.
+                      log(LogLevel.error, 'Log export failed: $error');
+                      toast.show(labels.exportError);
+                    }
+                  },
+                  leading: const Icon(Icons.description_outlined),
+                  title: Text(file.name),
+                  subtitle: Text('$dateStr • $sizeKb KB'),
+                  trailing: const Icon(Icons.ios_share),
+                ),
               );
             },
           ),

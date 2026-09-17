@@ -108,6 +108,30 @@ class TxDetails {
     this.status = TxStatus.ok,
   });
 
+  /// This transaction with [recipients] and/or [key] replaced.
+  ///
+  /// Deliberately narrow: these two are the only fields a wallet can lose while
+  /// still reporting the transaction, because they are the only two Monero does
+  /// not put on chain in a form a rescan can read back. Everything else comes
+  /// from the chain and must keep coming from whoever read it. See
+  /// `CryptoWallet.loadTxHistory`.
+  TxDetails copyWith({List<TxRecipient>? recipients, String? key}) => TxDetails(
+    index: index,
+    direction: direction,
+    hash: hash,
+    amountBaseUnits: amountBaseUnits,
+    feeBaseUnits: feeBaseUnits,
+    recipients: recipients ?? this.recipients,
+    accountIndex: accountIndex,
+    subaddrIndexList: subaddrIndexList,
+    timestamp: timestamp,
+    height: height,
+    confirmations: confirmations,
+    key: key ?? this.key,
+    broadcastAt: broadcastAt,
+    status: status,
+  );
+
   Map<String, dynamic> toJson() => {
     'index': index,
     'direction': direction,

@@ -48,6 +48,17 @@ void main() {
       // List<String> branch, so it silently returned null for these.
       await SharedPreferencesService.set<List<String>>('l', ['a', 'b']);
       expect(await SharedPreferencesService.get<List<String>>('l'), ['a', 'b']);
+
+      // The shape `shared_preferences` actually returns: it
+      // decodes a list off the platform channel untyped and casts inside
+      // `getStringList`, so a reader testing `value is List<String>` matched
+      // nothing on a device while passing against a fake that kept the type.
+      SharedPreferencesService.store = MemoryPreferenceStore()..values['raw'] = <dynamic>['a', 'b'];
+      expect(await SharedPreferencesService.get<List<String>>('raw'), ['a', 'b']);
+
+      // A list that is not all strings is still a miss, not a partial read.
+      SharedPreferencesService.store = MemoryPreferenceStore()..values['mixed'] = <dynamic>['a', 1];
+      expect(await SharedPreferencesService.get<List<String>>('mixed'), isNull);
     });
 
     test('a false bool is returned, not treated as absent', () async {

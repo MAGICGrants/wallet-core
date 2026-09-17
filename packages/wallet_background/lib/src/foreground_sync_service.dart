@@ -149,3 +149,18 @@ Future<void> startForegroundSyncIfEnabled() async {
       await SharedPreferencesService.get<bool>(SettingsKeys.foregroundSyncEnabled) ?? false;
   if (enabled) await startForegroundSync();
 }
+
+Future<void> stopSyncAndDeleteWallets(
+  WalletManager manager, {
+  List<String> extraPrefKeys = const [],
+}) async {
+  // First: the running service's isolate must be gone before the files are.
+  await stopForegroundSync();
+
+  await SharedPreferencesService.set<bool>(SettingsKeys.backgroundSyncEnabled, false);
+  await SharedPreferencesService.set<bool>(SettingsKeys.foregroundSyncEnabled, false);
+  await SharedPreferencesService.set<bool>(SettingsKeys.notificationsEnabled, false);
+  await applyBackgroundTaskRegistration();
+
+  await manager.deleteAll(extraPrefKeys: extraPrefKeys);
+}

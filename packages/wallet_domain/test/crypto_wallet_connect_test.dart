@@ -135,6 +135,98 @@ void main() {
     });
   });
 
+  group('an onion address is refused unless something routes it', () {
+    // The sibling of the group above. That one
+    // answers "useTor is set but Tor is gone"; this one answers "the address is
+    // an onion but nothing will carry it", which could happen in the background.
+    //
+    // Enforced here rather than per-coin so it holds for every coin and connection.
+    const onion = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567.onion:18081';
+
+    Future<FakeWallet> onionWallet({bool useTor = false, String proxyPort = ''}) async {
+      final wallet = FakeWallet('XMR');
+      addTearDown(wallet.dispose);
+      await wallet.openExisting(password: 'pw');
+      wallet.setConnection(address: onion, proxyPort: proxyPort, useTor: useTor);
+      return wallet;
+    }
+
+    test('with Tor off and no proxy, nothing reaches the network', () async {
+      final wallet = await onionWallet();
+
+      await wallet.connectToDaemon();
+
+      expect(wallet.connectCalls, isEmpty, reason: 'not even a resolver query is acceptable');
+      expect(wallet.torRequirementBroken, isTrue);
+      expect(wallet.isConnected, isFalse);
+    });
+
+    test('the refusal also stops the reconnect timer re-querying the resolver', () async {
+      final wallet = await onionWallet();
+      await wallet.connectToDaemon();
+
+      expect(wallet.isReconnectDue(DateTime.now().add(const Duration(hours: 1))), isFalse);
+      expect(wallet.connectCalls, isEmpty);
+    });
+
+    test('reconfiguring is the way out, as it is for a broken Tor requirement', () async {
+      final wallet = await onionWallet();
+      await wallet.connectToDaemon();
+      expect(wallet.torRequirementBroken, isTrue);
+
+      wallet.connected = true;
+      wallet.setConnection(address: 'node.example.com:18081', proxyPort: '', useTor: false);
+      await wallet.connectToDaemon();
+
+      expect(wallet.connectCalls, hasLength(1));
+      expect(wallet.torRequirementBroken, isFalse);
+    });
+
+    test('Tor carries it, so the connect proceeds', () async {
+      await torOnPort('9150');
+      final wallet = await onionWallet(useTor: true);
+
+      await wallet.connectToDaemon();
+
+      expect(wallet.connectCalls.single.address, onion);
+      expect(wallet.connectCalls.single.proxyPort, '9150');
+    });
+
+    test('a user-configured SOCKS proxy also counts as a route', () async {
+      // The rule the Ethereum request gates already document: a non-Tor proxy
+      // cannot resolve `.onion` either, so it fails to connect rather than
+      // leaking, and refusing it would break a user pointing at a system Tor.
+      final wallet = await onionWallet(proxyPort: '9050');
+
+      await wallet.connectToDaemon();
+
+      expect(wallet.connectCalls.single.proxyPort, '9050');
+      expect(wallet.torRequirementBroken, isFalse);
+    });
+
+    test('a clearnet address with no proxy is untouched by the rule', () async {
+      final wallet = await readyWallet();
+
+      await wallet.connectToDaemon();
+
+      expect(wallet.connectCalls, hasLength(1));
+      expect(wallet.torRequirementBroken, isFalse);
+    });
+
+    test('a bare .onion typo is not treated as an onion at all', () async {
+      // `isOnionHost` requires a real 56- or 16-character label, so this is an
+      // ordinary (if unresolvable) hostname and the rule must not fire on it.
+      final wallet = FakeWallet('XMR');
+      addTearDown(wallet.dispose);
+      await wallet.openExisting(password: 'pw');
+      wallet.setConnection(address: 'myserver.onion:18081', proxyPort: '', useTor: false);
+
+      await wallet.connectToDaemon();
+
+      expect(wallet.connectCalls, hasLength(1));
+    });
+  });
+
   group('the proxy the connect actually uses', () {
     test('Tor supplies the port, overriding whatever was configured', () async {
       await torOnPort('9150');

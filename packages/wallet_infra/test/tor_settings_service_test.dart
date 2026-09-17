@@ -96,9 +96,51 @@ void main() {
       expect(proxy.host.address, '127.0.0.1');
     });
 
-    test('a non-numeric external port throws rather than connecting to 0', () async {
-      await settings.save(torMode: TorMode.external, socksPort: 'not-a-port');
-      expect(settings.getProxy(), throwsFormatException);
+    test('an unusable external port reads as Tor unavailable', () async {
+      for (final bad in ['not-a-port', '', '  ', '0', '-1', '70000', '90.5']) {
+        await settings.save(torMode: TorMode.external, socksPort: bad);
+        expect(await settings.getProxy(), isNull, reason: 'port "$bad"');
+      }
+    });
+
+    test('a usable external port still resolves', () async {
+      await settings.save(torMode: TorMode.external, socksPort: ' 9150 ');
+      expect((await settings.getProxy())?.port, 9150, reason: 'surrounding space is tolerated');
+    });
+  });
+
+  group('settings reach a caller that asks before startup finishes', () {
+    // The app calls `loadSettings()` at startup without awaiting it, so a
+    // connection opened in that window used to see the constructed defaults —
+    // built-in Tor on 9050 — whatever the user had chosen.
+    test('getProxy loads the persisted mode rather than the default', () async {
+      SharedPreferencesService.store = MemoryPreferenceStore();
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torMode, 'disabled');
+
+      final settings = TorSettingsService.sharedInstance;
+      // Deliberately no loadSettings() call: this is the un-awaited window.
+      expect(await settings.getProxy(), isNull, reason: 'disabled must win over the default');
+    });
+
+    test('getProxy picks up a custom external port with no startup call', () async {
+      SharedPreferencesService.store = MemoryPreferenceStore();
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torMode, 'external');
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torSocksPort, '9150');
+
+      final proxy = await TorSettingsService.sharedInstance.getProxy();
+      expect(proxy?.port, 9150, reason: 'not the 9050 default');
+    });
+
+    test('the load happens once, not on every proxy lookup', () async {
+      SharedPreferencesService.store = MemoryPreferenceStore();
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torMode, 'external');
+
+      final settings = TorSettingsService.sharedInstance;
+      await settings.getProxy();
+
+      // A later save must not be undone by a re-read on the next lookup.
+      await settings.save(torMode: TorMode.external, socksPort: '9151');
+      expect((await settings.getProxy())?.port, 9151);
     });
   });
 }

@@ -128,6 +128,42 @@ void main() {
     expect(address, startsWith('4'));
   });
 
+  test('the real validator rejects an address with the right shape', () {
+    final wm = _ensureAvailable();
+    if (wm == null) return;
+
+    // A genuine address from this library, then the same shape with the payload
+    // replaced. `isAddressValid` used to be a length and a first character, so
+    // it accepted every one of these — which is the shape a mistyped address
+    // has, and a send to one is unrecoverable.
+    final real = _addressFromPolyseed(
+      wm,
+      mnemonic: _freshPolyseed(),
+      path: '${tmp.path}/validator',
+      newWallet: true,
+    );
+
+    const mainnet = 0;
+    expect(monero.Wallet_addressValid(real, mainnet), isTrue, reason: 'a real address');
+
+    expect(
+      monero.Wallet_addressValid('4${'A' * 94}', mainnet),
+      isFalse,
+      reason: '95 chars starting with 4 is a shape, not an address',
+    );
+    expect(
+      monero.Wallet_addressValid('8${'A' * 94}', mainnet),
+      isFalse,
+      reason: 'subaddress shape with no valid checksum',
+    );
+
+    // One character changed: the checksum is what catches this, and nothing
+    // about the length or the leading character does.
+    final swapped = real.substring(0, real.length - 1) + (real.endsWith('A') ? 'B' : 'A');
+    expect(swapped, hasLength(real.length));
+    expect(monero.Wallet_addressValid(swapped, mainnet), isFalse, reason: 'one typo');
+  });
+
   test('restoring the same polyseed reproduces the same address', () {
     final wm = _ensureAvailable();
     if (wm == null) return;

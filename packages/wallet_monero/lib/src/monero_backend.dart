@@ -144,6 +144,8 @@ abstract class MoneroBackend {
 
   Future<bool> walletExists(NativeHandle manager, String path);
 
+  bool addressValid(String address, int networkType);
+
   Future<String> managerErrorString(NativeHandle manager);
 
   Future<int> blockchainHeight(NativeHandle manager);

@@ -547,7 +547,9 @@ abstract class CryptoWallet with ChangeNotifier {
     _connectionAddress = address;
     _connectionProxyPort = proxyPort;
     _connectionUseTor = useTor;
-    _connectionType = connectionType;
+    // Canonicalised on the way in, so the in-memory type and the type the pref
+    // keys are named after cannot differ.
+    _connectionType = canonicalConnectionType(connectionType);
     _torRequirementBroken = false;
     _isConnected = false;
     // The new server hasn't been synced to yet; clear stale sync state so the
@@ -572,18 +574,72 @@ abstract class CryptoWallet with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> persistCurrentConnection() async {
-    await SharedPreferencesService.set(connPrefKey('connectionAddress'), _connectionAddress);
-    await SharedPreferencesService.set(connPrefKey('connectionProxyPort'), _connectionProxyPort);
-    await SharedPreferencesService.set(connPrefKey('connectionUseTor'), _connectionUseTor);
-    await SharedPreferencesService.set(connPrefKey('connectionType'), _connectionType);
+  /// The type a bare or unrecognised persisted value means.
+  ///
+  /// `''` and anything not in [connectionTypeOptions] resolve to the first
+  /// option, so Monero's `''` and `'lws'` are one server rather than two. This
+  /// has to be total: the per-type key names are built from it, and two
+  /// spellings of one mode would be two stored servers.
+  ///
+  /// A coin that declares no options has nothing to canonicalise against and
+  /// gets its type back untouched. It has exactly one slot either way, so the
+  /// value is informational there and [_connKey] keeps the flat keys.
+  @protected
+  String canonicalConnectionType(String type) {
+    final options = connectionTypeOptions;
+    if (options.isEmpty) return type;
+    return options.contains(type) ? type : options.first;
   }
 
-  Future<WalletConnectionDetails> getPersistedConnection() async => WalletConnectionDetails(
-    address: await SharedPreferencesService.get<String>(connPrefKey('connectionAddress')) ?? '',
-    proxyPort: await SharedPreferencesService.get<String>(connPrefKey('connectionProxyPort')) ?? '',
-    useTor: await SharedPreferencesService.get<bool>(connPrefKey('connectionUseTor')) ?? false,
-    connectionType: await SharedPreferencesService.get<String>(connPrefKey('connectionType')) ?? '',
+  /// The active connection type, never `''` for a coin that has a toggle.
+  String get activeConnectionType => canonicalConnectionType(_connectionType);
+
+  /// Pref key for [name] under [type]'s own slot.
+  ///
+  /// The server is stored **per type**, which is what makes an LWS connection to
+  /// a node unrepresentable rather than merely guarded against. Two consequences
+  /// worth knowing:
+  ///
+  ///  - selecting a mode selects that mode's server; neither can inherit the
+  ///    other's, however the type came to change;
+  ///  - a torn write is harmless. A stale type reads its own address, so the
+  ///    pair is always self-consistent even if it is out of date, and
+  ///    [persistCurrentConnection] needs no atomicity across keys.
+  String _connKey(String name, String type) {
+    // A coin with no toggle has one slot and uses the flat keys directly; only
+    // a coin with a toggle gains suffixed keys.
+    if (connectionTypeOptions.isEmpty) return connPrefKey(name);
+    return connPrefKey('${name}_${canonicalConnectionType(type)}');
+  }
+
+  Future<void> persistCurrentConnection() async {
+    final type = activeConnectionType;
+    await SharedPreferencesService.set(_connKey('connectionAddress', type), _connectionAddress);
+    await SharedPreferencesService.set(_connKey('connectionProxyPort', type), _connectionProxyPort);
+    await SharedPreferencesService.set(_connKey('connectionUseTor', type), _connectionUseTor);
+    // Last: everything it selects is already on disk, so a crash before this
+    // leaves the previous type pointing at its own unchanged server.
+    await SharedPreferencesService.set(connPrefKey('connectionType'), type);
+  }
+
+  /// The stored server for [type], regardless of which type is active.
+  ///
+  /// A mode with nothing stored reads back empty rather than borrowing another
+  /// mode's server; `isActive` then treats the wallet as unconfigured, which is
+  /// the honest answer and sends the user to the setup form.
+  Future<WalletConnectionDetails> getPersistedConnectionForType(String type) async {
+    final t = canonicalConnectionType(type);
+    return WalletConnectionDetails(
+      address: await SharedPreferencesService.get<String>(_connKey('connectionAddress', t)) ?? '',
+      proxyPort:
+          await SharedPreferencesService.get<String>(_connKey('connectionProxyPort', t)) ?? '',
+      useTor: await SharedPreferencesService.get<bool>(_connKey('connectionUseTor', t)) ?? false,
+      connectionType: t,
+    );
+  }
+
+  Future<WalletConnectionDetails> getPersistedConnection() async => getPersistedConnectionForType(
+    await SharedPreferencesService.get<String>(connPrefKey('connectionType')) ?? '',
   );
 
   Future<void> loadPersistedConnection() async {
@@ -809,9 +865,57 @@ abstract class CryptoWallet with ChangeNotifier {
   /// refreshed first, whether or not it announced anything. That belongs to
   /// [notifyNewIncomingTxs], which the app calls from wherever it wants
   /// notifications to come from.
+  /// [fresh], with the two fields a rescan cannot reproduce taken from what
+  /// this wallet already held.
+  ///
+  /// Who an outgoing transaction paid, and its secret key, are recorded by the
+  /// wallet that *built* it; Monero puts neither on chain in a form a wallet
+  /// can read back. So the wallet rebuilt for an LWS<->node switch rescans, and
+  /// reports the same transactions with no destinations and no keys. The plain
+  /// assignment below would take that at face value -- and [loadAllStats]
+  /// persists what it produces, so the copy this app had would go with it,
+  /// on disk as well as on screen.
+  ///
+  /// Keyed on the transaction hash, and it only ever fills a gap. A hash names
+  /// one transaction, so who it paid and what its key is are facts about it,
+  /// not values that can legitimately become empty. A wallet that has the
+  /// fields always wins; nothing here can overwrite a fresh reading.
+  ///
+  /// This recovers only what this install saw while in the other mode. A wallet
+  /// restored straight onto a node has nothing to carry, and still shows no
+  /// destinations for transactions it did not send.
+  List<TxDetails> _withCarriedFields(List<TxDetails> fresh) {
+    if (_txHistory.isEmpty || fresh.isEmpty) return fresh;
+
+    Map<String, TxDetails>? previous;
+    var out = fresh;
+
+    for (var i = 0; i < fresh.length; i++) {
+      final tx = fresh[i];
+      final wantsRecipients = tx.recipients.isEmpty;
+      final wantsKey = tx.key.isEmpty;
+      if (!wantsRecipients && !wantsKey) continue;
+
+      previous ??= {for (final old in _txHistory) old.hash: old};
+      final old = previous[tx.hash];
+      if (old == null) continue;
+
+      final recipients = wantsRecipients && old.recipients.isNotEmpty ? old.recipients : null;
+      final key = wantsKey && old.key.isNotEmpty ? old.key : null;
+      if (recipients == null && key == null) continue;
+
+      // Copied only once something is actually carried, so the common refresh
+      // (every transaction complete) allocates nothing.
+      if (identical(out, fresh)) out = List.of(fresh);
+      out[i] = tx.copyWith(recipients: recipients, key: key);
+    }
+
+    return out;
+  }
+
   Future<void> loadTxHistory({bool persistCount = true}) async {
     final previousLength = _txHistory.length;
-    final newHistory = readTxHistory();
+    final newHistory = _withCarriedFields(readTxHistory());
 
     final hasPendingTx =
         newHistory.isNotEmpty && newHistory.first.confirmations < requiredConfirmations;
@@ -930,6 +1034,15 @@ abstract class CryptoWallet with ChangeNotifier {
     if (!isActive) return;
     await connectToDaemon();
     await refresh();
+    // The same gate [refreshTask] applies, and for a sharper reason here. This
+    // is the path an LWS->node switch lands on, and the wallet it lands on was
+    // rebuilt from the seed moments ago: it has scanned nothing. Reading stats
+    // from it yields a zero balance and an empty history, and [loadAllStats]
+    // does not merely display those -- it persists them over the cached
+    // snapshot, so the balance and the transactions stay gone. While the scan
+    // runs, the last known figures are the honest ones; [pollSyncStatus] pulls
+    // real ones the moment the wallet has actually caught up.
+    if (deferStatsUntilSynced && !_isSynced) return;
     await loadAllStats();
   }
 
@@ -1034,11 +1147,20 @@ abstract class CryptoWallet with ChangeNotifier {
       torProxyPort = proxyInfo.port.toString();
     }
 
+    final proxyPort = torProxyPort ?? _connectionProxyPort;
+
+    // Require onion addresses to go through Tor or a SOCKS proxy
+    if (isUnroutedOnion(_connectionAddress, viaProxy: proxyPort.isNotEmpty)) {
+      walletLog(LogLevel.warn, 'onion address with no Tor route; skipping connect');
+      _torRequirementBroken = true;
+      _isConnected = false;
+      _connectFailures++;
+      notifyListeners();
+      return;
+    }
+
     try {
-      await connectToDaemonImpl(
-        address: _connectionAddress,
-        proxyPort: torProxyPort ?? _connectionProxyPort,
-      );
+      await connectToDaemonImpl(address: _connectionAddress, proxyPort: proxyPort);
     } catch (e) {
       _connectFailures++;
       rethrow;
@@ -1091,9 +1213,22 @@ abstract class CryptoWallet with ChangeNotifier {
     }
   }
 
+  /// Wipes the wallet: its files, its native handle, and everything persisted
+  /// under its namespace.
+  ///
+  /// Held under [runWithSyncSuspended] for the same reason the LWS<->node
+  /// rebuild is: [deleteFiles] closes the native wallet, and a refresh or
+  /// connection tick inside its native section when the handle is freed is a
+  /// use-after-free -- a SIGSEGV, not a catchable Dart error. The window is
+  /// wide open here, because nothing has told the timers to stand down yet:
+  /// `_isLoaded` is still true throughout the close, so `isActive` is true, and
+  /// a tick that finds `_isConnected` false will happily `init` the wallet and
+  /// restart its scan thread while the object underneath is being destroyed.
   Future<void> delete() async {
-    await deleteFiles();
-    await clearPersistedState();
+    await runWithSyncSuspended(() async {
+      await deleteFiles();
+      await clearPersistedState();
+    });
     setIsLoaded(false);
   }
 

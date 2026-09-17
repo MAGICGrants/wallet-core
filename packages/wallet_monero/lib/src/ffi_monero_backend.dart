@@ -172,6 +172,10 @@ class FfiMoneroBackend extends MoneroBackend {
   }
 
   @override
+  bool addressValid(String address, int networkType) =>
+      monero.Wallet_addressValid(address, networkType);
+
+  @override
   Future<void> connectToDaemon(NativeHandle wallet) async {
     final w = wallet.id;
     await Isolate.run(() => monero.Wallet_connectToDaemon(Pointer.fromAddress(w)));

@@ -381,6 +381,18 @@ void main() {
       expect(posts, isEmpty);
     });
 
+    test('node mode refuses to send the view key at all', () async {
+      await openWallet(type: 'node');
+      // Handed an LWS-looking address while in node mode, which is the shape an
+      // interrupted switch used to leave behind. A node-mode wallet has no
+      // light-wallet server to log in to, so the mode is checked rather than
+      // the address being trusted to match it.
+      connect(type: 'node', address: 'lws.example.com:18090');
+
+      await expectLater(wallet.isSubaddressSupported(1), throwsA(isA<StateError>()));
+      expect(posts, isEmpty);
+    });
+
     test('a wallet that is not open cannot probe', () async {
       connect();
       expect(wallet.isSubaddressSupported(1), throwsA(isA<StateError>()));
@@ -392,10 +404,14 @@ void main() {
     // "are the bytes protected". There is no `useSsl` toggle: the
     // scheme is derived from the host, so a routable host is forced to https and
     // the view key is never sent in the clear, while an onion or LAN host
-    // (each already confidential) stays plaintext. The upsert's
-    // `requireConfidentialChannel` therefore cannot fire under the derivation; it
-    // is defence in depth against a future derivation bug. These pin the derived
-    // scheme on the direct path, which is the one the `postJson` seam records.
+    // (each already confidential) stays plaintext. These pin the derived scheme
+    // on the direct path, which is the one the `postJson` seam records.
+    //
+    // For every host the derivation can judge, `requireConfidentialChannel` is
+    // defence in depth against a future derivation bug. The exception is the one
+    // thing a hostname cannot carry: the route. An onion is confidential only
+    // inside Tor, so the gate is load-bearing for onion-without-Tor and nothing
+    // else, which is why the route is threaded in rather than derived.
 
     test('a routable host is forced to https, never sent in the clear', () async {
       await openWallet();
@@ -423,7 +439,7 @@ void main() {
       expect(posts, isEmpty);
     });
 
-    test('an onion with Tor off is refused before the key is read (audit M-01)', () async {
+    test('an onion with Tor off is refused before the key is read', () async {
       await openWallet();
       const v3 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567';
       // The reachable bad state: global Tor disabled, so the connection form
@@ -452,6 +468,119 @@ void main() {
 
       await expectLater(wallet.loadSubaddressSupport(), completes);
       await expectLater(wallet.loadUnusedSubaddressIndex(), completes);
+    });
+  });
+
+  group('the connect that logs in is gated too', () {
+    // `upsert_subaddrs` is not the only request carrying the view key. The LWS
+    // login inside `Wallet_init` carries it too, and it is the request that
+    // establishes the session, so it is the *first* thing to reach a hostile
+    // endpoint. An extra guard.
+    //
+    // `initCalls` is the seam these assert on: an `init` the backend never
+    // recorded is a login that never happened, so the key never left. They
+    // drive `connectToDaemonImpl` directly to reach the gate in isolation,
+    // because the Tor cases would otherwise stop earlier on the missing proxy
+    // in `_connectImpl` and prove nothing about the gate.
+    const onion = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567.onion:18090';
+
+    test('an onion LWS address with Tor off is refused before init', () async {
+      await openWallet();
+      // The reachable bad state, the same one the upsert gate faces: global
+      // Tor is disabled, so the connection form forces useTor false and an
+      // onion address saves anyway.
+      connect(address: onion, useTor: false);
+
+      await expectLater(
+        wallet.connectToDaemonImpl(address: onion, proxyPort: ''),
+        throwsA(isA<InsecureChannelException>()),
+      );
+      expect(backend.initCalls, isEmpty, reason: 'no login may be attempted at all');
+    });
+
+    test('the real entry point refuses earlier, at the shared route gate', () async {
+      await openWallet();
+      connect(address: onion, useTor: false);
+
+      // `CryptoWallet` fails this closed before the coin is consulted, so the
+      // app's path never reaches the gate above; it marks the connection broken
+      // instead of throwing, which also stops the reconnect timer. Asserted
+      // here so the two layers cannot silently swap roles: whichever fires, no
+      // `init` may happen.
+      await wallet.connectToDaemon();
+
+      expect(backend.initCalls, isEmpty);
+      expect(wallet.torRequirementBroken, isTrue);
+      expect(wallet.isConnected, isFalse);
+    });
+
+    test('an onion LWS address carried by Tor is used in the clear', () async {
+      await openWallet();
+      connect(address: onion, useTor: true);
+
+      await wallet.connectToDaemonImpl(address: onion, proxyPort: '9050');
+
+      // Plaintext http to an onion is correct *inside* Tor; forcing TLS here
+      // would only fail against the port onion services actually run.
+      expect(backend.initCalls.single.daemonAddress, 'http://$onion');
+      expect(backend.initCalls.single.useSsl, isFalse);
+    });
+
+    test('a routable LWS host is forced to https and passes the gate', () async {
+      await openWallet();
+      connect(address: 'lws.example.com:18090');
+
+      await wallet.connectToDaemonImpl(address: 'lws.example.com:18090', proxyPort: '');
+
+      expect(backend.initCalls.single.daemonAddress, 'https://lws.example.com:18090');
+      expect(backend.initCalls.single.useSsl, isTrue);
+    });
+
+    test('a node is not refused by *this* gate — it carries no key', () async {
+      await openWallet(type: 'node');
+      connect(type: 'node', address: onion, useTor: false);
+
+      // `lightWallet: false`, so there is no view key for this gate to protect,
+      // and it stays out of the way. The node is not thereby allowed onto an
+      // unrouted onion: the shared gate in `CryptoWallet` refuses that, which is
+      // the test below.
+      await wallet.connectToDaemonImpl(address: onion, proxyPort: '');
+
+      expect(backend.initCalls.single.daemonAddress, 'http://$onion');
+    });
+
+    test('a node on an unrouted onion is still refused, by the shared gate', () async {
+      await openWallet(type: 'node');
+      connect(type: 'node', address: onion, useTor: false);
+
+      await wallet.connectToDaemon();
+
+      expect(backend.initCalls, isEmpty, reason: 'a node leaks the onion name too');
+      expect(wallet.torRequirementBroken, isTrue);
+    });
+
+    test('an unrouted onion is refused at setup, before it can be saved', () async {
+      await openWallet();
+
+      await expectLater(
+        wallet.testConnection(address: onion, proxyPort: '', useTor: false),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('the setup probe accepts an onion once Tor carries it', () async {
+      await openWallet();
+      await TorSettingsService.sharedInstance.save(torMode: TorMode.disabled);
+
+      // Tor is off at the settings layer, so this cannot reach the point of
+      // sending. What it pins is *which* refusal fires: the route gate passed
+      // and the probe stopped later, on Tor being unavailable.
+      await expectLater(
+        wallet.testConnection(address: onion, proxyPort: '', useTor: true),
+        throwsA(
+          isA<Exception>().having((e) => e.toString(), 'message', contains('Tor is disabled')),
+        ),
+      );
     });
   });
 

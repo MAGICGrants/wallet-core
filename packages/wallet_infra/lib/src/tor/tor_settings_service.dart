@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import '../logging.dart';
 import '../storage/preferences.dart';
 import 'tor_service.dart';
 
@@ -31,6 +33,17 @@ class TorSettingsService {
   TorMode get torMode => _torMode;
   String get socksPort => _socksPort;
   bool get useOrbot => _useOrbot;
+
+  Future<void>? _loaded;
+
+  /// Loads the persisted settings once, and only once.
+  ///
+  /// [loadSettings] is called at startup so the synchronous [torMode] getter is
+  /// populated for the UI, but nothing awaits it. [getProxy] awaits this instead
+  /// of trusting that ordering: a connection opened before startup finishes
+  /// would otherwise route on the constructed defaults — built-in Tor on 9050 —
+  /// whatever the user actually chose.
+  Future<void> ensureLoaded() => _loaded ??= loadSettings();
 
   Future<void> loadSettings() async {
     final torModeString = await SharedPreferencesService.get<String>(InfraPreferenceKeys.torMode);
@@ -70,12 +83,24 @@ class TorSettingsService {
   /// closed. Failing closed is the point; a connection that silently fell
   /// back to clearnet would be far worse than one that did not happen.
   Future<({InternetAddress host, int port})?> getProxy() async {
+    await ensureLoaded();
     switch (_torMode) {
       case TorMode.builtIn:
         if (!await TorService.sharedInstance.waitUntilConnected()) return null;
         return TorService.sharedInstance.getProxyInfo();
       case TorMode.external:
-        return (host: InternetAddress.loopbackIPv4, port: int.parse(_socksPort));
+        // `int.parse` threw here on an unusable saved port. That was inert
+        // while nothing loaded the persisted settings; now that something does,
+        // the throw escapes `_connectImpl` before it can latch
+        // `_torRequirementBroken`, so the reconnect timer retried forever with
+        // nothing shown to the user. Null is the "Tor unavailable" answer every
+        // caller already handles.
+        final port = int.tryParse(_socksPort.trim());
+        if (port == null || port < 1 || port > 65535) {
+          unawaited(log(LogLevel.error, 'External Tor SOCKS port is not usable: "$_socksPort"'));
+          return null;
+        }
+        return (host: InternetAddress.loopbackIPv4, port: port);
       case TorMode.disabled:
         return null;
     }
@@ -86,6 +111,7 @@ class TorSettingsService {
     _torMode = TorMode.builtIn;
     _socksPort = '9050';
     _useOrbot = false;
+    _loaded = null;
   }
 
   static String torModeToString(TorMode mode) => switch (mode) {

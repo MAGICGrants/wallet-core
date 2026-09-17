@@ -16,6 +16,15 @@ class SettingsPickerLabels {
   const SettingsPickerLabels({required this.title, required this.subtitle, required this.done});
 }
 
+/// Builds a sheet's chrome strings from the sheet's own [BuildContext].
+///
+/// A builder, not a value: the language picker changes the app's locale while
+/// it is still on screen, and strings snapshotted before `show` would leave the
+/// sheet stranded in the language the user just switched away from. Resolving
+/// them against the sheet's context registers the dependency on `Localizations`
+/// that makes the sheet follow the change.
+typedef SettingsPickerLabelsBuilder = SettingsPickerLabels Function(BuildContext context);
+
 /// Colours for a theme option's 38×38 preview tile. Per-app, since each app's
 /// light/dark grounds differ (and a swatch must show its own theme regardless of
 /// the theme currently in effect).
@@ -85,9 +94,13 @@ Future<void> showThemePickerSheet(
 
 /// Language picker sheet — the supported locales as native + English name rows
 /// with a [RadioDot]. Applies immediately via [onSelect]. Done just closes.
+///
+/// [labels] is rebuilt against the sheet's context so the sheet re-renders in
+/// the language the user just picked; the option names are deliberately not
+/// localized (each locale is listed in its own language, plus English).
 Future<void> showLanguagePickerSheet(
   BuildContext context, {
-  required SettingsPickerLabels labels,
+  required SettingsPickerLabelsBuilder labels,
   required List<LanguagePickerOption> options,
   required String selected,
   required ValueChanged<String> onSelect,
@@ -201,7 +214,7 @@ class _ThemeSwatch extends StatelessWidget {
 }
 
 class _LanguagePickerSheet extends StatefulWidget {
-  final SettingsPickerLabels labels;
+  final SettingsPickerLabelsBuilder labels;
   final List<LanguagePickerOption> options;
   final String selected;
   final ValueChanged<String> onSelect;
@@ -228,7 +241,9 @@ class _LanguagePickerSheetState extends State<_LanguagePickerSheet> {
   Widget build(BuildContext context) {
     return _PickerSheet(
       icon: Icons.language,
-      labels: widget.labels,
+      // Resolved here, in the sheet's own build, so switching the locale
+      // rebuilds this sheet's title, subtitle and Done button with it.
+      labels: widget.labels(context),
       iconBg: widget.iconBg,
       iconColor: widget.iconColor,
       children: [
