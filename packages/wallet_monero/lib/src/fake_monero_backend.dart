@@ -43,6 +43,21 @@ class FakeMoneroBackend extends MoneroBackend {
 
   String defaultAddress = '4-e';
 
+  /// Stands in for monero_c's base58-and-checksum validator.
+  ///
+  /// Deliberately not a re-implementation: reproducing the check here would
+  /// only prove the fake agrees with itself. It accepts the addresses this fake
+  /// hands out and rejects everything else, so a test can tell "the wallet asked
+  /// the validator" from "the wallet guessed". The real decode is covered in the
+  /// native tier, where the library is actually loaded.
+  bool Function(String address, int networkType) addressValidator = (address, _) => false;
+
+  /// Every [addressValid] call, so a test can assert the wallet delegated.
+  final List<({String address, int networkType})> addressValidCalls = [];
+
+  /// Addresses this fake has handed out, which are the ones it considers valid.
+  final Set<String> _issued = {};
+
   /// Stand-in private view key. A real one is 64 hex chars; this is deliberately
   /// not hex so that a test asserting it never reaches a log is unambiguous.
   String secretViewKeyValue = 'fake-view-key';
@@ -283,6 +298,14 @@ class FakeMoneroBackend extends MoneroBackend {
   }
 
   @override
+  bool addressValid(String address, int networkType) {
+    addressValidCalls.add((address: address, networkType: networkType));
+    return addressValidator(address, networkType) ||
+        address == defaultAddress ||
+        _issued.contains(address);
+  }
+
+  @override
   Future<void> connectToDaemon(NativeHandle wallet) async => _record('connectToDaemon');
 
   @override
@@ -424,17 +447,26 @@ class FakeMoneroBackend extends MoneroBackend {
   Future<BigInt> unlockedBalance(NativeHandle wallet, {int accountIndex = 0}) async =>
       unlockedBalanceValue;
 
+  String _issue(String address) {
+    _issued.add(address);
+    return address;
+  }
+
   @override
   Future<String> address(NativeHandle wallet, {int accountIndex = 0, int addressIndex = 0}) async {
     addressIndexRequests.add(addressIndex);
     final seed = _seedForWallet[wallet.id];
-    if (seed != null && addressesBySeed.containsKey(seed)) return addressesBySeed[seed]!;
+    if (seed != null && addressesBySeed.containsKey(seed)) {
+      return _issue(addressesBySeed[seed]!);
+    }
     if (seed != null) {
       // Stable per seed, so "restoring the same seed gives the same address"
       // is a property the fake actually exhibits.
-      return addressesBySeed.putIfAbsent(seed, () => '4${seed.hashCode.abs()}'.padRight(95, 'B'));
+      return _issue(
+        addressesBySeed.putIfAbsent(seed, () => '4${seed.hashCode.abs()}'.padRight(95, 'B')),
+      );
     }
-    return defaultAddress;
+    return _issue(defaultAddress);
   }
 
   @override

@@ -638,7 +638,7 @@ class MoneroWallet extends CryptoWallet {
           password: password,
           newWallet: isNewWallet,
           kdfRounds: 1,
-          networkType: MoneroConsts.mainnetNetworkType,
+          networkType: networkType,
         );
 
       case SeedFormat.bip39:
@@ -1518,13 +1518,16 @@ class MoneroWallet extends CryptoWallet {
     return null;
   }
 
+  /// The network this wallet's addresses belong to.
+  ///
+  /// Both apps ship Monero mainnet only. Named so the wallet factory and the
+  /// address validator cannot disagree about it.
+  int get networkType => MoneroConsts.mainnetNetworkType;
+
   @override
   bool isAddressValid(String address) {
-    // Monero mainnet: 95-char standard (network byte 18 -> '4'), 106-char
-    // integrated (also '4'), 95-char subaddress (network byte 42 -> '8').
-    final length = address.length;
-    if (length != 95 && length != 106) return false;
-    return address.startsWith('4') || address.startsWith('8');
+    if (address.isEmpty) return false;
+    return _backend.addressValid(address, networkType);
   }
 
   /// `Wallet_estimateTransactionFee` exists only in `magicgrants/monero_c`,
