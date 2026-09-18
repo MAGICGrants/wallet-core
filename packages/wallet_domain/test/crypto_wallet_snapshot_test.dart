@@ -73,6 +73,53 @@ void main() {
     return wallet;
   }
 
+  group('a session that starts with no server configured', () {
+    // The guard below reads the address once, at hydration. A launch that comes
+    // up with no server configured therefore skips the cached display for the
+    // whole session, however the connection is set afterwards.
+    test('the cached balance and history are skipped, and adding a server later '
+        'does not bring them back', () async {
+      final first = await readyWallet();
+      first.setBalancesForTesting(
+        total: BigInt.from(4000000000000),
+        unlocked: BigInt.from(4000000000000),
+      );
+      first.history = [_tx('a'), _tx('b')];
+      await first.loadTxHistory(persistCount: false);
+      await first.persistWalletSnapshot();
+      await first.persistCache();
+
+      // The launch that lost its server: cache hydration runs, but
+      // `loadPersistedSnapshot` returns on the empty-address guard.
+      final second = FakeWallet('XMR');
+      addTearDown(second.dispose);
+      second.setCachePassword('cache-pw');
+      await second.loadCache();
+      await second.loadPersistedSnapshot();
+
+      expect(second.totalBalanceBaseUnits, isNull, reason: 'nothing to show');
+      expect(second.txHistory, isEmpty);
+
+      // The user re-enters their node. Nothing re-runs the snapshot load: it is
+      // called once, from the manager's open path, and that already happened.
+      second.setConnection(address: 'node.example.com:18081', proxyPort: '', useTor: false);
+
+      expect(second.totalBalanceBaseUnits, isNull, reason: 'still nothing, for the whole session');
+      expect(second.txHistory, isEmpty);
+
+      // Only the next launch, with the address now persisted, paints it.
+      final third = FakeWallet('XMR');
+      addTearDown(third.dispose);
+      third.setConnection(address: 'node.example.com:18081', proxyPort: '', useTor: false);
+      third.setCachePassword('cache-pw');
+      await third.loadCache();
+      await third.loadPersistedSnapshot();
+
+      expect(third.totalBalanceBaseUnits, BigInt.from(4000000000000));
+      expect(third.txHistory.map((t) => t.hash), ['a', 'b']);
+    });
+  });
+
   group('the snapshot round trip', () {
     test('a balance and history survive a restart and show before any sync', () async {
       final first = await readyWallet();

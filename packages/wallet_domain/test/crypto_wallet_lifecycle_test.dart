@@ -40,6 +40,20 @@ class _SlowToConfirmWallet extends FakeWallet {
   int get requiredConfirmations => 12;
 }
 
+/// A coin whose fast-cadence sync poll throws, the way a native stats read can
+/// when it races a connect on the same wallet handle.
+class _PollThrowsWallet extends FakeWallet {
+  _PollThrowsWallet(super.symbol);
+
+  bool pollShouldThrow = true;
+
+  @override
+  Future<void> pollSyncStatus() async {
+    if (pollShouldThrow) throw Exception('native stats read failed');
+    return super.pollSyncStatus();
+  }
+}
+
 void main() {
   late Directory tmp;
 
@@ -517,6 +531,46 @@ void main() {
 
       expect(wallet.pollSyncCount, 3);
       expect(wallet.getIsConnectedCount, 1);
+    });
+  });
+
+  group('a throwing sync poll ends the only recovery path', () {
+    // With `deferStatsUntilSynced` set, `refreshTask` loads no stats until
+    // `_isSynced` flips, and the only thing that flips it is `pollSyncStatus`
+    // on the connection tick. That makes the tick the single recovery path.
+
+    test('the connection tick does not contain a throw from the sync poll', () async {
+      final wallet = await readyWallet(of: _PollThrowsWallet('XMR'));
+
+      // Nothing catches inside checkConnectionTask, so the throw reaches its
+      // caller: the timer callback in `_scheduleConnectionCheck`, which
+      // reschedules on the line after. A throw there ends the chain.
+      await expectLater(wallet.checkConnectionTask(), throwsException);
+    });
+
+    test('the in-flight guard is released, so nothing looks stuck afterwards', () async {
+      final wallet = await readyWallet(of: _PollThrowsWallet('XMR'));
+      await expectLater(wallet.checkConnectionTask(), throwsException);
+
+      // The `finally` clears the guard, so a manual tick still works; it is
+      // only the timer chain that is gone.
+      (wallet as _PollThrowsWallet).pollShouldThrow = false;
+      await wallet.checkConnectionTask();
+      expect(wallet.pollSyncCount, 1);
+    });
+
+    test('meanwhile the refresh timer loads no stats while unsynced', () async {
+      final wallet = await readyWallet();
+      wallet.deferStats = true;
+      wallet.setSyncedForTesting(false);
+      wallet.lifecycle.clear();
+
+      // Three cycles of the only surviving timer: it checkpoints and returns.
+      await wallet.refreshTask();
+      await wallet.refreshTask();
+      await wallet.refreshTask();
+
+      expect(wallet.statsCount, 0, reason: 'deferred until the sync poll flips _isSynced');
     });
   });
 

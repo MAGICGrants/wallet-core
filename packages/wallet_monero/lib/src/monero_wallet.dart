@@ -1504,23 +1504,34 @@ class MoneroWallet extends CryptoWallet {
   String? getReceiveAddress() {
     // A fresh subaddress per payment is the whole point of subaddresses; fall
     // back to the primary only when the server can't serve them.
-    final index = _unusedSubaddressIndex;
-    if (_serverSupportsSubaddresses == true && index != null && _subaddressCache != null) {
-      return _subaddressCache;
-    }
-    return _primaryAddress.isEmpty ? null : _primaryAddress;
+    return unusedSubaddress?.address ?? (_primaryAddress.isEmpty ? null : _primaryAddress);
   }
 
   String? _subaddressCache;
 
+  /// The subaddress to hand out, together with the index it actually is.
+  ///
+  /// One value rather than two getters: a caller that reads the index and the
+  /// address separately can label an address with an index it does not belong
+  /// to. [unusedSubaddressIndex] is the index the wallet is aiming for; this is
+  /// the one it resolved, and the two differ whenever the server would not
+  /// provision the next index.
+  ///
+  /// Null when there is nothing to hand out: the server can't serve
+  /// subaddresses, nothing is resolved yet, or the only index the server
+  /// accepted is 0 -- which is the primary address, not a subaddress.
+  ({int index, String address})? get unusedSubaddress {
+    if (_serverSupportsSubaddresses != true) return null;
+    final index = _effectiveSubaddressIndex;
+    final address = _subaddressCache;
+    if (index == null || index < 1 || address == null) return null;
+    return (index: index, address: address);
+  }
+
   /// The next unused subaddress, or null when the server can't serve them.
   /// Unlike [getReceiveAddress] there is no primary-address fallback; the
   /// receive screen toggles between this and the primary itself.
-  String? getUnusedSubaddress() {
-    final index = _unusedSubaddressIndex;
-    if (_serverSupportsSubaddresses == true && index != null) return _subaddressCache;
-    return null;
-  }
+  String? getUnusedSubaddress() => unusedSubaddress?.address;
 
   /// The network this wallet's addresses belong to.
   ///
@@ -1704,7 +1715,10 @@ class MoneroWallet extends CryptoWallet {
   Future<void> _refreshSubaddressCache() async {
     final wallet = _wallet;
     final index = _effectiveSubaddressIndex;
-    if (wallet == null || index == null || index < 0) {
+    // `< 1`, not `< 0`: index 0 of account 0 is the primary address, which
+    // `_effectiveSubaddressIndex` reaches by stepping back from index 1. It is
+    // not a subaddress and must never be cached as one.
+    if (wallet == null || index == null || index < 1) {
       _subaddressCache = null;
       return;
     }
