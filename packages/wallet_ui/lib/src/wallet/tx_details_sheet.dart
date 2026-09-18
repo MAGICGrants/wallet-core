@@ -195,8 +195,7 @@ class _TxDetailsSheet extends StatelessWidget {
                         incoming ? (labels.receivedAt ?? labels.recipients) : labels.recipients,
                         recipients,
                       ),
-                    if (change.isNotEmpty)
-                      _addressList(context, labels.changeRecipient, change),
+                    if (change.isNotEmpty) _addressList(context, labels.changeRecipient, change),
                   ]),
                 ),
               ),
