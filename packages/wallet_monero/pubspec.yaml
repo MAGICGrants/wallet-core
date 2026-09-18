@@ -20,10 +20,15 @@ dependencies:
   # Wallet_estimateTransactionFee (vtnerd's `lwsf` lacks it) plus lwsf fixes for
   # armv7 + mingw builds and insufficient-funds fee estimation. Track vtnerd's
   # lwsf again once these are upstreamed.
+  #
+  # Only the Apple ABIs read monero_c's .exp export list, and ld turns its
+  # entries into initial undefines, so it must name only symbols
+  # wallet2_api_c.cpp actually defines. The previous pin listed 47 that are
+  # commented out there, which broke the iOS jobs and nothing else.
   monero:
     git:
       url: https://github.com/magicgrants/monero_c
-      ref: de1f52cafd0e0ab7057e63994bc751af81f9ca76
+      ref: f173c670fef4f67c7b8d1050689a2bd1ddf93a0c
       path: impls/monero.dart
 
   polyseed: 0.0.7
