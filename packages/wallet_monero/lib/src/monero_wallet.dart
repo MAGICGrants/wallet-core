@@ -308,6 +308,7 @@ class MoneroWallet extends CryptoWallet {
     _loadedKind = _desiredKind;
 
     await loadPersistedSubaddressState();
+    await loadPrimaryAddress();
     setIsLoaded(true);
 
     // With the main wallet open and its password in hand, bring the background
@@ -581,6 +582,9 @@ class MoneroWallet extends CryptoWallet {
       await SharedPreferencesService.set<int>(prefKey('walletRestoreHeight'), restoreHeight);
     }
 
+    // Same reason as in `openExisting`: a freshly created wallet lands on the
+    // LWS-details screen before anything has connected.
+    await loadPrimaryAddress();
     setIsLoaded(true);
     await store();
 

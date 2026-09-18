@@ -504,6 +504,37 @@ void main() {
     });
   });
 
+  group('primary address', () {
+    // The LWS whitelisting screens show it so the user can hand it to a server
+    // they have not connected to yet. Cached only by `load()`, it stayed blank
+    // until a sync had run, so a wallet with no reachable server showed none.
+    test('is cached by the open itself, with no load or connect', () async {
+      backend.defaultAddress = '4${'d' * 94}';
+      connect();
+      backend.existingWalletPaths.add(await pathFor('lws'));
+
+      await wallet.openExisting(password: 'pw');
+
+      expect(wallet.getPrimaryAddress(), backend.defaultAddress);
+      expect(backend.countOf('init'), 0, reason: 'no daemon was contacted');
+    });
+
+    test('is cached by a restore, before the first sync', () async {
+      connect();
+
+      await wallet.restoreFromSeed(
+        seed: const PolyseedSeed(_polyseed),
+        from: const RestorePoint.height(2900000),
+        password: 'pw',
+      );
+
+      // The fake derives the address from the seed, so this is the restored
+      // wallet's own address rather than a leftover default.
+      expect(wallet.getPrimaryAddress(), backend.addressesBySeed[_polyseed]);
+      expect(wallet.getPrimaryAddress(), isNotEmpty);
+    });
+  });
+
   group('restore height', () {
     test('falls back to the persisted height when the backend reports 0', () async {
       // Needed to rebuild the other mode's file from the seed on
