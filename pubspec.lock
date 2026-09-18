@@ -679,8 +679,8 @@ packages:
     dependency: transitive
     description:
       path: "impls/monero.dart"
-      ref: "075265e24bbf3628d6ce0407c7d1bb7945aa48e7"
-      resolved-ref: "075265e24bbf3628d6ce0407c7d1bb7945aa48e7"
+      ref: de1f52cafd0e0ab7057e63994bc751af81f9ca76
+      resolved-ref: de1f52cafd0e0ab7057e63994bc751af81f9ca76
       url: "https://github.com/magicgrants/monero_c"
     source: git
     version: "0.0.0"

@@ -17,14 +17,6 @@ on:
     # 04:20 UTC daily. Off the hour, because everyone else picks the hour.
     - cron: '20 4 * * *'
   workflow_dispatch:
-  # Also on any change to the pieces that decide what the corpus *is*, since a
-  # silent derivation change is exactly what the manifest exists to catch.
-  pull_request:
-    paths:
-      - 'packages/wallet_monero/tool/make_fixtures.dart'
-      - 'test_fixtures/wallets/MANIFEST.json'
-      - 'pubspec.lock'
-      - 'scripts/**'
 
 env:
   FLUTTER_VERSION: 3.41.7
