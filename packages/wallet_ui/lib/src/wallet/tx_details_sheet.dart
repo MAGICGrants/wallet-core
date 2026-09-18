@@ -189,14 +189,14 @@ class _TxDetailsSheet extends StatelessWidget {
                         shortenMiddle(tx.key, head: 6, tail: 4),
                         copyText: tx.key,
                       ),
-                    if (recipients.isNotEmpty) _recipients(context, recipients, incoming),
-                    for (final c in change)
-                      _row(
+                    if (recipients.isNotEmpty)
+                      _addressList(
                         context,
-                        labels.changeRecipient,
-                        shortenMiddle(c.address, head: 6, tail: 4),
-                        copyText: c.address,
+                        incoming ? (labels.receivedAt ?? labels.recipients) : labels.recipients,
+                        recipients,
                       ),
+                    if (change.isNotEmpty)
+                      _addressList(context, labels.changeRecipient, change),
                   ]),
                 ),
               ),
@@ -347,7 +347,17 @@ class _TxDetailsSheet extends StatelessWidget {
     );
   }
 
-  Widget _recipients(BuildContext context, List<TxRecipient> recipients, bool incoming) {
+  Widget _copyIcon(BuildContext context, String text) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: () => _copy(context, text),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Icon(Icons.copy_outlined, size: 15, color: BrandColors.inkFaint),
+    ),
+  );
+
+  /// gets the same line, rather than an address-only row with no amount.
+  Widget _addressList(BuildContext context, String label, List<TxRecipient> entries) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
@@ -355,31 +365,29 @@ class _TxDetailsSheet extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
-                incoming ? (labels.receivedAt ?? labels.recipients) : labels.recipients,
-                style: _labelStyle,
-              ),
+              Text(label, style: _labelStyle),
               const Spacer(),
-              Text('${recipients.length}', style: _mutedMono),
+              Text('${entries.length}', style: _mutedMono),
             ],
           ),
-          for (final r in recipients)
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _copy(context, r.address),
-              child: Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(shortenMiddle(r.address, head: 6, tail: 4), style: _mutedMono),
+          for (final r in entries)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      shortenMiddle(r.address, head: 6, tail: 4),
+                      style: _mutedMono,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(width: 10),
-                    Text(_fmtAmount(r.amountBaseUnits), style: _valueStyle),
-                    const SizedBox(width: 10),
-                    Icon(Icons.copy_outlined, size: 15, color: BrandColors.inkFaint),
-                  ],
-                ),
+                  ),
+                  _copyIcon(context, r.address),
+                  const Spacer(),
+                  Text(_fmtAmount(r.amountBaseUnits), style: _valueStyle),
+                  _copyIcon(context, _fmtAmount(r.amountBaseUnits)),
+                ],
               ),
             ),
         ],
