@@ -584,6 +584,73 @@ void main() {
     test('returns null with no open wallet rather than throwing', () async {
       expect(await wallet.estimateFee('4${'A' * 94}', BigInt.one), isNull);
     });
+
+    group('a missing estimate is recorded', () {
+      // Nothing above this layer can tell "no estimate" from a zero fee: the C
+      // wrapper returns 0 from its own `catch (...)`, and the send screen shows
+      // a bare dash for both. These lines are the only trace either leaves.
+      late MemoryLogSink logs;
+
+      setUp(() {
+        logs = MemoryLogSink();
+        WalletLog.sink = logs;
+      });
+
+      tearDown(WalletLog.resetForTesting);
+
+      Future<String> logged() async {
+        await Future<void>.delayed(Duration.zero);
+        return logs.records.map((r) => r.line).join('\n');
+      }
+
+      test('an empty estimate says so, with the state that decides it', () async {
+        connect(type: 'node');
+        backend.existingWalletPaths.add(await pathFor('node'));
+        await wallet.openExisting(password: 'pw');
+
+        backend.feeEstimate = null;
+        expect(await wallet.estimateFee('4${'A' * 94}', BigInt.one, priority: 2), isNull);
+
+        final written = await logged();
+        expect(written, contains('estimateFee: none'));
+        expect(written, contains('priority 2'));
+        expect(written, contains('node=true'), reason: 'the mode this only happens in');
+        expect(written, contains('daemon='));
+      });
+
+      test('a throw is distinguishable from an empty estimate', () async {
+        connect();
+        backend.existingWalletPaths.add(await pathFor('lws'));
+        await wallet.openExisting(password: 'pw');
+
+        backend.feeEstimateError = StateError('ffi blew up');
+        expect(await wallet.estimateFee('4${'A' * 94}', BigInt.one), isNull);
+
+        final written = await logged();
+        expect(written, contains('estimateFee threw'));
+        expect(written, contains('ffi blew up'));
+        expect(written, isNot(contains('estimateFee: none')));
+      });
+
+      test('neither line carries the destination or the amount', () async {
+        connect();
+        backend.existingWalletPaths.add(await pathFor('lws'));
+        await wallet.openExisting(password: 'pw');
+
+        backend.feeEstimate = null;
+        await wallet.estimateFee('4${'A' * 94}', BigInt.from(1234567890123));
+
+        final written = await logged();
+        expect(written, isNotEmpty, reason: 'the assertions below would be vacuous');
+        expect(written, isNot(contains('4AAAAA')));
+        expect(written, isNot(contains('1234567890123')));
+      });
+
+      test('no open wallet is its own line, not silence', () async {
+        expect(await wallet.estimateFee('4${'A' * 94}', BigInt.one), isNull);
+        expect(await logged(), contains('estimateFee: no open wallet'));
+      });
+    });
   });
 
   group('sweeps and churns carry the fee', () {

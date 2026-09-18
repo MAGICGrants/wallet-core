@@ -1554,19 +1554,38 @@ class MoneroWallet extends CryptoWallet {
     int priority = 0,
   }) async {
     final wallet = _wallet;
-    if (wallet == null) return null;
+    if (wallet == null) {
+      walletLog(LogLevel.warn, 'estimateFee: no open wallet');
+      return null;
+    }
     try {
-      return await _backend.estimateTransactionFee(
+      final fee = await _backend.estimateTransactionFee(
         wallet,
         destinations: [destinationAddress],
         amounts: [amountBaseUnits],
         priority: priority,
       );
+      // A null here is the native call having returned 0, which the C wrapper
+      // also returns from its `catch (...)`. So it means "no estimate" and
+      // nothing more -- the wallet2 exception, if there was one, was swallowed
+      // two layers down and cannot be recovered. Logged because the caller
+      // cannot tell this apart from a fee of zero, and the send screen renders
+      // it as a bare dash with no error of any kind.
+      if (fee == null) walletLog(LogLevel.warn, 'estimateFee: none ${_feeContext(priority)}');
+      return fee;
     } catch (e) {
-      walletLog(LogLevel.warn, 'estimateFee failed: $e');
+      // Distinct from the branch above: here the FFI call itself failed, rather
+      // than the estimate coming back empty.
+      walletLog(LogLevel.warn, 'estimateFee threw ${_feeContext(priority)}: $e');
       return null;
     }
   }
+
+  /// The state that decides whether an estimate can succeed at all. Carries no
+  /// destination or amount; neither is needed to tell these failures apart.
+  String _feeContext(int priority) =>
+      'for priority $priority (node=$_isNodeMode, daemon=$_daemonInitialised, '
+      'connected=$isConnected, synced=$isSynced)';
 
   @override
   Future<PendingTransaction> createTx(

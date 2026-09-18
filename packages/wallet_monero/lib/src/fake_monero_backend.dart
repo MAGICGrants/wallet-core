@@ -82,6 +82,10 @@ class FakeMoneroBackend extends MoneroBackend {
   int walletHeight = 3000000;
   int refreshFromBlockHeight = 0;
   BigInt? feeEstimate = BigInt.from(30000000);
+
+  /// Thrown from [estimateTransactionFee] when set, so a test can tell the
+  /// "call failed" branch from the "came back empty" one.
+  Object? feeEstimateError;
   List<NativeTxInfo> transactions = [];
 
   // ----- Recording -----
@@ -146,6 +150,7 @@ class FakeMoneroBackend extends MoneroBackend {
     closeStarted = null;
     pauseNextWalletStats = null;
     walletStatsStarted = null;
+    feeEstimateError = null;
     backgroundSyncTypes.clear();
     backgroundSyncSetups.clear();
     backgroundWalletPaths.clear();
@@ -533,6 +538,8 @@ class FakeMoneroBackend extends MoneroBackend {
     int priority = 0,
   }) async {
     _record('estimateTransactionFee');
+    final err = feeEstimateError;
+    if (err != null) throw err;
     return feeEstimate;
   }
 
