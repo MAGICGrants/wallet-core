@@ -38,6 +38,17 @@ NativeTxInfo _received({
   txKey: '',
 );
 
+/// A backend whose address depends on the index, so the primary and subaddress
+/// N are distinguishable outcomes.
+class _IndexedAddressBackend extends FakeMoneroBackend {
+  @override
+  Future<String> address(NativeHandle wallet, {int accountIndex = 0, int addressIndex = 0}) async {
+    await super.address(wallet, accountIndex: accountIndex, addressIndex: addressIndex);
+    // Index 0 of account 0 is the primary address; anything else is a subaddress.
+    return addressIndex == 0 ? '4${'0' * 94}' : '8${'$addressIndex' * 94}';
+  }
+}
+
 void main() {
   late Directory tmp;
   late FakeMoneroBackend backend;
@@ -600,6 +611,76 @@ void main() {
       // index and status code are what a support thread actually needs.
       expect(written, contains('127.0.0.1:18090'));
       expect(written, contains('index 1'));
+    });
+
+    test('before the first load finishes there is an index but nothing to show', () async {
+      // The index and the support flag are persisted; the resolved subaddress
+      // is runtime-only and is refreshed in the last step of `load()`. Between
+      // an open and that step there is an index and no address to go with it.
+      final indexed = _IndexedAddressBackend();
+      final first = MoneroWallet(backend: indexed);
+      addTearDown(first.dispose);
+      first.setConnection(address: '127.0.0.1:18090', proxyPort: '', useTor: false);
+      indexed.existingWalletPaths.add(await first.walletPathForType('lws'));
+      await first.openExisting(password: 'pw');
+      await first.setServerSupportsSubaddresses(true);
+      await first.setUnusedSubaddressIndex(3, isSupported: true);
+      expect(first.getReceiveAddress(), startsWith('8'), reason: 'a real subaddress, once loaded');
+
+      // A fresh session: `openExisting` restores the persisted index and flag,
+      // but nothing has resolved the subaddress yet.
+      final second = MoneroWallet(backend: indexed);
+      addTearDown(second.dispose);
+      second.setConnection(address: '127.0.0.1:18090', proxyPort: '', useTor: false);
+      await second.openExisting(password: 'pw');
+
+      expect(second.serverSupportsSubaddresses, isTrue);
+      expect(second.unusedSubaddressIndex, 3, reason: 'the wallet is still aiming for #3');
+      // Nothing to label, so nothing is shown: the pair is what a screen reads,
+      // and it refuses to exist until the address it names has been resolved.
+      expect(second.unusedSubaddress, isNull);
+      expect(second.getUnusedSubaddress(), isNull);
+    });
+
+    test('a server that will not provision index 1 offers no subaddress at all', () async {
+      // The receive screen labels the QR with the raw `unusedSubaddressIndex`,
+      // but the address it shows comes from `_effectiveSubaddressIndex`, which
+      // subtracts one when the server refused to provision. At index 1 that is
+      // index 0 -- and index 0 of account 0 is the primary address, by this
+      // class's own definition: `loadPrimaryAddress` calls `address()` with
+      // exactly those coordinates. So the screen says "Subaddress #1" over the
+      // user's main address.
+      await openWallet();
+      await wallet.loadPrimaryAddress();
+      await wallet.setServerSupportsSubaddresses(true);
+      final primary = wallet.getPrimaryAddress();
+
+      backend.addressIndexRequests.clear();
+      await wallet.setUnusedSubaddressIndex(1, isSupported: false);
+
+      expect(
+        backend.addressIndexRequests,
+        isNot(contains(0)),
+        reason: 'index 0 of account 0 is the primary address; never cache it as a subaddress',
+      );
+      expect(wallet.unusedSubaddress, isNull, reason: 'there is no subaddress to hand out');
+      expect(wallet.getUnusedSubaddress(), isNull);
+      // The primary is still reachable, but only through the getter that says so.
+      expect(wallet.getReceiveAddress(), primary);
+    });
+
+    test('the resolved index is reported, not the one the wallet was aiming for', () async {
+      await openWallet();
+      await wallet.setServerSupportsSubaddresses(true);
+      backend.addressIndexRequests.clear();
+      await wallet.setUnusedSubaddressIndex(3, isSupported: false);
+
+      // Stepping back is deliberate -- the highest index the server did accept is
+      // the newest one it will actually scan. What must not happen is the
+      // heading reading #3 over it, so the pair reports the index it resolved.
+      expect(backend.addressIndexRequests, contains(2));
+      expect(wallet.unusedSubaddressIndex, 3, reason: 'still aiming for #3');
+      expect(wallet.unusedSubaddress?.index, 2, reason: 'but the label must match the address');
     });
 
     test('the body sent to the server does carry the view key — only the log does not', () async {

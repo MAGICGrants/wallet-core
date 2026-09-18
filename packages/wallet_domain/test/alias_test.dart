@@ -100,6 +100,23 @@ void main() {
       expect(await logged(), contains('Tor proxy unavailable'));
     });
 
+    test('a resolver failure is logged and rethrown, not turned into "no record"', () async {
+      await torOnPort('9150');
+      installResolver(throws: Exception('DNSSEC chain is broken'));
+      final wallet = FakeAliasWallet('XMR', network: 'xmr');
+      addTearDown(wallet.dispose);
+
+      // Rethrown rather than nulled: "the lookup failed" and "this alias has no
+      // record" must not read the same. The resolver package logs nothing, so
+      // this is the only place the reason is recorded.
+      await expectLater(wallet.resolveAlias('donate.example.org'), throwsA(isA<Exception>()));
+
+      final written = await logged();
+      expect(written, contains('alias: resolve failed'));
+      expect(written, contains('DNSSEC chain is broken'));
+      expect(written, isNot(contains('donate.example.org')), reason: 'the payee is fingerprinted');
+    });
+
     test('the proxy port reaches the resolver', () async {
       await torOnPort('9150');
       installResolver(result: const ResolvedAlias(address: address));

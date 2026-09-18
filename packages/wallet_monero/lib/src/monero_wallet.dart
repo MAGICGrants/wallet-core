@@ -308,6 +308,7 @@ class MoneroWallet extends CryptoWallet {
     _loadedKind = _desiredKind;
 
     await loadPersistedSubaddressState();
+    await loadPrimaryAddress();
     setIsLoaded(true);
 
     // With the main wallet open and its password in hand, bring the background
@@ -581,6 +582,9 @@ class MoneroWallet extends CryptoWallet {
       await SharedPreferencesService.set<int>(prefKey('walletRestoreHeight'), restoreHeight);
     }
 
+    // Same reason as in `openExisting`: a freshly created wallet lands on the
+    // LWS-details screen before anything has connected.
+    await loadPrimaryAddress();
     setIsLoaded(true);
     await store();
 
@@ -1500,23 +1504,34 @@ class MoneroWallet extends CryptoWallet {
   String? getReceiveAddress() {
     // A fresh subaddress per payment is the whole point of subaddresses; fall
     // back to the primary only when the server can't serve them.
-    final index = _unusedSubaddressIndex;
-    if (_serverSupportsSubaddresses == true && index != null && _subaddressCache != null) {
-      return _subaddressCache;
-    }
-    return _primaryAddress.isEmpty ? null : _primaryAddress;
+    return unusedSubaddress?.address ?? (_primaryAddress.isEmpty ? null : _primaryAddress);
   }
 
   String? _subaddressCache;
 
+  /// The subaddress to hand out, together with the index it actually is.
+  ///
+  /// One value rather than two getters: a caller that reads the index and the
+  /// address separately can label an address with an index it does not belong
+  /// to. [unusedSubaddressIndex] is the index the wallet is aiming for; this is
+  /// the one it resolved, and the two differ whenever the server would not
+  /// provision the next index.
+  ///
+  /// Null when there is nothing to hand out: the server can't serve
+  /// subaddresses, nothing is resolved yet, or the only index the server
+  /// accepted is 0 -- which is the primary address, not a subaddress.
+  ({int index, String address})? get unusedSubaddress {
+    if (_serverSupportsSubaddresses != true) return null;
+    final index = _effectiveSubaddressIndex;
+    final address = _subaddressCache;
+    if (index == null || index < 1 || address == null) return null;
+    return (index: index, address: address);
+  }
+
   /// The next unused subaddress, or null when the server can't serve them.
   /// Unlike [getReceiveAddress] there is no primary-address fallback; the
   /// receive screen toggles between this and the primary itself.
-  String? getUnusedSubaddress() {
-    final index = _unusedSubaddressIndex;
-    if (_serverSupportsSubaddresses == true && index != null) return _subaddressCache;
-    return null;
-  }
+  String? getUnusedSubaddress() => unusedSubaddress?.address;
 
   /// The network this wallet's addresses belong to.
   ///
@@ -1539,19 +1554,38 @@ class MoneroWallet extends CryptoWallet {
     int priority = 0,
   }) async {
     final wallet = _wallet;
-    if (wallet == null) return null;
+    if (wallet == null) {
+      walletLog(LogLevel.warn, 'estimateFee: no open wallet');
+      return null;
+    }
     try {
-      return await _backend.estimateTransactionFee(
+      final fee = await _backend.estimateTransactionFee(
         wallet,
         destinations: [destinationAddress],
         amounts: [amountBaseUnits],
         priority: priority,
       );
+      // A null here is the native call having returned 0, which the C wrapper
+      // also returns from its `catch (...)`. So it means "no estimate" and
+      // nothing more -- the wallet2 exception, if there was one, was swallowed
+      // two layers down and cannot be recovered. Logged because the caller
+      // cannot tell this apart from a fee of zero, and the send screen renders
+      // it as a bare dash with no error of any kind.
+      if (fee == null) walletLog(LogLevel.warn, 'estimateFee: none ${_feeContext(priority)}');
+      return fee;
     } catch (e) {
-      walletLog(LogLevel.warn, 'estimateFee failed: $e');
+      // Distinct from the branch above: here the FFI call itself failed, rather
+      // than the estimate coming back empty.
+      walletLog(LogLevel.warn, 'estimateFee threw ${_feeContext(priority)}: $e');
       return null;
     }
   }
+
+  /// The state that decides whether an estimate can succeed at all. Carries no
+  /// destination or amount; neither is needed to tell these failures apart.
+  String _feeContext(int priority) =>
+      'for priority $priority (node=$_isNodeMode, daemon=$_daemonInitialised, '
+      'connected=$isConnected, synced=$isSynced)';
 
   @override
   Future<PendingTransaction> createTx(
@@ -1700,7 +1734,10 @@ class MoneroWallet extends CryptoWallet {
   Future<void> _refreshSubaddressCache() async {
     final wallet = _wallet;
     final index = _effectiveSubaddressIndex;
-    if (wallet == null || index == null || index < 0) {
+    // `< 1`, not `< 0`: index 0 of account 0 is the primary address, which
+    // `_effectiveSubaddressIndex` reaches by stepping back from index 1. It is
+    // not a subaddress and must never be cached as one.
+    if (wallet == null || index == null || index < 1) {
       _subaddressCache = null;
       return;
     }

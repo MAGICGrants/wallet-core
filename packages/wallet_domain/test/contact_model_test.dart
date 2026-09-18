@@ -118,6 +118,34 @@ void main() {
   });
 
   group('the stored format both apps share', () {
+    test('a legacy single-address entry reads as a Monero contact', () async {
+      // What earlier Skylight builds wrote. It predates any other chain being
+      // storable, so the address is Monero's by definition.
+      final h = modelWith(
+        read: () async => [
+          json.encode({'id': '1', 'name': 'Alice', 'address': '4alice'}),
+        ],
+      );
+      await h.model.load();
+
+      expect(h.model.contacts.single.addressFor('XMR'), '4alice');
+      expect(h.model.contacts.single.addressFor('BTC'), isNull);
+    });
+
+    test('a legacy entry is rewritten in the multi-address form', () async {
+      final h = modelWith(
+        read: () async => [
+          json.encode({'id': '1', 'name': 'Alice', 'address': '4alice'}),
+        ],
+      );
+      await h.model.load();
+      await h.model.addContact('Bob', {'XMR': '4bob'});
+
+      for (final entry in h.writes.single) {
+        expect(json.decode(entry), containsPair('addresses', isA<Map<String, dynamic>>()));
+      }
+    });
+
     test('symbols are upper-cased and blank addresses dropped', () async {
       final h = modelWith(read: () async => []);
       await h.model.load();

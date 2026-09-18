@@ -212,13 +212,26 @@ abstract class CryptoWallet with ChangeNotifier {
       throw Exception('Tor is required to resolve an alias.');
     }
 
-    final resolved = await resolver(
-      alias: alias,
-      network: aliasNetwork,
-      asset: aliasAsset,
-      nativeAsset: aliasNativeAsset,
-      socksPort: proxy.port,
-    );
+    final ResolvedAlias? resolved;
+    try {
+      resolved = await resolver(
+        alias: alias,
+        network: aliasNetwork,
+        asset: aliasAsset,
+        nativeAsset: aliasNativeAsset,
+        socksPort: proxy.port,
+      );
+    } catch (e) {
+      // The resolver decides *why* a lookup failed -- an unsigned or broken
+      // DNSSEC chain, no record, a network error -- and is the only layer that
+      // knows. It does no logging of its own, and every caller above collapses
+      // this into "could not resolve", so this is the last point the reason
+      // exists. Rethrown, because a failed lookup must never read as "no
+      // record": that is the difference between a payment not being sent and a
+      // payment being sent to nobody.
+      walletLog(LogLevel.warn, 'alias: resolve failed for ${Redact.id(alias)}: $e');
+      rethrow;
+    }
     if (resolved == null) {
       walletLog(LogLevel.info, 'alias: no payable record');
       return null;
@@ -606,8 +619,8 @@ abstract class CryptoWallet with ChangeNotifier {
   ///    pair is always self-consistent even if it is out of date, and
   ///    [persistCurrentConnection] needs no atomicity across keys.
   String _connKey(String name, String type) {
-    // A coin with no toggle has one slot and uses the flat keys directly; only
-    // a coin with a toggle gains suffixed keys.
+    // One slot, so the flat keys the coin shipped with are kept and there is
+    // nothing to migrate. Only a coin with a toggle gains suffixed keys.
     if (connectionTypeOptions.isEmpty) return connPrefKey(name);
     return connPrefKey('${name}_${canonicalConnectionType(type)}');
   }
@@ -628,6 +641,11 @@ abstract class CryptoWallet with ChangeNotifier {
   /// mode's server; `isActive` then treats the wallet as unconfigured, which is
   /// the honest answer and sends the user to the setup form.
   Future<WalletConnectionDetails> getPersistedConnectionForType(String type) async {
+    // Idempotent, so this is correct however early a caller asks — and it is
+    // the only reader of the flat record, which is what keeps the active type
+    // from being able to move it.
+    await _migrateLegacyConnection();
+
     final t = canonicalConnectionType(type);
     return WalletConnectionDetails(
       address: await SharedPreferencesService.get<String>(_connKey('connectionAddress', t)) ?? '',
@@ -642,7 +660,71 @@ abstract class CryptoWallet with ChangeNotifier {
     await SharedPreferencesService.get<String>(connPrefKey('connectionType')) ?? '',
   );
 
+  /// Marks that the pre-split flat record has been dealt with.
+  ///
+  /// A separate key because the migration must not key off anything another
+  /// code path can rewrite. It used to decide which slot the flat record
+  /// belonged to by reading `connectionType` — the *active* type, which mode
+  /// adoption rewrites. Adopting LWS after a failed node switch therefore
+  /// relabelled the leftover node record as an LWS one, and the next launch
+  /// migrated a node address into the LWS slot, where the light-wallet login
+  /// sends the view key. Durable, unlike the transient version of that bug.
+  String get _migratedKey => connPrefKey('connectionSplitMigrated');
+
+  /// Copies a pre-split flat record into its own type's slot, once.
+  ///
+  /// Reads find it without this, but only while the active type still matches
+  /// the type it was saved under. The first mode switch moves `connectionType`,
+  /// and the record becomes unreachable: an upgrading user would lose the server
+  /// they had been using the moment they tried the other mode. Copying it on
+  /// first load is what makes "each mode remembers its own server" true for an
+  /// existing install and not just a fresh one.
+  ///
+  /// Runs at most once per install, guarded by [_migratedKey] rather than by
+  /// the state of any slot: "the slot is populated" is not the same as "the
+  /// flat record has been handled", and reading the active type to decide where
+  /// the record goes is what made adoption able to move it.
+  ///
+  /// The flat keys are left in place but are never read again after this — the
+  /// marker retires them. Deleting a user's only copy of their server to
+  /// reclaim three preferences is a bad trade, and an unread key is harmless.
+  Future<void> _migrateLegacyConnection() async {
+    // No toggle means one slot, which is the flat keys themselves.
+    if (connectionTypeOptions.isEmpty) return;
+
+    if (await SharedPreferencesService.get<bool>(_migratedKey) ?? false) return;
+
+    final legacyType = canonicalConnectionType(
+      await SharedPreferencesService.get<String>(connPrefKey('connectionType')) ?? '',
+    );
+    final address = await SharedPreferencesService.get<String>(connPrefKey('connectionAddress'));
+
+    // Two guards, not one. The marker stops the flat record being re-read after
+    // the active type moves; this stops it landing on top of a real record that
+    // was saved before the marker existed.
+    final occupied =
+        await SharedPreferencesService.get<String>(_connKey('connectionAddress', legacyType)) !=
+        null;
+
+    if (address != null && address.isNotEmpty && !occupied) {
+      await SharedPreferencesService.set(_connKey('connectionAddress', legacyType), address);
+      await SharedPreferencesService.set(
+        _connKey('connectionProxyPort', legacyType),
+        await SharedPreferencesService.get<String>(connPrefKey('connectionProxyPort')) ?? '',
+      );
+      await SharedPreferencesService.set(
+        _connKey('connectionUseTor', legacyType),
+        await SharedPreferencesService.get<bool>(connPrefKey('connectionUseTor')) ?? false,
+      );
+    }
+
+    // Set even when there was nothing to move, so a fresh install never
+    // consults the flat keys later either.
+    await SharedPreferencesService.set<bool>(_migratedKey, true);
+  }
+
   Future<void> loadPersistedConnection() async {
+    await _migrateLegacyConnection();
     final c = await getPersistedConnection();
     setConnection(
       address: c.address,

@@ -504,6 +504,37 @@ void main() {
     });
   });
 
+  group('primary address', () {
+    // The LWS whitelisting screens show it so the user can hand it to a server
+    // they have not connected to yet. Cached only by `load()`, it stayed blank
+    // until a sync had run, so a wallet with no reachable server showed none.
+    test('is cached by the open itself, with no load or connect', () async {
+      backend.defaultAddress = '4${'d' * 94}';
+      connect();
+      backend.existingWalletPaths.add(await pathFor('lws'));
+
+      await wallet.openExisting(password: 'pw');
+
+      expect(wallet.getPrimaryAddress(), backend.defaultAddress);
+      expect(backend.countOf('init'), 0, reason: 'no daemon was contacted');
+    });
+
+    test('is cached by a restore, before the first sync', () async {
+      connect();
+
+      await wallet.restoreFromSeed(
+        seed: const PolyseedSeed(_polyseed),
+        from: const RestorePoint.height(2900000),
+        password: 'pw',
+      );
+
+      // The fake derives the address from the seed, so this is the restored
+      // wallet's own address rather than a leftover default.
+      expect(wallet.getPrimaryAddress(), backend.addressesBySeed[_polyseed]);
+      expect(wallet.getPrimaryAddress(), isNotEmpty);
+    });
+  });
+
   group('restore height', () {
     test('falls back to the persisted height when the backend reports 0', () async {
       // Needed to rebuild the other mode's file from the seed on
@@ -552,6 +583,73 @@ void main() {
 
     test('returns null with no open wallet rather than throwing', () async {
       expect(await wallet.estimateFee('4${'A' * 94}', BigInt.one), isNull);
+    });
+
+    group('a missing estimate is recorded', () {
+      // Nothing above this layer can tell "no estimate" from a zero fee: the C
+      // wrapper returns 0 from its own `catch (...)`, and the send screen shows
+      // a bare dash for both. These lines are the only trace either leaves.
+      late MemoryLogSink logs;
+
+      setUp(() {
+        logs = MemoryLogSink();
+        WalletLog.sink = logs;
+      });
+
+      tearDown(WalletLog.resetForTesting);
+
+      Future<String> logged() async {
+        await Future<void>.delayed(Duration.zero);
+        return logs.records.map((r) => r.line).join('\n');
+      }
+
+      test('an empty estimate says so, with the state that decides it', () async {
+        connect(type: 'node');
+        backend.existingWalletPaths.add(await pathFor('node'));
+        await wallet.openExisting(password: 'pw');
+
+        backend.feeEstimate = null;
+        expect(await wallet.estimateFee('4${'A' * 94}', BigInt.one, priority: 2), isNull);
+
+        final written = await logged();
+        expect(written, contains('estimateFee: none'));
+        expect(written, contains('priority 2'));
+        expect(written, contains('node=true'), reason: 'the mode this only happens in');
+        expect(written, contains('daemon='));
+      });
+
+      test('a throw is distinguishable from an empty estimate', () async {
+        connect();
+        backend.existingWalletPaths.add(await pathFor('lws'));
+        await wallet.openExisting(password: 'pw');
+
+        backend.feeEstimateError = StateError('ffi blew up');
+        expect(await wallet.estimateFee('4${'A' * 94}', BigInt.one), isNull);
+
+        final written = await logged();
+        expect(written, contains('estimateFee threw'));
+        expect(written, contains('ffi blew up'));
+        expect(written, isNot(contains('estimateFee: none')));
+      });
+
+      test('neither line carries the destination or the amount', () async {
+        connect();
+        backend.existingWalletPaths.add(await pathFor('lws'));
+        await wallet.openExisting(password: 'pw');
+
+        backend.feeEstimate = null;
+        await wallet.estimateFee('4${'A' * 94}', BigInt.from(1234567890123));
+
+        final written = await logged();
+        expect(written, isNotEmpty, reason: 'the assertions below would be vacuous');
+        expect(written, isNot(contains('4AAAAA')));
+        expect(written, isNot(contains('1234567890123')));
+      });
+
+      test('no open wallet is its own line, not silence', () async {
+        expect(await wallet.estimateFee('4${'A' * 94}', BigInt.one), isNull);
+        expect(await logged(), contains('estimateFee: no open wallet'));
+      });
     });
   });
 
