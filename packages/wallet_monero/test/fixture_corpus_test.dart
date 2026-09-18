@@ -193,7 +193,7 @@ void main() {
       WalletFileCrypto.kdf = const WebCryptoPbkdf2();
     });
 
-    test('skylight_plaintext_prefs: pre-split connection is dropped, not migrated', () async {
+    test('skylight_plaintext_prefs: a shipped v1.0.11 install keeps its server', () async {
       final spec = fixtures['skylight_plaintext_prefs'] as Map<String, dynamic>?;
       if (spec == null) return markTestSkipped('not in this corpus');
 
@@ -207,13 +207,17 @@ void main() {
         await SharedPreferencesService.set<Object>(e.key, e.value as Object);
       }
 
-      // No migration: the v1 flat `connectionAddress` isn't adopted into the
-      // per-type slot, so it reads back empty; bare type/height still read through.
+      // Skylight's keys are bare, so no key *renaming* is involved -- but the
+      // address here is the flat pre-split record, and it reads back only
+      // because the connection-split migration copies it into the LWS slot.
+      // This is the upgrade path for every v1.0.11 install: assert the server
+      // survives, not merely that the file parses. Drop the migration and the
+      // honest result is an empty address, i.e. the user's server is gone.
       final wallet = MoneroWallet();
       addTearDown(wallet.dispose);
       await wallet.loadPersistedConnection();
 
-      expect(wallet.connectionAddress, isEmpty);
+      expect(wallet.connectionAddress, prefs['connectionAddress']);
       expect(wallet.connectionType, prefs['connectionType']);
       expect(await wallet.getRestoreHeight(), prefs['walletRestoreHeight']);
     });
