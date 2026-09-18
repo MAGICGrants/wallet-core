@@ -212,13 +212,26 @@ abstract class CryptoWallet with ChangeNotifier {
       throw Exception('Tor is required to resolve an alias.');
     }
 
-    final resolved = await resolver(
-      alias: alias,
-      network: aliasNetwork,
-      asset: aliasAsset,
-      nativeAsset: aliasNativeAsset,
-      socksPort: proxy.port,
-    );
+    final ResolvedAlias? resolved;
+    try {
+      resolved = await resolver(
+        alias: alias,
+        network: aliasNetwork,
+        asset: aliasAsset,
+        nativeAsset: aliasNativeAsset,
+        socksPort: proxy.port,
+      );
+    } catch (e) {
+      // The resolver decides *why* a lookup failed -- an unsigned or broken
+      // DNSSEC chain, no record, a network error -- and is the only layer that
+      // knows. It does no logging of its own, and every caller above collapses
+      // this into "could not resolve", so this is the last point the reason
+      // exists. Rethrown, because a failed lookup must never read as "no
+      // record": that is the difference between a payment not being sent and a
+      // payment being sent to nobody.
+      walletLog(LogLevel.warn, 'alias: resolve failed for ${Redact.id(alias)}: $e');
+      rethrow;
+    }
     if (resolved == null) {
       walletLog(LogLevel.info, 'alias: no payable record');
       return null;

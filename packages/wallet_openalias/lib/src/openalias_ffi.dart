@@ -13,7 +13,12 @@ DynamicLibrary _load() {
   if (Platform.isAndroid || Platform.isLinux) {
     return DynamicLibrary.open('lib$_libName.so');
   } else if (Platform.isIOS || Platform.isMacOS) {
-    return DynamicLibrary.open('$_libName.framework/$_libName');
+    // Already in this process, not a library to open. Both Apple podspecs build
+    // the Rust as a static archive and link it into the app binary:
+    //
+    //   :output_files => ["${BUILT_PRODUCTS_DIR}/libopenalias_ffi.a"]
+    //   'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/libopenalias_ffi.a'
+    return DynamicLibrary.process();
   } else if (Platform.isWindows) {
     return DynamicLibrary.open('$_libName.dll');
   }
