@@ -148,6 +148,7 @@ class BrandButton extends StatelessWidget {
       color: bg,
       shape: shape,
       child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         onTap: interactive ? onPressed : null,
         customBorder: shape,
         child: Padding(

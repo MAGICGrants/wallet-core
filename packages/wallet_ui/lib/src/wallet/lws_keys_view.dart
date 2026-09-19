@@ -39,6 +39,7 @@ class LwsKeysView extends StatelessWidget {
   final VoidCallback? onBack;
   final Widget? footer;
   final bool largeTitle;
+  final bool asModal;
 
   const LwsKeysView({
     super.key,
@@ -51,6 +52,7 @@ class LwsKeysView extends StatelessWidget {
     this.onBack,
     this.footer,
     this.largeTitle = false,
+    this.asModal = false,
   });
 
   @override
@@ -65,6 +67,7 @@ class LwsKeysView extends StatelessWidget {
       onBack: onBack,
       footer: footer,
       largeTitle: largeTitle,
+      asModal: asModal,
       fields: [
         KeyRevealField(label: labels.primaryAddressLabel, value: primaryAddress),
         KeyRevealField(label: labels.viewKeyLabel, value: secretViewKey, revealable: true),

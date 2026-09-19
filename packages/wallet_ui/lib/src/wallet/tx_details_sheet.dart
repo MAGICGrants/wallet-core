@@ -6,6 +6,7 @@ import 'package:wallet_domain/wallet_domain.dart'
 import 'package:wallet_infra/wallet_infra.dart' show SecureClipboard;
 
 import '../design/brand.dart';
+import '../design/click_cursor.dart';
 import '../design/toast.dart';
 import '../design/brand_button.dart';
 import '../design/brand_card.dart';
@@ -97,6 +98,7 @@ void showTxDetailsSheet({
   showBrandSheet<void>(
     context: context,
     isScrollControlled: true,
+    maxWidth: 460,
     builder: (context) => _TxDetailsSheet(wallet: wallet, tx: tx, labels: labels),
   );
 }
@@ -139,6 +141,8 @@ class _TxDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Desktop: centered modal card (no drag handle, no bottom Close/SafeArea).
+    final desktop = isDesktopModal;
     final incoming = tx.direction == txDirectionIncoming;
     final statusBanner = _statusBanner;
     final date = DateTime.fromMillisecondsSinceEpoch(tx.timestamp * 1000);
@@ -158,47 +162,47 @@ class _TxDetailsSheet extends StatelessWidget {
     final recipients = tx.recipients.where((r) => !r.isChange).toList();
     final change = tx.recipients.where((r) => r.isChange).toList();
 
-    return SafeArea(
-      top: false,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.86),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SheetHandle(),
-              _header(incoming),
-              if (statusBanner != null) ...[const SizedBox(height: 14), _banner(statusBanner)],
-              const SizedBox(height: 18),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: _card(context, [
-                    _row(context, labels.amount, _fmtAmount(tx.amountBaseUnits), bold: true),
-                    // The fee is only paid by the sender; received txs don't show it.
-                    if (!incoming) _row(context, labels.networkFee, feeText),
-                    _row(context, labels.hash, shortenMiddle(tx.hash), copyText: tx.hash),
-                    _row(context, labels.timeAndDate, dateText, mono: false),
-                    _row(context, labels.confirmationHeight, heightText),
-                    _row(context, labels.confirmations, '${tx.confirmations}'),
-                    if (tx.key.isNotEmpty)
-                      _row(
-                        context,
-                        labels.viewKey,
-                        shortenMiddle(tx.key, head: 6, tail: 4),
-                        copyText: tx.key,
-                      ),
-                    if (recipients.isNotEmpty)
-                      _addressList(
-                        context,
-                        incoming ? (labels.receivedAt ?? labels.recipients) : labels.recipients,
-                        recipients,
-                      ),
-                    if (change.isNotEmpty) _addressList(context, labels.changeRecipient, change),
-                  ]),
-                ),
+    final inner = ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.86),
+      child: Padding(
+        // Desktop: the modal card owns the edge padding.
+        padding: desktop ? EdgeInsets.zero : const EdgeInsets.fromLTRB(16, 10, 16, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!desktop) const SheetHandle(),
+            _header(incoming),
+            if (statusBanner != null) ...[const SizedBox(height: 14), _banner(statusBanner)],
+            const SizedBox(height: 18),
+            Flexible(
+              child: SingleChildScrollView(
+                child: _card(context, [
+                  _row(context, labels.amount, _fmtAmount(tx.amountBaseUnits), bold: true),
+                  // The fee is only paid by the sender; received txs don't show it.
+                  if (!incoming) _row(context, labels.networkFee, feeText),
+                  _row(context, labels.hash, shortenMiddle(tx.hash), copyText: tx.hash),
+                  _row(context, labels.timeAndDate, dateText, mono: false),
+                  _row(context, labels.confirmationHeight, heightText),
+                  _row(context, labels.confirmations, '${tx.confirmations}'),
+                  if (tx.key.isNotEmpty)
+                    _row(
+                      context,
+                      labels.viewKey,
+                      shortenMiddle(tx.key, head: 6, tail: 4),
+                      copyText: tx.key,
+                    ),
+                  if (recipients.isNotEmpty)
+                    _addressList(
+                      context,
+                      incoming ? (labels.receivedAt ?? labels.recipients) : labels.recipients,
+                      recipients,
+                    ),
+                  if (change.isNotEmpty) _addressList(context, labels.changeRecipient, change),
+                ]),
               ),
+            ),
+            if (!desktop) ...[
               const SizedBox(height: 14),
               BrandButton.ghost(
                 label: labels.close,
@@ -206,10 +210,12 @@ class _TxDetailsSheet extends StatelessWidget {
                 onPressed: () => Navigator.pop(context),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
+
+    return desktop ? inner : SafeArea(top: false, child: inner);
   }
 
   /// A reverted transaction is not one more attribute of a successful one:
@@ -317,7 +323,7 @@ class _TxDetailsSheet extends StatelessWidget {
     bool bold = false,
     String? copyText,
   }) {
-    return GestureDetector(
+    return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: () => _copy(context, copyText ?? value),
       child: Padding(
@@ -346,7 +352,7 @@ class _TxDetailsSheet extends StatelessWidget {
     );
   }
 
-  Widget _copyIcon(BuildContext context, String text) => GestureDetector(
+  Widget _copyIcon(BuildContext context, String text) => Tappable(
     behavior: HitTestBehavior.opaque,
     onTap: () => _copy(context, text),
     child: Padding(

@@ -4,6 +4,7 @@ import 'package:wallet_domain/wallet_domain.dart';
 import 'package:wallet_fiat/wallet_fiat.dart' show FiatRateModel;
 
 import '../design/brand.dart';
+import '../design/click_cursor.dart';
 import 'coin_mark.dart';
 import 'format.dart';
 
@@ -56,7 +57,7 @@ class TxActivityRow extends StatelessWidget {
     final date = DateTime.fromMillisecondsSinceEpoch(tx.timestamp * 1000);
     final amountColor = incoming ? BrandColors.success : BrandColors.ink;
 
-    return GestureDetector(
+    return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(

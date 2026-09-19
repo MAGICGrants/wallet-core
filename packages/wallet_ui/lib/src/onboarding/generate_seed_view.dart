@@ -162,6 +162,7 @@ class _ConfirmCheck extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
+      mouseCursor: WidgetStateMouseCursor.clickable,
       onTap: () => onChanged(!value),
       borderRadius: BrandRadii.rTile,
       child: Padding(

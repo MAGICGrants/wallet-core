@@ -29,8 +29,9 @@ Future<bool> showConfirmSheet({
     context: context,
     builder: (sheetContext) => SafeArea(
       top: false,
+      // Desktop modal: the card owns the edge padding.
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(22, 8, 22, 12),
+        padding: isDesktopModal ? EdgeInsets.zero : const EdgeInsets.fromLTRB(22, 8, 22, 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -46,15 +47,20 @@ Future<bool> showConfirmSheet({
             const SizedBox(height: 7),
             Text(body, style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5)),
             const SizedBox(height: 18),
-            BrandButton(label: cancelLabel, onPressed: () => Navigator.pop(sheetContext, false)),
-            const SizedBox(height: 4),
-            BrandButton.ghost(
-              label: confirmLabel,
-              color: confirmColor ?? BrandColors.error,
-              onPressed: () {
-                Navigator.pop(sheetContext, true);
-                onConfirm?.call();
-              },
+            SheetActions(
+              gap: 4,
+              primary: BrandButton(
+                label: cancelLabel,
+                onPressed: () => Navigator.pop(sheetContext, false),
+              ),
+              secondary: BrandButton.ghost(
+                label: confirmLabel,
+                color: confirmColor ?? BrandColors.error,
+                onPressed: () {
+                  Navigator.pop(sheetContext, true);
+                  onConfirm?.call();
+                },
+              ),
             ),
           ],
         ),

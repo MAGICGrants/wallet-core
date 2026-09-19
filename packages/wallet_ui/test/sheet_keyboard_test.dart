@@ -22,6 +22,10 @@ Widget _host({required WidgetBuilder sheet}) => MaterialApp(
 );
 
 void main() {
+  // These assert the mobile bottom-sheet path; force it on the desktop test host.
+  setUp(() => debugIsDesktopModalOverride = false);
+  tearDown(() => debugIsDesktopModalOverride = null);
+
   testWidgets('a sheet with a text field sits on the keyboard, not above it', (tester) async {
     final dpr = tester.view.devicePixelRatio;
     final screenHeight = tester.view.physicalSize.height / dpr;

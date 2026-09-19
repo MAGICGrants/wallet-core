@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../design/brand.dart';
+import '../design/click_cursor.dart';
 import '../design/brand_button.dart';
 import '../design/brand_card.dart';
 import '../design/sheet.dart';
@@ -120,6 +121,8 @@ class _ContactPickerSheetState<T> extends State<_ContactPickerSheet<T>> {
     final height = math.min(mq.size.height * 0.72, maxSheetHeight(context, fraction: 1) - 40);
 
     final results = widget.search(_query);
+    // Desktop modal: the card owns the edge padding.
+    final hpad = isDesktopModal ? 0.0 : 22.0;
 
     // No keyboard padding here: showBrandSheet applies it once for the whole
     // sheet, and a second one lifts this clear off the keyboard.
@@ -128,14 +131,14 @@ class _ContactPickerSheetState<T> extends State<_ContactPickerSheet<T>> {
       child: SizedBox(
         height: height,
         child: Padding(
-          padding: const EdgeInsets.only(top: 10),
+          padding: EdgeInsets.only(top: isDesktopModal ? 0 : 10),
           child: Column(
             mainAxisSize: MainAxisSize.max,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SheetHandle(),
               Padding(
-                padding: const EdgeInsets.fromLTRB(22, 0, 22, 16),
+                padding: EdgeInsets.fromLTRB(hpad, 0, hpad, 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -157,7 +160,7 @@ class _ContactPickerSheetState<T> extends State<_ContactPickerSheet<T>> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+                padding: EdgeInsets.fromLTRB(hpad, 0, hpad, 14),
                 child: BrandCard(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Row(
@@ -187,7 +190,7 @@ class _ContactPickerSheetState<T> extends State<_ContactPickerSheet<T>> {
                 child: results.isEmpty
                     ? Center(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+                          padding: EdgeInsets.fromLTRB(hpad, 8, hpad, 24),
                           child: Text(
                             _query.isEmpty ? labels.noContacts : labels.noResults,
                             style: BrandText.bodyMuted.copyWith(fontSize: 13),
@@ -196,7 +199,7 @@ class _ContactPickerSheetState<T> extends State<_ContactPickerSheet<T>> {
                         ),
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 22),
+                        padding: EdgeInsets.symmetric(horizontal: hpad),
                         itemCount: results.length,
                         itemBuilder: (context, index) => _ContactPickRow<T>(
                           entry: results[index],
@@ -204,14 +207,16 @@ class _ContactPickerSheetState<T> extends State<_ContactPickerSheet<T>> {
                         ),
                       ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(22, 16, 22, 8),
-                child: BrandButton.ghost(
-                  label: labels.cancel,
-                  color: BrandColors.inkMuted,
-                  onPressed: () => Navigator.pop(context),
+              // Desktop modal closes with the top-right X, not a Cancel button.
+              if (!isDesktopModal)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(hpad, 16, hpad, 8),
+                  child: BrandButton.ghost(
+                    label: labels.cancel,
+                    color: BrandColors.inkMuted,
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -307,6 +312,6 @@ class _ContactPickRow<T> extends StatelessWidget {
     );
 
     if (!enabled) return Opacity(opacity: 0.45, child: row);
-    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: row);
+    return Tappable(behavior: HitTestBehavior.opaque, onTap: onTap, child: row);
   }
 }

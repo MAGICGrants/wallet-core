@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../design/brand.dart';
+import '../design/click_cursor.dart';
 import '../design/brand_button.dart';
 import '../design/brand_card.dart';
 import '../design/brand_segmented.dart';
@@ -380,7 +381,7 @@ class _FieldIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onPressed,
       child: Padding(
@@ -417,7 +418,7 @@ class _CheckRow extends StatelessWidget {
         children: [
           // Tap target is the check + label; vertical padding here sets the row
           // height (no extra slop on the box, which was bloating the gaps).
-          GestureDetector(
+          Tappable(
             behavior: HitTestBehavior.opaque,
             onTap: onTap,
             child: Padding(

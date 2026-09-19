@@ -3,9 +3,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../design/brand.dart';
+import '../design/click_cursor.dart';
 import '../design/brand_card.dart';
 import '../design/brand_screen_header.dart';
 import '../design/section_header.dart';
+import '../design/sheet.dart' show isDesktopModal;
 
 /// One labelled value in a [KeyRevealView] — an address, key, seed phrase or
 /// height. [revealable] blurs the value behind a tap-to-reveal overlay (used
@@ -33,6 +35,9 @@ class KeyRevealView extends StatefulWidget {
   final VoidCallback? onBack;
   final Widget? footer;
 
+  /// Content-only render for a desktop modal (no Scaffold, header or back).
+  final bool asModal;
+
   /// Onboarding shows the title big (below the header); settings shows it small
   /// in the header centre.
   final bool largeTitle;
@@ -49,6 +54,7 @@ class KeyRevealView extends StatefulWidget {
     this.onBack,
     this.footer,
     this.largeTitle = false,
+    this.asModal = false,
   });
 
   @override
@@ -60,6 +66,84 @@ class _KeyRevealViewState extends State<KeyRevealView> {
 
   @override
   Widget build(BuildContext context) {
+    // Desktop modal: the card owns the edge padding, so content drops its own.
+    final hpad = isDesktopModal ? 0.0 : 20.0;
+    final fieldInset = isDesktopModal ? 0.0 : 16.0;
+    final scrollChildren = <Widget>[
+      if (widget.description != null)
+        Padding(
+          padding: EdgeInsets.fromLTRB(hpad, 4, hpad, 20),
+          child: Text(
+            widget.description!,
+            style: TextStyle(fontSize: 13.5, height: 1.6, color: BrandColors.inkMuted),
+          ),
+        ),
+      for (var i = 0; i < widget.fields.length; i++)
+        _KeyField(
+          label: widget.fields[i].label,
+          value: widget.fields[i].value,
+          onCopy: () => widget.onCopy(widget.fields[i].value),
+          revealLabel: widget.revealLabel,
+          hidden: widget.fields[i].revealable && !_revealed.contains(i),
+          onReveal: widget.fields[i].revealable ? () => setState(() => _revealed.add(i)) : null,
+          horizontalInset: fieldInset,
+        ),
+      if (widget.warning != null)
+        Padding(
+          padding: EdgeInsets.fromLTRB(hpad, 6, hpad, 20),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                margin: const EdgeInsets.only(top: 1),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: BrandColors.inverseSurface,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.visibility_off_outlined, size: 14, color: BrandColors.onPrimary),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Text(
+                  widget.warning!,
+                  style: TextStyle(fontSize: 11.5, height: 1.5, color: BrandColors.inkMuted),
+                ),
+              ),
+            ],
+          ),
+        ),
+    ];
+
+    // Desktop modal: title (the modal supplies the card + close), scroll, footer.
+    if (widget.asModal) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(hpad, 2, isDesktopModal ? 0 : 44, 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.headerIcon != null) ...[widget.headerIcon!, const SizedBox(width: 8)],
+                Expanded(child: Text(widget.title, style: BrandText.title)),
+              ],
+            ),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: scrollChildren),
+            ),
+          ),
+          if (widget.footer != null)
+            Padding(padding: EdgeInsets.fromLTRB(hpad, 6, hpad, 4), child: widget.footer!),
+        ],
+      );
+    }
+
     return Scaffold(
       backgroundColor: BrandColors.paper,
       body: SafeArea(
@@ -97,64 +181,7 @@ class _KeyRevealViewState extends State<KeyRevealView> {
                             padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
                             child: Text(widget.title, style: BrandText.title),
                           ),
-                        if (widget.description != null)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                            child: Text(
-                              widget.description!,
-                              style: TextStyle(
-                                fontSize: 13.5,
-                                height: 1.6,
-                                color: BrandColors.inkMuted,
-                              ),
-                            ),
-                          ),
-                        for (var i = 0; i < widget.fields.length; i++)
-                          _KeyField(
-                            label: widget.fields[i].label,
-                            value: widget.fields[i].value,
-                            onCopy: () => widget.onCopy(widget.fields[i].value),
-                            revealLabel: widget.revealLabel,
-                            hidden: widget.fields[i].revealable && !_revealed.contains(i),
-                            onReveal: widget.fields[i].revealable
-                                ? () => setState(() => _revealed.add(i))
-                                : null,
-                          ),
-                        if (widget.warning != null)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 26,
-                                  height: 26,
-                                  margin: const EdgeInsets.only(top: 1),
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: BrandColors.inverseSurface,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.visibility_off_outlined,
-                                    size: 14,
-                                    color: BrandColors.onPrimary,
-                                  ),
-                                ),
-                                const SizedBox(width: 11),
-                                Expanded(
-                                  child: Text(
-                                    widget.warning!,
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      height: 1.5,
-                                      color: BrandColors.inkMuted,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        ...scrollChildren,
                       ],
                     ),
                   ),
@@ -179,6 +206,7 @@ class _KeyField extends StatelessWidget {
   final bool hidden;
   final VoidCallback? onReveal;
   final String? revealLabel;
+  final double horizontalInset;
 
   const _KeyField({
     required this.label,
@@ -187,6 +215,7 @@ class _KeyField extends StatelessWidget {
     this.hidden = false,
     this.onReveal,
     this.revealLabel,
+    this.horizontalInset = 16,
   });
 
   @override
@@ -202,7 +231,7 @@ class _KeyField extends StatelessWidget {
     );
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -228,7 +257,7 @@ class _KeyField extends StatelessWidget {
                 ),
                 if (hidden && onReveal != null)
                   Positioned.fill(
-                    child: GestureDetector(
+                    child: Tappable(
                       behavior: HitTestBehavior.opaque,
                       onTap: onReveal,
                       child: Center(
@@ -267,7 +296,7 @@ class _CopyChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(

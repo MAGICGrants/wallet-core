@@ -116,6 +116,7 @@ class _OptionCard extends StatelessWidget {
         child: Material(
           type: MaterialType.transparency,
           child: InkWell(
+            mouseCursor: WidgetStateMouseCursor.clickable,
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.all(16),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'brand.dart';
+import 'click_cursor.dart';
 
 /// Small tan icon+label pill (Paste / Scan / Contacts). [bordered] adds a
 /// hairline + slightly rounder corners (contact sheet); the plain variant is
@@ -30,7 +31,7 @@ class MiniActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(

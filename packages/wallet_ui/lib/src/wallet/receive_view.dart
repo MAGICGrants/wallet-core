@@ -1,15 +1,21 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../design/brand.dart';
 import '../design/brand_button.dart';
 import '../design/brand_card.dart';
+import '../design/click_cursor.dart';
 import '../design/brand_screen_header.dart';
 import '../design/brand_segmented.dart';
 import '../design/icon_circle_button.dart';
 import '../design/section_header.dart';
 import '../design/share_anchor.dart';
 import 'coin_mark.dart';
+
+/// A selectable receiving asset for [ReceiveView]'s dropdown.
+typedef ReceiveAssetOption = ({String coinSymbol, String iconAsset, String coinName});
 
 /// Translated strings for [ReceiveView]. Injected so the view stays
 /// localization-agnostic — each app passes its own generated l10n.
@@ -46,6 +52,12 @@ class ReceiveView extends StatelessWidget {
   final String? coinName;
   final String? blockchainSubtitle;
 
+  /// When more than one option is given (and [onSelectAsset] is set), the coin
+  /// card becomes a dropdown for switching the receiving asset — used when
+  /// Receive is entered from the multicoin home. Empty keeps it a static card.
+  final List<ReceiveAssetOption> assetOptions;
+  final ValueChanged<String>? onSelectAsset;
+
   // Subaddress tabs. Null [tabLabels] hides the segmented control.
   final List<String>? tabLabels;
   final int selectedTab;
@@ -73,6 +85,8 @@ class ReceiveView extends StatelessWidget {
     this.selectedTab = 0,
     this.onSelectTab,
     this.warning,
+    this.assetOptions = const [],
+    this.onSelectAsset,
   });
 
   @override
@@ -111,12 +125,22 @@ class ReceiveView extends StatelessWidget {
                           padding: const EdgeInsets.fromLTRB(16, 22, 16, 24),
                           children: [
                             if (coinName != null)
-                              _CoinCard(
-                                coinSymbol: coinSymbol,
-                                iconAsset: iconAsset,
-                                coinName: coinName!,
-                                blockchainSubtitle: blockchainSubtitle,
-                              ),
+                              if (assetOptions.length > 1 && onSelectAsset != null)
+                                ReceiveAssetSelectorCard(
+                                  coinSymbol: coinSymbol,
+                                  iconAsset: iconAsset,
+                                  coinName: coinName!,
+                                  blockchainSubtitle: blockchainSubtitle,
+                                  options: assetOptions,
+                                  onSelect: onSelectAsset!,
+                                )
+                              else
+                                _CoinCard(
+                                  coinSymbol: coinSymbol,
+                                  iconAsset: iconAsset,
+                                  coinName: coinName!,
+                                  blockchainSubtitle: blockchainSubtitle,
+                                ),
                             if (tabLabels != null) ...[
                               const SizedBox(height: 14),
                               BrandSegmented(
@@ -174,34 +198,216 @@ class _CoinCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return BrandCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: _coinRow(coinSymbol, iconAsset, coinName, blockchainSubtitle),
+    );
+  }
+}
+
+/// Content of a coin card: mark + name (+ subtitle). Shared by the static card
+/// and the selector trigger so they read identically.
+Widget _coinRow(String coinSymbol, String iconAsset, String coinName, String? subtitle) => Row(
+  children: [
+    CoinMark(coinSymbol: coinSymbol, iconAsset: iconAsset, size: 32),
+    const SizedBox(width: 12),
+    Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            coinName,
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w500,
+              height: 1.25,
+              color: BrandColors.ink,
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: BrandText.caption.copyWith(fontSize: 11.5, color: BrandColors.inkMuted),
+            ),
+          ],
+        ],
+      ),
+    ),
+  ],
+);
+
+/// The receiving-asset picker: a coin card that drops an anchored overlay of
+/// options, matching the Send screen's "From" dropdown.
+class ReceiveAssetSelectorCard extends StatefulWidget {
+  final String coinSymbol;
+  final String iconAsset;
+  final String coinName;
+  final String? blockchainSubtitle;
+  final List<ReceiveAssetOption> options;
+  final ValueChanged<String> onSelect;
+
+  const ReceiveAssetSelectorCard({
+    super.key,
+    required this.coinSymbol,
+    required this.iconAsset,
+    required this.coinName,
+    required this.blockchainSubtitle,
+    required this.options,
+    required this.onSelect,
+  });
+
+  @override
+  State<ReceiveAssetSelectorCard> createState() => ReceiveAssetSelectorCardState();
+}
+
+class ReceiveAssetSelectorCardState extends State<ReceiveAssetSelectorCard> {
+  final LayerLink _link = LayerLink();
+  final OverlayPortalController _menu = OverlayPortalController();
+  bool _open = false;
+
+  void _toggle() {
+    setState(() => _open = !_open);
+    _open ? _menu.show() : _menu.hide();
+  }
+
+  void _close() {
+    if (!_open) return;
+    setState(() => _open = false);
+    _menu.hide();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final trigger = AnimatedContainer(
+      duration: BrandMotion.transition,
+      decoration: BoxDecoration(color: BrandColors.card, borderRadius: BorderRadius.circular(16)),
+      // Border drawn over the content so thickening it on open doesn't reflow.
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _open ? BrandColors.primary : BrandColors.border,
+          width: _open ? 2 : 1,
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [
-          CoinMark(coinSymbol: coinSymbol, iconAsset: iconAsset, size: 32),
-          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: _coinRow(
+              widget.coinSymbol,
+              widget.iconAsset,
+              widget.coinName,
+              widget.blockchainSubtitle,
+            ),
+          ),
+          AnimatedRotation(
+            turns: _open ? 0.5 : 0,
+            duration: BrandMotion.transition,
+            child: Icon(Icons.keyboard_arrow_down, size: 20, color: BrandColors.inkMuted),
+          ),
+        ],
+      ),
+    );
+
+    return CompositedTransformTarget(
+      link: _link,
+      child: OverlayPortal(
+        controller: _menu,
+        overlayChildBuilder: _dropdown,
+        child: Tappable(onTap: _toggle, child: trigger),
+      ),
+    );
+  }
+
+  Widget _dropdown(BuildContext ctx) {
+    final width = math.min(MediaQuery.of(ctx).size.width, 480.0) - 32;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _close),
+        ),
+        CompositedTransformFollower(
+          link: _link,
+          showWhenUnlinked: false,
+          targetAnchor: Alignment.bottomLeft,
+          followerAnchor: Alignment.topLeft,
+          offset: const Offset(0, 6),
+          child: SizedBox(
+            width: width,
+            child: Material(
+              color: Colors.transparent,
+              child: BrandCard(
+                radius: 20,
+                clipBehavior: Clip.antiAlias,
+                shadow: const [
+                  BoxShadow(color: Color(0x1F2C170C), blurRadius: 24, offset: Offset(0, 12)),
+                ],
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [for (final o in widget.options) _row(o)],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _row(ReceiveAssetOption o) {
+    final selected = o.coinSymbol == widget.coinSymbol;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: selected ? BrandColors.surfaceSunken : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            _close();
+            widget.onSelect(o.coinSymbol);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
+            child: Row(
               children: [
-                Text(
-                  coinName,
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w500,
-                    height: 1.25,
-                    color: BrandColors.ink,
+                CoinMark(coinSymbol: o.coinSymbol, iconAsset: o.iconAsset, size: 32),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        o.coinName,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w500,
+                          height: 1.25,
+                          color: BrandColors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        o.coinSymbol,
+                        style: TextStyle(
+                          fontFamily: 'Ubuntu Mono',
+                          fontSize: 11.5,
+                          height: 1.3,
+                          color: BrandColors.inkMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                if (blockchainSubtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    blockchainSubtitle!,
-                    style: BrandText.caption.copyWith(fontSize: 11.5, color: BrandColors.inkMuted),
-                  ),
+                if (selected) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.check, size: 18, color: BrandColors.primary),
                 ],
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -239,7 +445,7 @@ class _QrCard extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           SectionHeader(label: heading, padding: const EdgeInsets.only(bottom: 9)),
-          GestureDetector(
+          Tappable(
             onTap: onTap,
             child: Text(
               address,

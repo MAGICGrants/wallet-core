@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'brand.dart';
+import 'click_cursor.dart';
 import 'brand_card.dart';
 
 /// Seed words show in 3 columns, dropping to 2 on screens narrower than a
@@ -63,7 +64,7 @@ class SeedGrid extends StatelessWidget {
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            GestureDetector(
+            Tappable(
               onTap: onReveal,
               behavior: HitTestBehavior.opaque,
               child: Column(

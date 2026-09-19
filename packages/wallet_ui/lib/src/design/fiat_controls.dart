@@ -28,6 +28,7 @@ class FiatCurrencyChip extends StatelessWidget {
       color: selected ? BrandColors.primary : BrandColors.surfaceSunken,
       shape: shape,
       child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         onTap: onTap,
         customBorder: shape,
         child: Padding(
