@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:wallet_infra/wallet_infra.dart' show TorService, TorConnectionStatus;
 
@@ -172,11 +174,6 @@ class UnlockView extends StatelessWidget {
   }
 
   Widget _statusBar() {
-    final (Color color, String text) = switch (TorService.sharedInstance.status) {
-      TorConnectionStatus.connected => (BrandColors.purple, 'Tor · connected'),
-      TorConnectionStatus.connecting => (BrandColors.warning, 'Tor · connecting'),
-      TorConnectionStatus.disconnected => (BrandColors.inkFaint, 'Tor · off'),
-    };
     return Container(
       decoration: BoxDecoration(
         color: BrandColors.surfaceSunken,
@@ -186,25 +183,7 @@ class UnlockView extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 9),
-              Text(
-                text,
-                style: TextStyle(
-                  fontFamily: 'Ubuntu',
-                  fontSize: 12,
-                  height: 1,
-                  color: BrandColors.inkMuted,
-                ),
-              ),
-            ],
-          ),
+          const _TorStatusLine(),
           Text(
             version!,
             style: TextStyle(
@@ -216,6 +195,64 @@ class UnlockView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The Tor status dot + label in the desktop unlock footer. Stateful so it polls
+/// [TorService] (which exposes no change notification) and updates on its own,
+/// e.g. connecting → connected after launch.
+class _TorStatusLine extends StatefulWidget {
+  const _TorStatusLine();
+
+  @override
+  State<_TorStatusLine> createState() => _TorStatusLineState();
+}
+
+class _TorStatusLineState extends State<_TorStatusLine> {
+  Timer? _poll;
+  TorConnectionStatus _status = TorService.sharedInstance.status;
+
+  @override
+  void initState() {
+    super.initState();
+    _poll = Timer.periodic(const Duration(seconds: 1), (_) {
+      final status = TorService.sharedInstance.status;
+      if (mounted && status != _status) setState(() => _status = status);
+    });
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (Color color, String text) = switch (_status) {
+      TorConnectionStatus.connected => (BrandColors.purple, 'Tor · connected'),
+      TorConnectionStatus.connecting => (BrandColors.warning, 'Tor · connecting'),
+      TorConnectionStatus.disconnected => (BrandColors.inkFaint, 'Tor · off'),
+    };
+    return Row(
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 9),
+        Text(
+          text,
+          style: TextStyle(
+            fontFamily: 'Ubuntu',
+            fontSize: 12,
+            height: 1,
+            color: BrandColors.inkMuted,
+          ),
+        ),
+      ],
     );
   }
 }
