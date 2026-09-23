@@ -26,7 +26,14 @@ class DesktopModalCard extends StatelessWidget {
     return Dialog(
       backgroundColor: BrandColors.paper,
       insetPadding: const EdgeInsets.all(24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        // Dark theme: a discrete hairline so the card reads against the dimmed
+        // background it floats over. Light theme leans on the scrim + shadow.
+        side: BrandColors.isDark
+            ? BorderSide(color: BrandColors.border)
+            : BorderSide.none,
+      ),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: Stack(

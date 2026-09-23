@@ -15,6 +15,7 @@ export 'src/onboarding/create_password_view.dart';
 export 'src/onboarding/create_wallet_view.dart';
 export 'src/onboarding/fiat_setup_view.dart';
 export 'src/onboarding/generate_seed_view.dart';
+export 'src/onboarding/onboarding_scaffold.dart';
 export 'src/onboarding/restore_wallet_view.dart';
 export 'src/onboarding/scan_from_card.dart';
 export 'src/onboarding/scan_qr_view.dart';

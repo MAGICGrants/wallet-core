@@ -124,6 +124,10 @@ class ConnectionFormView extends StatelessWidget {
   final VoidCallback onSave;
   final bool pinnedSave;
 
+  /// Hide the built-in Save button — the host renders its own (e.g. the desktop
+  /// onboarding footer's Continue button sits beside Back).
+  final bool showSave;
+
   const ConnectionFormView({
     super.key,
     required this.labels,
@@ -155,6 +159,7 @@ class ConnectionFormView extends StatelessWidget {
     this.successLatency,
     this.syncRows = const [],
     this.pinnedSave = false,
+    this.showSave = true,
   });
 
   List<Widget> _routePills() =>
@@ -277,7 +282,8 @@ class ConnectionFormView extends StatelessWidget {
               ),
             ),
           ),
-          Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 8), child: saveButton),
+          if (showSave)
+            Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 8), child: saveButton),
         ],
       );
     }
@@ -285,7 +291,7 @@ class ConnectionFormView extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [...content, const SizedBox(height: 16), saveButton],
+      children: [...content, if (showSave) ...[const SizedBox(height: 16), saveButton]],
     );
   }
 }
