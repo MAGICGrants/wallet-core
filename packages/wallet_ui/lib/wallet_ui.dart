@@ -13,6 +13,7 @@ export 'src/export_logs_dialog.dart';
 // Onboarding views — presentational (injected labels + callbacks).
 export 'src/onboarding/create_password_view.dart';
 export 'src/onboarding/create_wallet_view.dart';
+export 'src/onboarding/desktop_generate_seed_view.dart';
 export 'src/onboarding/fiat_setup_view.dart';
 export 'src/onboarding/generate_seed_view.dart';
 export 'src/onboarding/onboarding_scaffold.dart';

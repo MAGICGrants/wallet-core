@@ -35,6 +35,10 @@ class DesktopOnboardingScaffold extends StatelessWidget {
   /// primary action (e.g. a connection form with its own Save button).
   final bool showContinue;
 
+  /// Hide the "Step N of M" row + dots — for an unnumbered step (e.g. the
+  /// post-creation LWS-details screen) that still wants the two-pane chrome.
+  final bool showSteps;
+
   const DesktopOnboardingScaffold({
     super.key,
     required this.logo,
@@ -51,6 +55,7 @@ class DesktopOnboardingScaffold extends StatelessWidget {
     this.continueEnabled = true,
     this.loading = false,
     this.showContinue = true,
+    this.showSteps = true,
   });
 
   @override
@@ -90,7 +95,7 @@ class DesktopOnboardingScaffold extends StatelessWidget {
                       // Opaque base so the pane never turns translucent mid-fade
                       // (both fading copies carry the ink fill; without this the
                       // sliding content would show through at ~50%).
-                      Positioned.fill(child: ColoredBox(color: BrandColors.ink)),
+                      Positioned.fill(child: ColoredBox(color: BrandColors.inverseSurface)),
                       Opacity(opacity: 1 - t, child: fromChild),
                       Opacity(opacity: t, child: toChild),
                     ],
@@ -112,7 +117,9 @@ class DesktopOnboardingScaffold extends StatelessWidget {
       type: MaterialType.transparency,
       child: Container(
         width: 436,
-        color: BrandColors.ink,
+        // A fixed dark hero pane in both themes: inverseSurface stays dark
+        // (ink would flip light in dark mode), with theme-independent light text.
+        color: BrandColors.inverseSurface,
         padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 44),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,7 +134,7 @@ class DesktopOnboardingScaffold extends StatelessWidget {
                 height: 1.18,
                 fontWeight: FontWeight.w700,
                 letterSpacing: -0.36,
-                color: BrandColors.surfaceTinted,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 14),
@@ -137,7 +144,7 @@ class DesktopOnboardingScaffold extends StatelessWidget {
                 fontFamily: 'Ubuntu',
                 fontSize: 14,
                 height: 1.7,
-                color: BrandColors.inkDisabled,
+                color: Colors.white70,
               ),
             ),
             const Spacer(),
@@ -159,7 +166,7 @@ class DesktopOnboardingScaffold extends StatelessWidget {
                           fontFamily: 'Ubuntu',
                           fontSize: 13,
                           height: 1.6,
-                          color: BrandColors.frameEdge,
+                          color: Colors.white60,
                         ),
                       ),
                     ),
@@ -189,8 +196,7 @@ class DesktopOnboardingScaffold extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _stepRow(),
-              const SizedBox(height: 30),
+              if (showSteps) ...[_stepRow(), const SizedBox(height: 30)],
               Expanded(child: content),
               const SizedBox(height: 20),
               Row(
@@ -256,6 +262,11 @@ class DesktopOnboardingScaffold extends StatelessWidget {
 /// A selectable option card used by the onboarding choice screens (Tor, price
 /// display, wallet setup): radio + accent icon + title + description.
 class OnboardingRadioCard extends StatelessWidget {
+  /// App-set fill for the selected card; null keeps [BrandColors.surfaceSunken].
+  /// Skylight sets this to [BrandColors.card] so a selected card stays white and
+  /// only the accent border marks the selection.
+  static Color? Function()? selectedFill;
+
   final bool selected;
   final IconData icon;
   final String title;
@@ -283,7 +294,9 @@ class OnboardingRadioCard extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         decoration: BoxDecoration(
-          color: selected ? BrandColors.surfaceSunken : BrandColors.card,
+          color: selected
+              ? (selectedFill?.call() ?? BrandColors.surfaceSunken)
+              : BrandColors.card,
           border: Border.all(
             color: selected ? BrandColors.primary : BrandColors.border,
             width: selected ? 1.5 : 1,

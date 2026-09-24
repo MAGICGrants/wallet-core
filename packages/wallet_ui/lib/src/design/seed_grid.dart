@@ -18,7 +18,10 @@ class SeedGrid extends StatelessWidget {
   final List<String> words;
   final bool revealed;
   final String revealLabel;
-  final String screenshotNote;
+
+  /// The "screenshots are blocked" safety line under the reveal pill. Null omits
+  /// it — desktop has no screenshot blocking, so the line would be misleading.
+  final String? screenshotNote;
   final VoidCallback onReveal;
 
   const SeedGrid({
@@ -26,7 +29,7 @@ class SeedGrid extends StatelessWidget {
     required this.words,
     required this.revealed,
     required this.revealLabel,
-    required this.screenshotNote,
+    this.screenshotNote,
     required this.onReveal,
   });
 
@@ -103,12 +106,14 @@ class SeedGrid extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: BrandSpacing.md),
-            Text(
-              screenshotNote,
-              textAlign: TextAlign.center,
-              style: BrandText.caption.copyWith(color: BrandColors.inkFaint),
-            ),
+            if (screenshotNote != null) ...[
+              const SizedBox(height: BrandSpacing.md),
+              Text(
+                screenshotNote!,
+                textAlign: TextAlign.center,
+                style: BrandText.caption.copyWith(color: BrandColors.inkFaint),
+              ),
+            ],
           ],
         ),
       ],

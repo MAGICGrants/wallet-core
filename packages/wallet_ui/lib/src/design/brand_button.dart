@@ -104,7 +104,7 @@ class BrandButton extends StatelessWidget {
       case BrandButtonVariant.secondary:
         bg = BrandColors.surfaceSunken;
         fg = active ? accent : BrandColors.inkDisabled;
-        side = BorderSide(color: BrandColors.borderStrong);
+        side = BorderSide(color: BrandColors.border);
       case BrandButtonVariant.ghost:
         bg = Colors.transparent;
         fg = active ? accent : BrandColors.inkDisabled;
@@ -114,34 +114,44 @@ class BrandButton extends StatelessWidget {
       side = BorderSide(color: borderColor!);
     }
 
-    final labelStyle = dense
-        ? TextStyle(fontSize: 13.5, height: 1, fontWeight: FontWeight.w500, color: fg)
-        : BrandText.buttonLabel.copyWith(color: fg);
+    // Design: the primary CTA (filled) is the larger button; the secondary
+    // bordered button is a size down (radius 14, 14px label, 13/24 padding).
+    final secondary = variant == BrandButtonVariant.secondary;
+    final radius = dense ? 12.0 : (secondary ? 14.0 : BrandRadii.button);
+    final fontSize = dense ? 13.5 : (secondary ? 14.0 : 16.0);
+    final iconSize = dense ? 15.0 : (secondary ? 16.0 : 18.0);
+    final iconGap = dense ? 6.0 : (secondary ? 9.0 : BrandSpacing.sm);
+    final vPad = dense ? 11.0 : (secondary ? 13.0 : 17.0);
+    final hPad = dense ? 14.0 : (secondary ? 24.0 : BrandSpacing.lg);
+
+    final labelStyle = BrandText.buttonLabel.copyWith(fontSize: fontSize, height: 1, color: fg);
 
     final child = loading
+        // Sized to the label's line height so the button doesn't grow taller
+        // when it swaps the text for the spinner.
         ? SizedBox(
-            height: dense ? 16 : 20,
-            width: dense ? 16 : 20,
-            child: CircularProgressIndicator(strokeWidth: 2.4, color: fg),
+            height: fontSize,
+            width: fontSize,
+            child: CircularProgressIndicator(strokeWidth: 2.2, color: fg),
           )
         : Row(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (icon != null && !iconTrailing) ...[
-                Icon(icon, size: dense ? 15 : 18, color: fg),
-                SizedBox(width: dense ? 6 : BrandSpacing.sm),
+                Icon(icon, size: iconSize, color: fg),
+                SizedBox(width: iconGap),
               ],
               Text(label, style: labelStyle),
               if (icon != null && iconTrailing) ...[
-                SizedBox(width: dense ? 6 : BrandSpacing.sm),
-                Icon(icon, size: dense ? 15 : 18, color: fg),
+                SizedBox(width: iconGap),
+                Icon(icon, size: iconSize, color: fg),
               ],
             ],
           );
 
     final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(dense ? 12 : BrandRadii.button),
+      borderRadius: BorderRadius.circular(radius),
       side: side,
     );
     final button = Material(
@@ -152,9 +162,7 @@ class BrandButton extends StatelessWidget {
         onTap: interactive ? onPressed : null,
         customBorder: shape,
         child: Padding(
-          padding: dense
-              ? const EdgeInsets.symmetric(vertical: 11, horizontal: 14)
-              : const EdgeInsets.symmetric(vertical: 17, horizontal: BrandSpacing.lg),
+          padding: EdgeInsets.symmetric(vertical: vPad, horizontal: hPad),
           child: Center(widthFactor: expand ? null : 1, child: child),
         ),
       ),

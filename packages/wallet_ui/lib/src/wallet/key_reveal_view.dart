@@ -38,6 +38,10 @@ class KeyRevealView extends StatefulWidget {
   /// Content-only render for a desktop modal (no Scaffold, header or back).
   final bool asModal;
 
+  /// Just the value cards — no title, description, warning or footer. For
+  /// embedding in another chrome (e.g. the onboarding scaffold's content slot).
+  final bool fieldsOnly;
+
   /// Onboarding shows the title big (below the header); settings shows it small
   /// in the header centre.
   final bool largeTitle;
@@ -55,6 +59,7 @@ class KeyRevealView extends StatefulWidget {
     this.footer,
     this.largeTitle = false,
     this.asModal = false,
+    this.fieldsOnly = false,
   });
 
   @override
@@ -90,7 +95,8 @@ class _KeyRevealViewState extends State<KeyRevealView> {
         ),
       if (widget.warning != null)
         Padding(
-          padding: EdgeInsets.fromLTRB(hpad, 6, hpad, 20),
+          // Desktop modal: the card owns the bottom inset, so drop this one.
+          padding: EdgeInsets.fromLTRB(hpad, 6, hpad, isDesktopModal ? 0 : 20),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -116,6 +122,25 @@ class _KeyRevealViewState extends State<KeyRevealView> {
           ),
         ),
     ];
+
+    // Just the value cards, host-supplied chrome (e.g. onboarding content slot).
+    if (widget.fieldsOnly) {
+      return ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          for (var i = 0; i < widget.fields.length; i++)
+            _KeyField(
+              label: widget.fields[i].label,
+              value: widget.fields[i].value,
+              onCopy: () => widget.onCopy(widget.fields[i].value),
+              revealLabel: widget.revealLabel,
+              hidden: widget.fields[i].revealable && !_revealed.contains(i),
+              onReveal: widget.fields[i].revealable ? () => setState(() => _revealed.add(i)) : null,
+              horizontalInset: 0,
+            ),
+        ],
+      );
+    }
 
     // Desktop modal: title (the modal supplies the card + close), scroll, footer.
     if (widget.asModal) {
@@ -262,7 +287,7 @@ class _KeyField extends StatelessWidget {
                       onTap: onReveal,
                       child: Center(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
                           decoration: BoxDecoration(
                             color: BrandColors.inverseSurface,
                             borderRadius: BorderRadius.circular(100),
