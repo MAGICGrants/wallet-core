@@ -33,7 +33,9 @@ bool isValidConnectionAddress(String value) {
   return !isRemoteIp(value);
 }
 
-/// A private/LAN IPv4 host (RFC 1918 ranges + loopback).
+/// A private/LAN IPv4 host (RFC 1918 ranges + loopback), or one in the RFC 6598
+/// shared space (100.64/10) that Tailscale-style VPNs assign from. Keep in step
+/// with `isLocalHost` in wallet_infra, which gates what may be sent in plaintext.
 bool isLocalIp(String host) {
   if (host.startsWith('192.168.') || host.startsWith('10.') || host.startsWith('127.')) {
     return true;
@@ -42,6 +44,11 @@ bool isLocalIp(String host) {
   if (match != null) {
     final second = int.tryParse(match.group(1)!) ?? 0;
     return second >= 16 && second <= 31;
+  }
+  final shared = RegExp(r'^100\.(\d{1,3})\.').firstMatch(host);
+  if (shared != null) {
+    final second = int.tryParse(shared.group(1)!) ?? 0;
+    return second >= 64 && second <= 127;
   }
   return false;
 }

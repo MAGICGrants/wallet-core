@@ -153,6 +153,8 @@ void main() {
         '172.31.255.254',
         '192.168.1.1',
         '169.254.1.1',
+        '100.64.0.1', // RFC 6598 shared space: Tailscale / Headscale
+        '100.127.255.254',
         '[fd00::1]', // IPv6 unique-local
         '[fe80::1]', // IPv6 link-local
       ]) {
@@ -192,7 +194,8 @@ void main() {
         '11.0.0.1',
         '192.169.1.1',
         '8.8.8.8',
-        '100.64.0.1', // CGNAT: routable inside a carrier network, shared
+        '100.63.255.255', // below 100.64/10
+        '100.128.0.1', // above 100.64/10
       ]) {
         expect(
           classifyEndpoint(Uri.parse('http://$host:18081'), viaTor: true),

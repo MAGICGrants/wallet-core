@@ -180,12 +180,16 @@ bool isLocalHost(String host) {
 
   final bytes = addr.rawAddress;
   if (addr.type == InternetAddressType.IPv4) {
-    // RFC 1918 only. Deliberately **not** 100.64/10 (CGNAT): that range is
-    // routed inside a carrier's network and shared with its other subscribers,
-    // so it is not "never left my LAN" in any sense that protects a view key.
+    // RFC 1918.
     if (bytes[0] == 10) return true;
     if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
     if (bytes[0] == 192 && bytes[1] == 168) return true;
+    // RFC 6598 shared address space, 100.64/10. Overlay VPNs (Tailscale,
+    // Headscale) assign node addresses from it, and their traffic is already
+    // WireGuard-encrypted. Known gap: the same range is carrier CGNAT, routed
+    // inside a carrier's network and shared with its other subscribers, and
+    // nothing here tells the two apart.
+    if (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127) return true;
     return false;
   }
   // IPv6 unique-local, fc00::/7.
