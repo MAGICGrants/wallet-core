@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:wallet_domain/wallet_domain.dart' show WalletManager;
 import 'package:wallet_infra/wallet_infra.dart';
 
+import 'fiat_currency.dart';
+
 /// Ceiling on a Kraken ticker reply, which is a handful of numbers.
 ///
 /// The bound matters most here: this is the only reader that runs unattended on
@@ -34,7 +36,7 @@ class FiatRates {
 /// Tracks the latest fiat exchange rate (in [fiatCode]) for every coin the
 /// wallet supports. Each coin is fetched independently so a Kraken outage on one
 /// pair doesn't blank out the others.
-class FiatRateModel with ChangeNotifier {
+class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
   // coinSymbol -> Kraken base code prefix used to build the pair name. Kraken
   // uses the legacy "X<asset>Z<fiat>" notation for its original assets (XMR
   // `XXMRZ`, BTC `XXBTZ`, ETH `XETHZ`); newer assets like DAI have no prefix
@@ -45,9 +47,6 @@ class FiatRateModel with ChangeNotifier {
     'ETH': 'XETHZ',
     'DAI': 'DAI',
   };
-
-  // Fiat codes Kraken doesn't quote directly, fetched via a USD bridge.
-  static const List<String> _indirectPairCurrencies = ['CAD', 'AUD', 'GBP', 'CHF', 'JPY'];
 
   static List<String> get supportedCoins => _krakenBase.keys.toList();
 
@@ -109,6 +108,20 @@ class FiatRateModel with ChangeNotifier {
   bool get hasFailed => _hasFailed;
   bool get isDisabled => _isDisabled;
   String get fiatCode => _fiatCode;
+
+  /// The user's currency, from the shared table: its symbol and minor units.
+  FiatCurrency get fiatCurrency => FiatCurrency.of(_fiatCode);
+
+  /// [rateFor] with the currency attached, or null when fiat is disabled or no
+  /// rate has arrived. A disabled API keeps its last in-memory rates, so this is
+  /// the check to use before offering fiat anywhere a user can act on it.
+  @override
+  FiatQuote? quoteFor(String coinSymbol) {
+    if (_isDisabled) return null;
+    final rate = rateFor(coinSymbol);
+    if (rate == null || !rate.isFinite || rate <= 0) return null;
+    return (currency: fiatCurrency, rate: rate);
+  }
 
   static String _persistKeyFor(String coinSymbol) =>
       '${SettingsKeys.fiatRate}_${coinSymbol.toLowerCase()}';
@@ -270,7 +283,7 @@ class FiatRateModel with ChangeNotifier {
   /// Kraken doesn't quote directly.
   Future<double> _fetchCoinRate(String coin) async {
     final krakenBase = _krakenBase[coin]!;
-    final isIndirect = _indirectPairCurrencies.contains(_fiatCode);
+    final isIndirect = FiatCurrency.of(_fiatCode).bridgedViaUsd;
     final pair1 = isIndirect ? '${krakenBase}USD' : '$krakenBase$_fiatCode';
     final pair2 = isIndirect ? 'USDT$_fiatCode' : null;
 

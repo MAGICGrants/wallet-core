@@ -103,16 +103,23 @@ class ConfirmSendView extends StatelessWidget {
               children: [
                 CoinMark(coinSymbol: coinSymbol, iconAsset: iconAsset, size: 22),
                 const SizedBox(width: 9),
+                // One line at any length: the font shrinks so every digit of
+                // the amount being sent stays visible.
                 Flexible(
-                  child: Text(
-                    amountText,
-                    textAlign: TextAlign.end,
-                    style: TextStyle(
-                      fontFamily: 'Ubuntu Mono',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
-                      color: BrandColors.ink,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      amountText,
+                      maxLines: 1,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(
+                        fontFamily: 'Ubuntu Mono',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                        color: BrandColors.ink,
+                      ),
                     ),
                   ),
                 ),

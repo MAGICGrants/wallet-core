@@ -1,17 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:wallet_fiat/wallet_fiat.dart' show FiatCurrency;
 
 import 'brand.dart';
 import 'fiat_controls.dart';
 import 'mode_select_card.dart';
 import 'section_header.dart';
-
-/// A selectable fiat currency — its code and display symbol.
-class FiatCurrencyOption {
-  final String code;
-  final String symbol;
-
-  const FiatCurrencyOption({required this.code, required this.symbol});
-}
 
 /// The fiat rate-source selection body shared by the onboarding [FiatSetupView]
 /// and the in-app fiat settings sheet: three [ModeSelectCard]s (Tor-only /
@@ -37,7 +30,9 @@ class FiatModesView extends StatelessWidget {
   final ValueChanged<int> onModeChanged;
 
   final String currencyLabel;
-  final List<FiatCurrencyOption> currencies;
+
+  /// The currencies offered; the shared table unless a caller narrows it.
+  final List<FiatCurrency> currencies;
   final String currency;
   final ValueChanged<String> onCurrencyChanged;
 
@@ -54,7 +49,7 @@ class FiatModesView extends StatelessWidget {
     required this.modeIndex,
     required this.onModeChanged,
     required this.currencyLabel,
-    required this.currencies,
+    this.currencies = FiatCurrency.all,
     required this.currency,
     required this.onCurrencyChanged,
   });
