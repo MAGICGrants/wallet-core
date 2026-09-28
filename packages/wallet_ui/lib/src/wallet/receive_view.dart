@@ -23,7 +23,17 @@ class ReceiveLabels {
   final String title;
   final String copyAddress;
 
-  const ReceiveLabels({required this.title, required this.copyAddress});
+  /// Labels for the QR enlarge/shrink toggle. Null leaves the toggle off (the
+  /// app also gates it via [ReceiveView.onToggleQr]).
+  final String? enlargeQr;
+  final String? shrinkQr;
+
+  const ReceiveLabels({
+    required this.title,
+    required this.copyAddress,
+    this.enlargeQr,
+    this.shrinkQr,
+  });
 }
 
 /// The receive screen: a coin card, an optional subaddress/primary segmented
@@ -68,6 +78,11 @@ class ReceiveView extends StatelessWidget {
   final String? warning;
   final VoidCallback onCopy;
 
+  /// QR enlarge (mobile). [onToggleQr] null hides the toggle; [qrEnlarged] is
+  /// controlled by the app so it can hold screen brightness while grown.
+  final bool qrEnlarged;
+  final VoidCallback? onToggleQr;
+
   const ReceiveView({
     super.key,
     required this.labels,
@@ -87,10 +102,13 @@ class ReceiveView extends StatelessWidget {
     this.warning,
     this.assetOptions = const [],
     this.onSelectAsset,
+    this.qrEnlarged = false,
+    this.onToggleQr,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (qrEnlarged) return _buildEnlarged(context);
     return Scaffold(
       backgroundColor: BrandColors.paper,
       body: SafeArea(
@@ -151,7 +169,13 @@ class ReceiveView extends StatelessWidget {
                               ),
                             ],
                             const SizedBox(height: 14),
-                            _QrCard(address: address, heading: qrHeading, onTap: onCopy),
+                            _QrCard(
+                              address: address,
+                              heading: qrHeading,
+                              onTap: onCopy,
+                              onEnlarge: onToggleQr,
+                              enlargeLabel: labels.enlargeQr,
+                            ),
                             if (warning != null) ...[
                               const SizedBox(height: 14),
                               Text(
@@ -173,6 +197,76 @@ class ReceiveView extends StatelessWidget {
                         ),
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The QR grown to fill the screen for easy scanning; the app holds screen
+  /// brightness at full while this is shown. Tapping anywhere shrinks it back.
+  Widget _buildEnlarged(BuildContext context) {
+    return Scaffold(
+      backgroundColor: BrandColors.paper,
+      body: SafeArea(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onToggleQr,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final side = math.min(constraints.maxWidth, 420.0);
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: QrImageView(
+                          data: address,
+                          size: side - 32,
+                          padding: EdgeInsets.zero,
+                          eyeStyle: const QrEyeStyle(
+                            eyeShape: QrEyeShape.square,
+                            color: Color(0xFF2C170C),
+                          ),
+                          dataModuleStyle: const QrDataModuleStyle(
+                            dataModuleShape: QrDataModuleShape.square,
+                            color: Color(0xFF2C170C),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  if (labels.shrinkQr != null) ...[
+                    const SizedBox(height: 24),
+                    Tappable(
+                      onTap: onToggleQr,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.close_fullscreen, size: 18, color: BrandColors.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            labels.shrinkQr!,
+                            style: BrandText.caption.copyWith(
+                              color: BrandColors.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -418,7 +512,18 @@ class _QrCard extends StatelessWidget {
   final String heading;
   final VoidCallback onTap;
 
-  const _QrCard({required this.address, required this.heading, required this.onTap});
+  /// When set (and [enlargeLabel] is given), shows an enlarge toggle under the
+  /// address. Null on desktop / when the app doesn't offer it.
+  final VoidCallback? onEnlarge;
+  final String? enlargeLabel;
+
+  const _QrCard({
+    required this.address,
+    required this.heading,
+    required this.onTap,
+    this.onEnlarge,
+    this.enlargeLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -443,6 +548,26 @@ class _QrCard extends StatelessWidget {
               ),
             ),
           ),
+          if (onEnlarge != null && enlargeLabel != null) ...[
+            const SizedBox(height: 14),
+            Tappable(
+              onTap: onEnlarge,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.fullscreen, size: 18, color: BrandColors.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    enlargeLabel!,
+                    style: BrandText.caption.copyWith(
+                      color: BrandColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           SectionHeader(label: heading, padding: const EdgeInsets.only(bottom: 9)),
           Tappable(
