@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'brand.dart';
+import 'click_cursor.dart';
 import 'brand_button.dart';
 import 'mode_select_card.dart';
 import 'radio_dot.dart';
@@ -277,7 +278,7 @@ class _LanguageRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
@@ -333,19 +334,21 @@ class _PickerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Desktop modal: the card owns the edge padding.
+    final hpad = isDesktopModal ? 0.0 : 22.0;
     return SafeArea(
       top: false,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.82),
         child: Padding(
-          padding: const EdgeInsets.only(top: 10),
+          padding: EdgeInsets.only(top: isDesktopModal ? 0 : 10),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SheetHandle(),
               Padding(
-                padding: const EdgeInsets.fromLTRB(22, 0, 22, 16),
+                padding: EdgeInsets.fromLTRB(hpad, 0, hpad, 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -370,12 +373,12 @@ class _PickerSheet extends StatelessWidget {
               ),
               Flexible(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  padding: EdgeInsets.symmetric(horizontal: hpad),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
+                padding: EdgeInsets.fromLTRB(hpad, 18, hpad, 8),
                 child: BrandButton(
                   label: labels.done,
                   onPressed: () => Navigator.of(context).pop(),

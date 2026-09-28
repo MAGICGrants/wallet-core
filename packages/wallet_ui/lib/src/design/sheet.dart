@@ -1,6 +1,9 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 
 import 'brand.dart';
+import 'desktop_modal.dart';
 
 /// Presents a brand-styled modal bottom sheet (paper ground, rounded top,
 /// capped width). Use [SheetHandle]/[SheetIcon] inside for the grabber/title.
@@ -20,7 +23,18 @@ Future<T?> showBrandSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool isScrollControlled = false,
+  double maxWidth = 520,
 }) {
+  // Desktop has no bottom sheets: present the same content as a centered modal
+  // with a top-right close button (the SheetHandle hides itself there).
+  // [DesktopModalCard] owns the uniform edge padding; sheet contents drop their
+  // own (see [isDesktopModal]) so it isn't doubled.
+  if (isDesktopModal) {
+    return showDialog<T>(
+      context: context,
+      builder: (context) => DesktopModalCard(maxWidth: maxWidth, child: builder(context)),
+    );
+  }
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: isScrollControlled,
@@ -29,7 +43,7 @@ Future<T?> showBrandSheet<T>({
     // being capped.
     useSafeArea: true,
     backgroundColor: Colors.transparent,
-    constraints: const BoxConstraints(maxWidth: 520),
+    constraints: BoxConstraints(maxWidth: maxWidth),
     builder: (context) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
@@ -43,6 +57,49 @@ Future<T?> showBrandSheet<T>({
       ),
     ),
   );
+}
+
+/// Test seam for [isDesktopModal]; null uses the real host platform.
+@visibleForTesting
+bool? debugIsDesktopModalOverride;
+
+/// True on desktop, where a sheet is a centered [DesktopModalCard] that owns the
+/// content padding. Sheet contents use this to drop their own edge padding there
+/// (mobile keeps it, so mobile layout is unchanged).
+bool get isDesktopModal =>
+    debugIsDesktopModalOverride ?? (Platform.isLinux || Platform.isWindows || Platform.isMacOS);
+
+/// A sheet's primary + secondary action buttons. Stacked (primary above
+/// secondary) on a mobile sheet; side by side (secondary left, primary right) in
+/// a desktop modal. Buttons fill their slot, so pass plain [BrandButton]s.
+class SheetActions extends StatelessWidget {
+  final Widget primary;
+  final Widget secondary;
+
+  /// Vertical gap between the stacked buttons on mobile.
+  final double gap;
+
+  const SheetActions({super.key, required this.primary, required this.secondary, this.gap = 2});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isDesktopModal) {
+      return Row(
+        children: [
+          Expanded(child: secondary),
+          const SizedBox(width: 10),
+          Expanded(child: primary),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        primary,
+        SizedBox(height: gap),
+        secondary,
+      ],
+    );
+  }
 }
 
 /// The tallest a sheet's content may be: [fraction] of the space above the
@@ -68,6 +125,8 @@ class SheetHandle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // No drag grabber in a desktop modal.
+    if (isDesktopModal) return const SizedBox.shrink();
     return Center(
       child: Container(
         width: 38,

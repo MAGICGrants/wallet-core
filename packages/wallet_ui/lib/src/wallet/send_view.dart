@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../design/brand.dart';
+import '../design/click_cursor.dart';
 import '../design/brand_button.dart';
 import '../design/brand_card.dart';
 import '../design/brand_screen_header.dart';
@@ -269,7 +270,7 @@ class SendView extends StatelessWidget {
                 ],
               ),
             ),
-            GestureDetector(
+            Tappable(
               behavior: HitTestBehavior.opaque,
               onTap: onClearContact,
               child: Container(
@@ -409,7 +410,7 @@ class SendView extends StatelessWidget {
               else
                 Text(amount.coinSymbol, style: _unitStyle),
               const SizedBox(width: 10),
-              GestureDetector(
+              Tappable(
                 behavior: HitTestBehavior.opaque,
                 onTap: onMax,
                 child: Container(
@@ -534,7 +535,7 @@ class SendView extends StatelessWidget {
       ],
     );
     if (onAvailableTap != null) {
-      availableLine = GestureDetector(
+      availableLine = Tappable(
         behavior: HitTestBehavior.opaque,
         onTap: onAvailableTap,
         child: availableLine,

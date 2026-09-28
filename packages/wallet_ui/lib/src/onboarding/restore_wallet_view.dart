@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../design/brand.dart';
+import '../design/click_cursor.dart';
 import '../design/brand_button.dart';
 import '../design/brand_screen_header.dart';
 import '../design/brand_segmented.dart';
@@ -74,9 +75,16 @@ class RestoreWalletLabels {
 class RestoreWalletController {
   _RestoreWalletViewState? _state;
 
+  /// Whether the phrase is complete and valid — drives an external Continue
+  /// button in [RestoreWalletView.embedded] mode (desktop onboarding).
+  final ValueNotifier<bool> canRestore = ValueNotifier(false);
+
   /// Replaces the grid contents; adjusts the selected length to fit when the
   /// active type is variable and [words] matches one of its length options.
   void setWords(List<String> words) => _state?._setWords(words);
+
+  /// Triggers the restore (embedded mode, where the button lives outside).
+  void restore() => _state?._restore();
 
   void _attach(_RestoreWalletViewState s) => _state = s;
   void _detach(_RestoreWalletViewState s) {
@@ -111,6 +119,10 @@ class RestoreWalletView extends StatefulWidget {
   final int? stepCount;
   final int? stepIndex;
 
+  /// Content-only render for the desktop onboarding shell: no Scaffold, header
+  /// or Restore button (the shell supplies those; drive it via [controller]).
+  final bool embedded;
+
   const RestoreWalletView({
     super.key,
     required this.labels,
@@ -124,6 +136,7 @@ class RestoreWalletView extends StatefulWidget {
     this.controller,
     this.stepCount,
     this.stepIndex,
+    this.embedded = false,
   });
 
   @override
@@ -152,6 +165,21 @@ class _RestoreWalletViewState extends State<RestoreWalletView> {
   void initState() {
     super.initState();
     widget.controller?._attach(this);
+    for (final c in _controllers) {
+      c.addListener(_pushValidity);
+    }
+  }
+
+  /// Publishes "ready to restore" to the controller, for an external Continue
+  /// button (embedded mode). A no-op when the value is unchanged.
+  void _pushValidity() {
+    final ctrl = widget.controller;
+    if (ctrl == null) return;
+    final words = _readWords();
+    ctrl.canRestore.value =
+        _allFilledValid(words) &&
+        _mnemonicError(words) == null &&
+        (widget.canRestore?.call() ?? true);
   }
 
   @override
@@ -192,6 +220,7 @@ class _RestoreWalletViewState extends State<RestoreWalletView> {
 
   void _setCount(int n) {
     if (n != _count) setState(() => _count = n);
+    _pushValidity();
   }
 
   void _selectType(int index) {
@@ -260,6 +289,7 @@ class _RestoreWalletViewState extends State<RestoreWalletView> {
       focusNode: _nodes[i],
       validate: _valid,
       isLast: i == _count - 1,
+      big: widget.embedded,
       onChanged: (v) => _onSlotChanged(i, v),
       onSubmitted: () {
         if (i + 1 < _count) _nodes[i + 1].requestFocus();
@@ -279,12 +309,122 @@ class _RestoreWalletViewState extends State<RestoreWalletView> {
     final showSteps = widget.stepCount != null && widget.stepIndex != null;
     final type = _type;
 
+    // Embedded mode drives an external Continue: the restore-point gate lives in
+    // the parent, so republish validity after each rebuild (no-op when unchanged;
+    // deferred a frame to avoid mutating the notifier mid-build).
+    if (widget.embedded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _pushValidity();
+      });
+    }
+
     // The slots, notice, and Restore button react to typing via their own
     // listeners — a keystroke never rebuilds the whole screen.
     final reactive = Listenable.merge([
       for (var i = 0; i < _count; i++) _controllers[i],
       for (var i = 0; i < _count; i++) _nodes[i],
     ]);
+
+    final typeSelector = widget.seedTypes.length > 1
+        ? BrandSegmented(
+            labels: [for (final t in widget.seedTypes) t.label],
+            selectedIndex: _typeIndex,
+            onSelect: _selectType,
+            dense: true,
+          )
+        : null;
+
+    final lengthRow = (type.lengthOptions != null && type.fixedWordCount == null)
+        ? Row(
+            children: [
+              SectionHeader(label: labels.seedLength, padding: EdgeInsets.zero),
+              const Spacer(),
+              _SeedLengthSelector(
+                lengths: type.lengthOptions!,
+                selected: _count,
+                onSelect: _setCount,
+              ),
+            ],
+          )
+        : null;
+
+    // The scrollable per-word grid, bad-word notice and restore-point card.
+    final gridList = Expanded(
+      child: ListView(
+        children: [
+          // Rows sized to their content; 3 columns, or 2 on narrow screens.
+          // A short last row is padded with empty slots.
+          for (var r = 0; r * cols < _count; r++) ...[
+            if (r > 0) const SizedBox(height: 9),
+            Row(
+              children: [
+                for (var c = 0; c < cols && r * cols + c < _count; c++) ...[
+                  if (c > 0) const SizedBox(width: 9),
+                  Expanded(child: _buildSlot(r * cols + c)),
+                ],
+              ],
+            ),
+          ],
+          ListenableBuilder(
+            listenable: reactive,
+            builder: (context, _) {
+              final words = _readWords();
+              final bad = _firstBad(words);
+              final Widget notice;
+              if (bad != null) {
+                notice = _BadWordNotice(
+                  message: labels.badWord(bad + 1),
+                  suggestion: type.suggestWord?.call(words[bad]),
+                  suggestionText: labels.didYouMean,
+                );
+              } else if (_mnemonicError(words) case final err?) {
+                notice = _BadWordNotice(message: err, suggestion: null, suggestionText: (_) => '');
+              } else {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: BrandSpacing.md),
+                child: notice,
+              );
+            },
+          ),
+          const SizedBox(height: BrandSpacing.lg),
+          widget.restorePointFields,
+        ],
+      ),
+    );
+
+    // Desktop onboarding shell supplies the header, step dots and Continue.
+    if (widget.embedded) {
+      final pasteButton = BrandButton.secondary(
+        label: labels.paste,
+        icon: Icons.content_paste_rounded,
+        dense: true,
+        expand: false,
+        onPressed: _paste,
+      );
+      return Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (typeSelector != null) ...[typeSelector, const SizedBox(height: BrandSpacing.md)],
+              Row(
+                children: [
+                  if (lengthRow != null) Expanded(child: lengthRow) else const Spacer(),
+                  const SizedBox(width: 12),
+                  pasteButton,
+                ],
+              ),
+              const SizedBox(height: BrandSpacing.md),
+              gridList,
+            ],
+          ),
+        ),
+      );
+    }
 
     final column = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -310,79 +450,11 @@ class _RestoreWalletViewState extends State<RestoreWalletView> {
           ),
         ),
         const SizedBox(height: BrandSpacing.lg),
-        if (widget.seedTypes.length > 1) ...[
-          BrandSegmented(
-            labels: [for (final t in widget.seedTypes) t.label],
-            selectedIndex: _typeIndex,
-            onSelect: _selectType,
-            dense: true,
-          ),
-          const SizedBox(height: BrandSpacing.md),
-        ],
-        if (type.lengthOptions != null && type.fixedWordCount == null) ...[
-          Row(
-            children: [
-              SectionHeader(label: labels.seedLength, padding: EdgeInsets.zero),
-              const Spacer(),
-              _SeedLengthSelector(
-                lengths: type.lengthOptions!,
-                selected: _count,
-                onSelect: _setCount,
-              ),
-            ],
-          ),
-          const SizedBox(height: BrandSpacing.md),
-        ],
+        if (typeSelector != null) ...[typeSelector, const SizedBox(height: BrandSpacing.md)],
+        if (lengthRow != null) ...[lengthRow, const SizedBox(height: BrandSpacing.md)],
         Text(labels.subtitle, style: BrandText.bodyMuted),
         const SizedBox(height: BrandSpacing.lg),
-        Expanded(
-          child: ListView(
-            children: [
-              // Rows sized to their content; 3 columns, or 2 on narrow screens.
-              // A short last row is padded with empty slots.
-              for (var r = 0; r * cols < _count; r++) ...[
-                if (r > 0) const SizedBox(height: 9),
-                Row(
-                  children: [
-                    for (var c = 0; c < cols && r * cols + c < _count; c++) ...[
-                      if (c > 0) const SizedBox(width: 9),
-                      Expanded(child: _buildSlot(r * cols + c)),
-                    ],
-                  ],
-                ),
-              ],
-              ListenableBuilder(
-                listenable: reactive,
-                builder: (context, _) {
-                  final words = _readWords();
-                  final bad = _firstBad(words);
-                  final Widget notice;
-                  if (bad != null) {
-                    notice = _BadWordNotice(
-                      message: labels.badWord(bad + 1),
-                      suggestion: type.suggestWord?.call(words[bad]),
-                      suggestionText: labels.didYouMean,
-                    );
-                  } else if (_mnemonicError(words) case final err?) {
-                    notice = _BadWordNotice(
-                      message: err,
-                      suggestion: null,
-                      suggestionText: (_) => '',
-                    );
-                  } else {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(top: BrandSpacing.md),
-                    child: notice,
-                  );
-                },
-              ),
-              const SizedBox(height: BrandSpacing.lg),
-              widget.restorePointFields,
-            ],
-          ),
-        ),
+        gridList,
         // Keep the Restore button off the restore-point card when the words make
         // the list scroll (small screens / 2-column layout).
         const SizedBox(height: BrandSpacing.md),
@@ -430,6 +502,9 @@ class _WordSlot extends StatefulWidget {
   final FocusNode focusNode;
   final bool Function(String) validate;
   final bool isLast;
+
+  /// Larger cell for the desktop (embedded) layout.
+  final bool big;
   final ValueChanged<String> onChanged;
   final VoidCallback onSubmitted;
 
@@ -442,6 +517,7 @@ class _WordSlot extends StatefulWidget {
     required this.isLast,
     required this.onChanged,
     required this.onSubmitted,
+    this.big = false,
   });
 
   @override
@@ -487,12 +563,15 @@ class _WordSlotState extends State<_WordSlot> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    final fs = widget.big ? 14.5 : 13.5;
+    return Tappable(
       // The field box is text-tight; make the whole slot (incl. padding) focus it.
       behavior: HitTestBehavior.opaque,
       onTap: () => widget.focusNode.requestFocus(),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+        padding: widget.big
+            ? const EdgeInsets.symmetric(horizontal: 14, vertical: 13)
+            : const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
         decoration: BoxDecoration(
           color: _filled ? BrandColors.card : BrandColors.surfaceSunken,
           borderRadius: BorderRadius.circular(12),
@@ -528,9 +607,9 @@ class _WordSlotState extends State<_WordSlot> {
                 cursorColor: BrandColors.primary,
                 // Force the field box down to the text height so it doesn't add
                 // vertical padding (which made the slot tall + misaligned the no.).
-                strutStyle: const StrutStyle(forceStrutHeight: true, height: 1, fontSize: 13.5),
+                strutStyle: StrutStyle(forceStrutHeight: true, height: 1, fontSize: fs),
                 style: TextStyle(
-                  fontSize: 13.5,
+                  fontSize: fs,
                   height: 1,
                   fontWeight: FontWeight.w500,
                   color: _error ? BrandColors.error : BrandColors.ink,
@@ -575,7 +654,7 @@ class _SeedLengthSelector extends StatelessWidget {
         spacing: 3,
         children: [
           for (final n in lengths)
-            GestureDetector(
+            Tappable(
               behavior: HitTestBehavior.opaque,
               onTap: () => onSelect(n),
               child: AnimatedContainer(
