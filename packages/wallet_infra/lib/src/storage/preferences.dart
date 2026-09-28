@@ -27,6 +27,10 @@ class SettingsKeys {
   static const String torMode = 'torMode';
   static const String torSocksPort = 'torSocksPort';
   static const String torUseOrbot = 'torUseOrbot';
+  // Store review (StoreReview): a send made the user eligible, and the day the
+  // store was last asked. The day, not the moment -- this store is plaintext.
+  static const String storeReviewEligible = 'storeReviewEligible';
+  static const String storeReviewLastAskedDay = 'storeReviewLastAskedDay';
 }
 
 /// Non-secret key/value storage.
