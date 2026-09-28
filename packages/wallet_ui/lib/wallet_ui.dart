@@ -23,6 +23,7 @@ export 'src/onboarding/unlock_view.dart';
 export 'src/onboarding/welcome_view.dart';
 
 // Wallet-coupled widgets (depend on wallet_domain / wallet_fiat).
+export 'src/wallet/amount_entry_controller.dart';
 export 'src/wallet/coin_badge.dart';
 export 'src/wallet/coin_mark.dart';
 export 'src/wallet/confirm_send_view.dart';

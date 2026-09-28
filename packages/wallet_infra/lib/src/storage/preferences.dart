@@ -17,6 +17,8 @@ class SettingsKeys {
   // Marks that the fiat API was turned off *by* disabling global Tor (not by the
   // user), so re-enabling Tor can restore it.
   static const String fiatAutoDisabledByTor = 'fiatAutoDisabledByTor';
+  // The unit the send screen's amount was last typed in: `coin` or `fiat`.
+  static const String sendAmountUnit = 'sendAmountUnit';
   static const String notificationsEnabled = 'notificationsEnabled';
   static const String backgroundSyncEnabled = 'backgroundSyncEnabled';
   static const String foregroundSyncEnabled = 'foregroundSyncEnabled';

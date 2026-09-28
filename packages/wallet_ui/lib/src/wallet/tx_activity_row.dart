@@ -25,7 +25,6 @@ class TxActivityRow extends StatelessWidget {
   final CryptoWallet asset;
   final TxActivityLabels labels;
   final FiatRateModel fiatRate;
-  final String fiatSymbol;
   final bool showDivider;
 
   /// When false, the leading badge is a coin-agnostic direction circle (no
@@ -40,7 +39,6 @@ class TxActivityRow extends StatelessWidget {
     required this.asset,
     required this.labels,
     required this.fiatRate,
-    required this.fiatSymbol,
     required this.showDivider,
     this.showCoinIcon = true,
     required this.onTap,
@@ -122,7 +120,7 @@ class TxActivityRow extends StatelessWidget {
                 if (amountFiat != null && !fiatRate.isDisabled) ...[
                   const SizedBox(height: 2),
                   Text(
-                    formatFiat(amountFiat, fiatSymbol),
+                    formatFiat(amountFiat, fiatRate.fiatCurrency),
                     style: TextStyle(
                       fontFamily: 'Ubuntu Mono',
                       fontSize: 11,

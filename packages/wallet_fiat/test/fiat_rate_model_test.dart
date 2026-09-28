@@ -266,6 +266,40 @@ void main() {
     });
   });
 
+  group('quoteFor', () {
+    test('carries the rate with the currency from the shared table', () async {
+      await SharedPreferencesService.set<double>('${SettingsKeys.fiatRate}_btc', 61234.5);
+      await SharedPreferencesService.set<String>(SettingsKeys.fiatCurrency, 'GBP');
+
+      final model = pollingModel();
+      final manager = await configuredManager([FakeFiatWallet('BTC')]);
+      addTearDown(manager.dispose);
+      await model.startService(walletManager: manager);
+      await pumpEventQueue();
+
+      final quote = model.quoteFor('BTC');
+      expect(quote?.rate, 61234.5);
+      expect(quote?.currency, same(FiatCurrency.gbp));
+    });
+
+    test('offers nothing while fiat is disabled, even with a rate in memory', () async {
+      // rateFor keeps answering from persisted rates when disabled; quoteFor is
+      // the check for anywhere a user acts on a price.
+      await SharedPreferencesService.set<double>('${SettingsKeys.fiatRate}_btc', 61234.5);
+      await FiatRateModel.saveFiatApiMode(FiatApiMode.disabled);
+
+      final model = FiatRateModel();
+      addTearDown(model.dispose);
+      final manager = await configuredManager([FakeFiatWallet('BTC')]);
+      addTearDown(manager.dispose);
+      await model.startService(walletManager: manager);
+      await pumpEventQueue();
+
+      expect(model.rateFor('BTC'), 61234.5);
+      expect(model.quoteFor('BTC'), isNull);
+    });
+  });
+
   group('clearPersistedRates', () {
     test('removes every coin, so a currency change cannot show a stale price', () async {
       // Without this, switching USD → EUR shows yesterday's dollar figure under a
