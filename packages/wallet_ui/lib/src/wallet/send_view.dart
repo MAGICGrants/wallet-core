@@ -504,7 +504,7 @@ class SendAmountCard extends StatelessWidget {
         if (converted != null) ...[
           const SizedBox(height: 9),
           // Tapping the other unit swaps to it, like the chip.
-          GestureDetector(
+          Tappable(
             behavior: HitTestBehavior.opaque,
             onTap: amount.swap,
             child: SizedBox(
@@ -550,7 +550,7 @@ class SendAmountCard extends StatelessWidget {
     return Semantics(
       button: true,
       label: switchUnitLabel,
-      child: GestureDetector(
+      child: Tappable(
         behavior: HitTestBehavior.opaque,
         onTap: amount.swap,
         child: Container(
