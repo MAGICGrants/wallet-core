@@ -374,11 +374,81 @@ class SendView extends StatelessWidget {
   Widget _amountSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [_amountCard(), if (amountError.isNotEmpty) _errorText(amountError)],
+      children: [
+        BrandCard(
+          padding: const EdgeInsets.fromLTRB(14, 15, 14, 14),
+          child: SendAmountCard(
+            amount: amount,
+            maxLabel: labels.maxButton,
+            switchUnitLabel: labels.switchUnit,
+            onMax: onMax,
+            availableText: availableText,
+            availableLeading: availableLeading,
+            onAvailableTap: onAvailableTap,
+          ),
+        ),
+        if (amountError.isNotEmpty) _errorText(amountError),
+      ],
     );
   }
 
-  Widget _amountCard() {
+  Widget _prioritySection() {
+    return Column(
+      children: [
+        BrandSegmented(
+          labels: labels.priorityLabels,
+          selectedIndex: selectedPriority,
+          onSelect: onSelectPriority,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 11, 4, 0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(labels.networkFee, style: TextStyle(fontSize: 12, color: BrandColors.inkMuted)),
+              feeValue,
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The amount-entry card body: the amount field (with the fiat-symbol prefix and
+/// decimals-limited input), the tappable unit chip that swaps coin/fiat entry,
+/// MAX, the converted amount, and the available + rate line. Shared by
+/// [SendView] and the apps' desktop send forms so fiat entry renders
+/// identically. Renders the content only — wrap it in your own card container
+/// (e.g. a [BrandCard]). Rebuilds off [amount], so wrap in a [ListenableBuilder]
+/// on it if the parent doesn't already.
+class SendAmountCard extends StatelessWidget {
+  const SendAmountCard({
+    super.key,
+    required this.amount,
+    required this.maxLabel,
+    required this.switchUnitLabel,
+    required this.onMax,
+    this.availableText,
+    this.availableLeading,
+    this.onAvailableTap,
+  });
+
+  final AmountEntryController amount;
+  final String maxLabel;
+
+  /// Screen-reader label for the unit chip that swaps coin and fiat entry.
+  final String switchUnitLabel;
+  final VoidCallback onMax;
+
+  /// Available-balance line, left of the rate. Null omits it, leaving the
+  /// bottom line as just the rate.
+  final String? availableText;
+  final Widget? availableLeading;
+  final VoidCallback? onAvailableTap;
+
+  @override
+  Widget build(BuildContext context) {
     final quote = amount.quote;
     final fiatEntry = amount.unit == AmountUnit.fiat && quote != null;
     final converted = _convertedText();
@@ -387,87 +457,84 @@ class SendView extends StatelessWidget {
         : '1 ${amount.coinSymbol} ≈ ${formatFiat(quote.rate, quote.currency)}';
     final fiatDecimals = quote?.currency.decimals ?? 0;
 
-    return BrandCard(
-      padding: const EdgeInsets.fromLTRB(14, 15, 14, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _AmountField(
-                  amount: amount,
-                  prefix: fiatEntry ? quote.currency.symbol : '',
-                  hint: fiatEntry
-                      ? (fiatDecimals == 0 ? '0' : '0.${'0' * fiatDecimals}')
-                      : '0.000000',
-                  decimals: fiatEntry ? fiatDecimals : amount.coinDecimals,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _AmountField(
+                amount: amount,
+                prefix: fiatEntry ? quote.currency.symbol : '',
+                hint: fiatEntry
+                    ? (fiatDecimals == 0 ? '0' : '0.${'0' * fiatDecimals}')
+                    : '0.000000',
+                decimals: fiatEntry ? fiatDecimals : amount.coinDecimals,
               ),
-              const SizedBox(width: 10),
-              if (quote != null)
-                _unitChip(fiatEntry ? quote.currency.code : amount.coinSymbol)
-              else
-                Text(amount.coinSymbol, style: _unitStyle),
-              const SizedBox(width: 10),
-              Tappable(
-                behavior: HitTestBehavior.opaque,
-                onTap: onMax,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: BrandColors.surfaceAccent,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    labels.maxButton,
-                    style: TextStyle(
-                      fontFamily: 'Ubuntu Mono',
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                      color: BrandColors.primaryDeep,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (converted != null) ...[
-            const SizedBox(height: 9),
-            // Tapping the other unit swaps to it, like the chip.
-            GestureDetector(
+            ),
+            const SizedBox(width: 10),
+            if (quote != null)
+              _unitChip(fiatEntry ? quote.currency.code : amount.coinSymbol)
+            else
+              Text(amount.coinSymbol, style: _unitStyle),
+            const SizedBox(width: 10),
+            Tappable(
               behavior: HitTestBehavior.opaque,
-              onTap: amount.swap,
-              child: SizedBox(
-                width: double.infinity,
-                height: 17,
-                child: converted.isEmpty
-                    ? null
-                    : FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          converted,
-                          maxLines: 1,
-                          style: TextStyle(
-                            fontFamily: 'Ubuntu Mono',
-                            fontSize: 13,
-                            color: BrandColors.inkMuted,
-                          ),
-                        ),
-                      ),
+              onTap: onMax,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 12),
+                decoration: BoxDecoration(
+                  color: BrandColors.surfaceAccent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  maxLabel,
+                  style: TextStyle(
+                    fontFamily: 'Ubuntu Mono',
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: BrandColors.primaryDeep,
+                  ),
+                ),
               ),
             ),
           ],
-          if (availableText != null || rate != null) ...[
-            const SizedBox(height: 11),
-            Container(height: 1, color: BrandColors.surfaceTinted),
-            const SizedBox(height: 11),
-            _amountBottomLine(rate),
-          ],
+        ),
+        if (converted != null) ...[
+          const SizedBox(height: 9),
+          // Tapping the other unit swaps to it, like the chip.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: amount.swap,
+            child: SizedBox(
+              width: double.infinity,
+              height: 17,
+              child: converted.isEmpty
+                  ? null
+                  : FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        converted,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontFamily: 'Ubuntu Mono',
+                          fontSize: 13,
+                          color: BrandColors.inkMuted,
+                        ),
+                      ),
+                    ),
+            ),
+          ),
         ],
-      ),
+        if (availableText != null || rate != null) ...[
+          const SizedBox(height: 11),
+          Container(height: 1, color: BrandColors.surfaceTinted),
+          const SizedBox(height: 11),
+          _amountBottomLine(rate),
+        ],
+      ],
     );
   }
 
@@ -482,7 +549,7 @@ class SendView extends StatelessWidget {
   Widget _unitChip(String label) {
     return Semantics(
       button: true,
-      label: labels.switchUnit,
+      label: switchUnitLabel,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: amount.swap,
@@ -522,8 +589,8 @@ class SendView extends StatelessWidget {
   Widget _amountBottomLine(String? rate) {
     final style = TextStyle(fontFamily: 'Ubuntu Mono', fontSize: 12, color: BrandColors.inkMuted);
     final rateText = rate == null ? null : Text(rate, style: style);
-    // Spice: no available line here (it's on the "From" card), so the bottom
-    // line is just the rate.
+    // No available line (Spice shows it on the "From" card), so the bottom line
+    // is just the rate.
     if (availableText == null) return rateText ?? const SizedBox.shrink();
 
     Widget availableLine = Row(
@@ -545,28 +612,6 @@ class SendView extends StatelessWidget {
       children: [
         Expanded(child: availableLine),
         if (rateText != null) ...[const SizedBox(width: 10), rateText],
-      ],
-    );
-  }
-
-  Widget _prioritySection() {
-    return Column(
-      children: [
-        BrandSegmented(
-          labels: labels.priorityLabels,
-          selectedIndex: selectedPriority,
-          onSelect: onSelectPriority,
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 11, 4, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(labels.networkFee, style: TextStyle(fontSize: 12, color: BrandColors.inkMuted)),
-              feeValue,
-            ],
-          ),
-        ),
       ],
     );
   }
