@@ -150,10 +150,7 @@ class BrandButton extends StatelessWidget {
             ],
           );
 
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(radius),
-      side: side,
-    );
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius), side: side);
     final button = Material(
       color: bg,
       shape: shape,

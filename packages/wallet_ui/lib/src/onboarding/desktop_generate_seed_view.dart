@@ -283,7 +283,11 @@ class _BirthdayCard extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   reason,
-                  style: TextStyle(fontFamily: 'Ubuntu', fontSize: 12.5, color: BrandColors.inkMuted),
+                  style: TextStyle(
+                    fontFamily: 'Ubuntu',
+                    fontSize: 12.5,
+                    color: BrandColors.inkMuted,
+                  ),
                 ),
               ],
             ),

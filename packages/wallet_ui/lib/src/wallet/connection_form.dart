@@ -291,7 +291,10 @@ class ConnectionFormView extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [...content, if (showSave) ...[const SizedBox(height: 16), saveButton]],
+      children: [
+        ...content,
+        if (showSave) ...[const SizedBox(height: 16), saveButton],
+      ],
     );
   }
 }

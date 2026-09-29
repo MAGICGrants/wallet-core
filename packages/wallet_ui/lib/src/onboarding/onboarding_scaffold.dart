@@ -294,9 +294,7 @@ class OnboardingRadioCard extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         decoration: BoxDecoration(
-          color: selected
-              ? (selectedFill?.call() ?? BrandColors.surfaceSunken)
-              : BrandColors.card,
+          color: selected ? (selectedFill?.call() ?? BrandColors.surfaceSunken) : BrandColors.card,
           border: Border.all(
             color: selected ? BrandColors.primary : BrandColors.border,
             width: selected ? 1.5 : 1,

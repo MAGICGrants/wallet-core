@@ -30,9 +30,7 @@ class DesktopModalCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         // Dark theme: a discrete hairline so the card reads against the dimmed
         // background it floats over. Light theme leans on the scrim + shadow.
-        side: BrandColors.isDark
-            ? BorderSide(color: BrandColors.border)
-            : BorderSide.none,
+        side: BrandColors.isDark ? BorderSide(color: BrandColors.border) : BorderSide.none,
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
