@@ -91,6 +91,13 @@ jobs:
         working-directory: packages/wallet_monero
         run: dart run tool/make_fixtures.dart
 
+      # The H-01 LWS MITM test connects to a routable NAME that must resolve to
+      # the local TLS server (a bare IP is treated as local and stays plaintext,
+      # so no handshake runs). Map it to loopback; the test fails under
+      # REQUIRE_MONERO_FFI if it is missing.
+      - name: Map the H-01 MITM test host to loopback
+        run: echo "127.0.0.1 mitm.test" | sudo tee -a /etc/hosts
+
       # REQUIRE_* turns "not available" from a skip into a failure, so a broken
       # build or a missing corpus cannot leave this job green.
       - name: wallet_monero (real FFI + corpus)
