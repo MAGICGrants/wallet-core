@@ -31,6 +31,9 @@ class Erc20ChainWallet extends EthereumChainWallet {
   final String tokenContractAddress;
   final int tokenDecimals;
   final String parentCoinSymbol;
+
+  @override
+  String? get ownTokenContract => tokenContractAddress;
   final String _assetName;
   final int _displayDecimals;
   final int _displaySmallerDigits;
@@ -179,6 +182,8 @@ class Erc20ChainWallet extends EthereumChainWallet {
       rawHex: '0x${bytesToHex(raw)}',
       txHash: '0x${bytesToHex(keccak256(raw))}',
       to: destinationAddress,
+      chainId: chainId,
+      tokenContractAddress: ownTokenContract,
     );
   }
 

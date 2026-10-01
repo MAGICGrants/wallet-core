@@ -9,7 +9,14 @@ class EthereumPendingTx implements PendingTransaction {
     required this.rawHex,
     required this.txHash,
     required this.to,
+    required this.chainId,
+    required this.tokenContractAddress,
   });
+
+  /// Origin identity, re-checked in `commitTx` so only the asset that signed
+  /// these bytes can broadcast them.
+  final int chainId;
+  final String? tokenContractAddress;
 
   /// Send value in base units; wei for a native transfer, raw token units for
   /// an ERC-20 one.
