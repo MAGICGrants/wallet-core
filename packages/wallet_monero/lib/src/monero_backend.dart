@@ -154,6 +154,7 @@ abstract class MoneroBackend {
     NativeHandle manager, {
     required String path,
     required String password,
+    int networkType = 0,
   });
 
   /// The word-list factory: 25-word legacy, or a BIP39 phrase already converted

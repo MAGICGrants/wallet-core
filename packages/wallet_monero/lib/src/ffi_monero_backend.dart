@@ -61,6 +61,7 @@ class FfiMoneroBackend extends MoneroBackend {
     NativeHandle manager, {
     required String path,
     required String password,
+    int networkType = 0,
   }) async {
     final wm = manager.id;
     final address = await Isolate.run(
@@ -68,6 +69,7 @@ class FfiMoneroBackend extends MoneroBackend {
         Pointer.fromAddress(wm),
         path: path,
         password: password,
+        networkType: networkType,
       ).address,
     );
     return NativeHandle(address);

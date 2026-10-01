@@ -1,4 +1,5 @@
-// H-01 (native, real FFI): the monero_c epee `user_ca` hostname fix (patch 0017).
+// LWS TLS hostname verification (native, real FFI): the monero_c epee `user_ca`
+// hostname fix (patch 0017).
 //
 // LWS on Android trusts a bundled CA set (via Wallet_setCaFilePath), which puts
 // the native TLS layer into `user_ca` mode. Before the fix, epee ran the RFC 2818
@@ -13,15 +14,15 @@
 // directly, then driving a real LWS connect at a local TLS server:
 //
 //   wrong-host cert + patched .so   -> handshake REJECTED  (server sees nothing)
-//   wrong-host cert + UNPATCHED .so -> handshake COMPLETES (the H-01 bug -> FAIL)
+//   wrong-host cert + UNPATCHED .so -> handshake COMPLETES (the bug -> FAIL)
 //   matching-host cert + patched    -> handshake COMPLETES (no over-rejection)
 //
 // The signal is whether the *server* completes a TLS handshake (message- and
 // SDK-independent): a rejected client aborts before the server emits a socket.
 //
 // Runs in wallet-core's existing `native.yml` job, which builds the real .so and
-// sets MONERO_LIB_PATH. It self-skips when the lib is absent, or when `lws.test`
-// does not resolve to loopback (native.yml adds `127.0.0.1 lws.test` to
+// sets MONERO_LIB_PATH. It self-skips when the lib is absent, or when `mitm.test`
+// does not resolve to loopback (native.yml adds `127.0.0.1 mitm.test` to
 // /etc/hosts; a routable NAME is required because a bare IP is treated as local
 // and stays plaintext, so no handshake runs).
 //
@@ -107,7 +108,7 @@ Future<Map<String, Object?>> _lwsConnect({
     final wallet = monero.WalletManager_createWalletFromPolyseed(
       wm,
       path: walletPath,
-      password: 'h01-test',
+      password: 'fixture-test',
       networkType: 0,
       mnemonic: mnemonic,
       seedOffset: '',
@@ -193,7 +194,7 @@ void main() {
       isFalse,
       reason: 'The cert is for wrong.host but we connect as $_host, so the patched '
           '.so must reject it at the TLS handshake. A completed handshake means '
-          'patch 0017 is missing (the H-01 bug). connect: $result',
+          'patch 0017 is missing (the user_ca hostname bug). connect: $result',
     );
   });
 

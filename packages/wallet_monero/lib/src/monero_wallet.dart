@@ -44,9 +44,14 @@ class MoneroPendingTransaction implements PendingTransaction {
 /// something went wrong in production, and the comment at the site says what.
 /// Removing one reintroduces the bug it was written for.
 class MoneroWallet extends CryptoWallet {
-  MoneroWallet({MoneroBackend? backend}) : _backend = backend ?? const FfiMoneroBackend();
+  MoneroWallet({MoneroBackend? backend, @visibleForTesting int? networkTypeOverride})
+      : _backend = backend ?? const FfiMoneroBackend(),
+        _networkTypeOverride = networkTypeOverride;
 
   final MoneroBackend _backend;
+
+  // Both apps ship mainnet only; a test opening a stagenet fixture overrides it.
+  final int? _networkTypeOverride;
 
   NativeHandle? _manager;
   NativeHandle? _wallet;
@@ -280,7 +285,8 @@ class MoneroWallet extends CryptoWallet {
     final path = target?.path ?? await resolveWalletPath();
     final openPassword = target?.password ?? password;
 
-    final wallet = await _backend.openWallet(manager, path: path, password: openPassword);
+    final wallet =
+        await _backend.openWallet(manager, path: path, password: openPassword, networkType: networkType);
     final error = await _backend.walletErrorString(wallet);
     if (error.isNotEmpty) {
       walletLog(LogLevel.error, 'openWallet error: $error');
@@ -1537,7 +1543,7 @@ class MoneroWallet extends CryptoWallet {
   ///
   /// Both apps ship Monero mainnet only. Named so the wallet factory and the
   /// address validator cannot disagree about it.
-  int get networkType => MoneroConsts.mainnetNetworkType;
+  int get networkType => _networkTypeOverride ?? MoneroConsts.mainnetNetworkType;
 
   @override
   bool isAddressValid(String address) {
