@@ -184,6 +184,7 @@ class FakeMoneroBackend extends MoneroBackend {
     NativeHandle manager, {
     required String path,
     required String password,
+    int networkType = 0,
   }) async {
     _record('openWallet');
     opens.add((path: path, password: password));

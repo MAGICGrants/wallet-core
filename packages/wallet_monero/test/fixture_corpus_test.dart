@@ -164,7 +164,10 @@ void main() {
           );
         }
 
-        final wallet = MoneroWallet();
+        // The corpus is stagenet (no fixture can hold mainnet value); the apps
+        // ship mainnet only, so open them with the manifest's network, not the
+        // production default.
+        final wallet = MoneroWallet(networkTypeOverride: manifest['networkType'] as int);
         addTearDown(wallet.dispose);
 
         expect(
