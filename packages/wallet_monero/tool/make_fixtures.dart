@@ -379,7 +379,11 @@ final List<_Fixture> _fixtures = [
 
   // Node-mode wallet: Skylight names the other mode's file `mywallet_node`.
   _Fixture('skylight_node', true, (wm, dir) {
-    final address = _recoveredWallet(wm.node!, path: '${dir.path}/mywallet_node', mnemonic: _legacy25);
+    final address = _recoveredWallet(
+      wm.node!,
+      path: '${dir.path}/mywallet_node',
+      mnemonic: _legacy25,
+    );
     return {
       'walletFile': 'mywallet_node',
       'address': address,
@@ -408,7 +412,11 @@ final List<_Fixture> _fixtures = [
   // Spice reports "no wallet" here and drops the user into onboarding on top of
   // an existing wallet.
   _Fixture('skylight_node_only', true, (wm, dir) {
-    final address = _recoveredWallet(wm.node!, path: '${dir.path}/mywallet_node', mnemonic: _legacy25);
+    final address = _recoveredWallet(
+      wm.node!,
+      path: '${dir.path}/mywallet_node',
+      mnemonic: _legacy25,
+    );
     File('${dir.path}/prefs.json').writeAsStringSync(
       jsonEncode({'connectionType': 'lws', 'connectionAddress': 'stagenet.example.com:38089'}),
     );
@@ -424,7 +432,11 @@ final List<_Fixture> _fixtures = [
 
   // Spice v2 names its files per coin.
   _Fixture('spice_v2_xmr', true, (wm, dir) {
-    final address = _recoveredWallet(wm.lws!, path: '${dir.path}/mywallet_xmr', mnemonic: _legacy25);
+    final address = _recoveredWallet(
+      wm.lws!,
+      path: '${dir.path}/mywallet_xmr',
+      mnemonic: _legacy25,
+    );
     _recoveredWallet(wm.node!, path: '${dir.path}/mywallet_xmr_node', mnemonic: _legacy25);
     return {
       'walletFile': 'mywallet_xmr',

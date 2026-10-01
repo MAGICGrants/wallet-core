@@ -45,8 +45,8 @@ class MoneroPendingTransaction implements PendingTransaction {
 /// Removing one reintroduces the bug it was written for.
 class MoneroWallet extends CryptoWallet {
   MoneroWallet({MoneroBackend? backend, @visibleForTesting int? networkTypeOverride})
-      : _backend = backend ?? const FfiMoneroBackend(),
-        _networkTypeOverride = networkTypeOverride;
+    : _backend = backend ?? const FfiMoneroBackend(),
+      _networkTypeOverride = networkTypeOverride;
 
   final MoneroBackend _backend;
 
@@ -285,8 +285,12 @@ class MoneroWallet extends CryptoWallet {
     final path = target?.path ?? await resolveWalletPath();
     final openPassword = target?.password ?? password;
 
-    final wallet =
-        await _backend.openWallet(manager, path: path, password: openPassword, networkType: networkType);
+    final wallet = await _backend.openWallet(
+      manager,
+      path: path,
+      password: openPassword,
+      networkType: networkType,
+    );
     final error = await _backend.walletErrorString(wallet);
     if (error.isNotEmpty) {
       walletLog(LogLevel.error, 'openWallet error: $error');

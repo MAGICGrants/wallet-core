@@ -138,8 +138,10 @@ Future<Map<String, Object?>> _lwsConnect({
   });
 }
 
-String _freshSeed() => Polyseed.create()
-    .encode(PolyseedLang.getByEnglishName('English'), PolyseedCoin.POLYSEED_MONERO);
+String _freshSeed() => Polyseed.create().encode(
+  PolyseedLang.getByEnglishName('English'),
+  PolyseedCoin.POLYSEED_MONERO,
+);
 
 void main() {
   late Directory tmp;
@@ -154,17 +156,21 @@ void main() {
   Future<bool> ready() async {
     if (!_libAvailable()) {
       if (_required) {
-        fail('REQUIRE_MONERO_FFI=1 but monero_c did not load (libPath='
-            '"${monero.libPath}"). Build it with scripts/build-moneroc-ci.sh '
-            'and set MONERO_LIB_PATH.');
+        fail(
+          'REQUIRE_MONERO_FFI=1 but monero_c did not load (libPath='
+          '"${monero.libPath}"). Build it with scripts/build-moneroc-ci.sh '
+          'and set MONERO_LIB_PATH.',
+        );
       }
       markTestSkipped('needs a monero_c build; set MONERO_LIB_PATH');
       return false;
     }
     if (!await _resolvesToLoopback(_host)) {
       if (_required) {
-        fail('REQUIRE_MONERO_FFI=1 but "$_host" does not resolve to 127.0.0.1. '
-            'Add `127.0.0.1 $_host` to /etc/hosts (native.yml does this).');
+        fail(
+          'REQUIRE_MONERO_FFI=1 but "$_host" does not resolve to 127.0.0.1. '
+          'Add `127.0.0.1 $_host` to /etc/hosts (native.yml does this).',
+        );
       }
       markTestSkipped('"$_host" must resolve to 127.0.0.1 (add it to /etc/hosts)');
       return false;
@@ -192,7 +198,8 @@ void main() {
     expect(
       server.sawHandshake,
       isFalse,
-      reason: 'The cert is for wrong.host but we connect as $_host, so the patched '
+      reason:
+          'The cert is for wrong.host but we connect as $_host, so the patched '
           '.so must reject it at the TLS handshake. A completed handshake means '
           'patch 0017 is missing (the user_ca hostname bug). connect: $result',
     );
@@ -218,7 +225,8 @@ void main() {
     expect(
       server.sawHandshake,
       isTrue,
-      reason: 'The cert matches $_host, so the handshake must complete (the fix '
+      reason:
+          'The cert matches $_host, so the handshake must complete (the fix '
           'must not over-reject). connect: $result',
     );
   });
