@@ -143,14 +143,8 @@ Future<ParsedHttpResponse> makeSocksHttpRequest(
   );
 
   try {
-    log(
-      LogLevel.warn,
-      '▶ SOCKS: connecting to proxy (${uri.host}:${uri.port}, ssl=${uri.scheme == 'https'})',
-    );
     await socket.connect();
-    log(LogLevel.warn, '▶ SOCKS: proxy connected; connectTo + TLS handshake…');
     await socket.connectTo(uri.host, uri.port);
-    log(LogLevel.warn, '▶ SOCKS: connectTo done (handshake ok); sending request…');
 
     final rawRequest = getRawHttpRequestString(method, url, jsonBody: body);
     // Full-body framing (Content-Length/chunked/EOF). `send` alone stops at the
@@ -162,23 +156,15 @@ Future<ParsedHttpResponse> makeSocksHttpRequest(
       maxBytes: maxBytes,
       timeout: timeout,
     );
-    log(LogLevel.warn, '▶ SOCKS: response received (${rawResponse.length} chars)');
 
     return parseHttpResponse(rawResponse);
   } finally {
-    // Each request opens its own SOCKS connection, and with it a Tor circuit.
-    // Left open they accumulate for the life of the process; the fiat poller
-    // alone starts one every ten minutes. Closing must not mask a request
-    // error, so its own failure is only logged.
-    //
-    // Bounded: this runs in `finally`, before the already-parsed response is
-    // returned, and closing a secure SOCKS socket over Tor can hang, which
-    // would fail the request to the caller's timeout DESPITE the response having
-    // arrived. That was the fiat-over-Tor bug. Skylight bounded it; match that.
-    try {
-      await socket.close().timeout(const Duration(seconds: 5));
-    } catch (e) {
-      log(LogLevel.warn, 'Failed to close SOCKS socket: $e');
-    }
+    // Each request opens its own SOCKS connection, and with it a Tor circuit;
+    // left open they accumulate for the life of the process. The reply is
+    // already read and the request asked for `Connection: close`, so tear the
+    // socket down outright: a graceful close awaits a TLS/TCP shutdown that
+    // routinely hangs for seconds over Tor, which is what spammed a 5s timeout
+    // on every request.
+    socket.destroy();
   }
 }

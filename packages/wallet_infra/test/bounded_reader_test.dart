@@ -179,7 +179,39 @@ void main() {
       source.send('\n\r\n');
 
       final response = await readHttpResponse(source.stream);
-      expect(response, contains('hi'));
+      // De-chunked: the body is the payload, not the hex size framing around it.
+      expect(response, endsWith('\r\n\r\nhi'));
+    });
+
+    test('a multi-chunk JSON body is reassembled into valid JSON', () async {
+      // The bug behind "fees never load over Tor": a node sends a large reply
+      // (eth_getBlockByNumber) chunked, and the raw SOCKS path handed the hex
+      // size prefixes straight to jsonDecode. Split one JSON object across chunks.
+      const part1 = '{"jsonrpc":"2.0","id":1,';
+      const part2 = '"result":{"baseFeePerGas":"0x7"}}';
+      final source = _Source();
+      source.send('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n');
+      source.send('${part1.length.toRadixString(16)}\r\n$part1\r\n');
+      source.send('${part2.length.toRadixString(16)}\r\n$part2\r\n');
+      source.send('0\r\n\r\n');
+
+      final response = await readHttpResponse(source.stream);
+      final body = response.substring(response.indexOf('\r\n\r\n') + 4);
+      expect(jsonDecode(body), {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'result': {'baseFeePerGas': '0x7'},
+      });
+    });
+
+    test('a Content-Length body is left untouched (not mistaken for chunked)', () async {
+      const body = '{"ok":true}';
+      final source = _Source();
+      source.send('HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\n\r\n');
+      source.send(body);
+
+      final response = await readHttpResponse(source.stream);
+      expect(response, endsWith('\r\n\r\n$body'));
     });
 
     test('a body containing the terminator bytes early still frames correctly', () async {

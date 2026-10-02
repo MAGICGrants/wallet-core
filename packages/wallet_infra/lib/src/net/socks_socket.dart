@@ -233,6 +233,26 @@ class SOCKSSocket {
     }
   }
 
+  /// Immediate, non-graceful teardown for one-shot request/response callers.
+  ///
+  /// [close] flushes and awaits the TLS/TCP shutdown, which can hang for seconds
+  /// over Tor after the reply is already in hand. The HTTP path sends
+  /// `Connection: close` and reads the whole body, so there is nothing to flush;
+  /// destroy the sockets outright rather than wait on a handshake nobody needs.
+  void destroy() {
+    unawaited(_subscription?.cancel());
+    if (sslEnabled) {
+      try {
+        _secureSocksSocket.destroy();
+      } catch (_) {}
+    }
+    try {
+      _socksSocket.destroy();
+    } catch (_) {}
+    if (!_responseController.isClosed) _responseController.close();
+    if (sslEnabled && !_secureResponseController.isClosed) _secureResponseController.close();
+  }
+
   /// Flushes pending data and closes the connection.
   Future<void> close() async {
     try {

@@ -108,6 +108,7 @@ Future<String> readBoundedBody(
 
 const List<int> _headerTerminator = [13, 10, 13, 10]; // CRLF CRLF
 const List<int> _chunkedTerminator = [13, 10, 48, 13, 10, 13, 10]; // CRLF "0" CRLF CRLF
+const List<int> _crlf = [13, 10];
 
 final RegExp _contentLengthPattern = RegExp(r'content-length:\s*(\d+)', caseSensitive: false);
 
@@ -115,6 +116,7 @@ final RegExp _contentLengthPattern = RegExp(r'content-length:\s*(\d+)', caseSens
 class _HttpFraming {
   int? headerEnd;
   int? contentLength;
+  bool chunked = false;
 
   /// Where the next header search may start. Kept back by three bytes from the
   /// end so a terminator split across two chunks is still found.
@@ -180,11 +182,16 @@ Future<String> readHttpResponse(
       // Decoded once, over the headers alone; bounded by whatever the server
       // spent before the terminator, which `maxBytes` already covers.
       final headers = utf8.decode(bytes.sublist(0, at), allowMalformed: true);
+      final lower = headers.toLowerCase();
       final match = _contentLengthPattern.firstMatch(headers);
       framing.contentLength = match == null ? null : int.tryParse(match.group(1)!);
+      // Chunked takes precedence over Content-Length and frames by the chunked
+      // terminator; the body is de-chunked after the read.
+      framing.chunked = lower.contains('transfer-encoding: chunked');
+      if (framing.chunked) framing.contentLength = null;
       // Rule three: an announced close means EOF frames the body, whatever
       // Content-Length claimed.
-      if (headers.toLowerCase().contains('connection: close')) framing.contentLength = null;
+      if (lower.contains('connection: close')) framing.contentLength = null;
     }
 
     final headerEnd = framing.headerEnd!;
@@ -211,5 +218,35 @@ Future<String> readHttpResponse(
     timeout: timeout,
     isComplete: isComplete,
   );
+  if (framing.chunked && framing.headerEnd != null) {
+    return utf8.decode(_dechunk(bytes, framing.headerEnd! + _headerTerminator.length));
+  }
   return utf8.decode(bytes);
+}
+
+/// Strips chunked transfer-encoding framing from the body starting at
+/// [bodyStart], returning the headers unchanged followed by the de-chunked body.
+///
+/// `HttpClient` does this itself; the raw SOCKS path does not, so without it a
+/// chunked JSON reply (a full eth block, a large explorer page) reaches
+/// `jsonDecode` with hex size prefixes still in it and fails to parse. On any
+/// malformed framing it returns [bytes] unchanged rather than corrupt a body
+/// that was not actually chunked.
+List<int> _dechunk(List<int> bytes, int bodyStart) {
+  final out = bytes.sublist(0, bodyStart);
+  var i = bodyStart;
+  while (i < bytes.length) {
+    final crlf = _indexOfBytes(bytes, _crlf, i);
+    if (crlf < 0) return bytes;
+    final sizeStr = ascii.decode(bytes.sublist(i, crlf), allowInvalid: true).split(';').first.trim();
+    final size = int.tryParse(sizeStr, radix: 16);
+    if (size == null) return bytes;
+    if (size == 0) break; // final chunk
+    final start = crlf + _crlf.length;
+    final end = start + size;
+    if (end > bytes.length) return bytes; // truncated mid-chunk
+    out.addAll(bytes.sublist(start, end));
+    i = end + _crlf.length; // skip the CRLF trailing the chunk data
+  }
+  return out;
 }
