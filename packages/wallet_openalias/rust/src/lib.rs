@@ -110,7 +110,7 @@ const OVERALL_TIMEOUT: Duration = Duration::from_secs(60);
 ///
 /// A fixed constant rather than the build time on purpose: embedding the build
 /// time would make the artifact non-reproducible, and F-Droid rebuilds this from
-/// source (D12/D14). It only has to be far enough in the past to be certainly
+/// source. It only has to be far enough in the past to be certainly
 /// true and recent enough to catch a grossly wrong clock; it never needs bumping
 /// for correctness, only for tightness.
 const MIN_PLAUSIBLE_UNIX_TIME: u64 = 1767225600;
@@ -268,8 +268,8 @@ fn ffi_guard<T>(function: &'static str, on_panic: T, body: impl FnOnce() -> T) -
             // Only a `&'static str` payload is quoted, because those are
             // literals in source. A `String` payload was formatted at panic time
             // and can interpolate the data being parsed — which here is an
-            // attacker-supplied DNS answer, and `docs/logging.md` rule 5 keeps
-            // that out of logs. The function name is the diagnostic part.
+            // attacker-supplied DNS answer, and wallet_infra's logging policy
+            // keeps that out of logs. The function name is the diagnostic part.
             let detail = payload
                 .downcast_ref::<&'static str>()
                 .copied()
@@ -1081,8 +1081,8 @@ mod tests {
         );
 
         // A formatted payload was built at panic time and can interpolate the
-        // data being parsed — here, an attacker-supplied DNS answer. Rule 5 in
-        // docs/logging.md keeps that out of the log.
+        // data being parsed — here, an attacker-supplied DNS answer.
+        // wallet_infra's logging policy keeps that out of the log.
         assert!(
             !formatted_message.contains("888attackeraddress"),
             "got: {formatted_message}"

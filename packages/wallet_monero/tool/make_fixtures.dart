@@ -352,11 +352,11 @@ class _Managers {
 
 /// The wallets.
 ///
-/// Two entries from testing.md's table are deliberately absent:
-/// `no_secret_service` and `app_lock_on_cold_start`. Neither is a wallet
-/// directory; they are runtime-environment scenarios (a Linux box with no
-/// Secret Service provider; a cold start with app lock on) and belong in the
-/// app's own integration tier, which is the only place that can arrange them.
+/// Two cases are deliberately absent: `no_secret_service` and
+/// `app_lock_on_cold_start`. Neither is a wallet directory; they are
+/// runtime-environment scenarios (a Linux box with no Secret Service provider;
+/// a cold start with app lock on) and belong in the app's own integration
+/// tier, which is the only place that can arrange them.
 /// Inventing directories for them here would look like coverage and provide none.
 final List<_Fixture> _fixtures = [
   // v1.0.12 LWS wallet created from a generated polyseed. `newWallet: true` is

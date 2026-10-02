@@ -23,7 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #
 # This used to be a literal https://github.com/vtnerd/monero_c.git while the
 # commit came from pubspec.lock — fine only while the pin happened to live in
-# that fork. It does not: the fee-estimation pin (D1) is
+# that fork. It does not: the fee-estimation pin is
 # magicgrants/monero_c@c74f8df, which does not exist in vtnerd's repo, so the
 # hardcoded URL would fail at `git checkout` the moment the pin moved. Reading
 # both url and ref from the same lockfile entry keeps them consistent forever,

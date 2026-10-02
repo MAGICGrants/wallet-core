@@ -869,7 +869,7 @@ class MoneroWallet extends CryptoWallet {
     ]) {
       await SharedPreferencesService.remove(prefKey(key));
     }
-    // Two secrets, two lifetimes (`background-sync.md`). A deleted wallet that
+    // Two secrets, two lifetimes. A deleted wallet that
     // leaves this behind leaves a live key in the keystore, and the next wallet
     // on this device inherits it; `_setUpBackgroundSync` reuses a stored
     // password, so a stranger's cache password would end up encrypting a cache
