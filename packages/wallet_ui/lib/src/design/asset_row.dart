@@ -61,7 +61,7 @@ class AssetRow extends StatelessWidget {
         borderRadius: radius,
         child: Material(
           type: MaterialType.transparency,
-          child: InkWell(onTap: onTap, child: row),
+          child: InkWell(mouseCursor: WidgetStateMouseCursor.clickable, onTap: onTap, child: row),
         ),
       );
     }

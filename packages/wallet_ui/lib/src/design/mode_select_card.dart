@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'brand.dart';
+import 'click_cursor.dart';
 import 'radio_dot.dart';
 
 /// A selectable radio card — title + description with a radio dot. Selected pops
@@ -43,7 +44,7 @@ class ModeSelectCard extends StatelessWidget {
     );
     final dot = RadioDot(selected: selected);
 
-    return GestureDetector(
+    return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: AnimatedContainer(

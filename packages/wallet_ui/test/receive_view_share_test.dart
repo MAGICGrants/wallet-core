@@ -9,7 +9,12 @@ import 'package:wallet_ui/wallet_ui.dart';
 /// the button's own, not the screen's.
 Widget _harness({required ValueChanged<Rect?>? onShare, bool ready = true}) => MaterialApp(
   home: ReceiveView(
-    labels: const ReceiveLabels(title: 'Receive', copyAddress: 'Copy address'),
+    labels: const ReceiveLabels(
+      title: 'Receive',
+      copyAddress: 'Copy address',
+      enlargeQr: 'Tap to enlarge and brighten',
+      shrinkQr: 'Tap to shrink',
+    ),
     onBack: () {},
     onShare: onShare,
     ready: ready,

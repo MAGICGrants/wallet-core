@@ -73,16 +73,16 @@ jobs:
         working-directory: packages/wallet_ethereum
         run: flutter test --no-pub
 
-      # The corpus fixtures that need no monero_c — plaintext prefs and the two
+      # The fixtures that need no monero_c — plaintext prefs and the two
       # corruption cases — so they gate every push rather than only the nightly.
       # The wallet-file fixtures are skipped here and covered by native.yml.
-      - name: Generate the FFI-free fixture corpus
+      - name: Generate the fixtures that need no monero_c
         working-directory: packages/wallet_monero
         run: dart run tool/make_fixtures.dart
 
-      # Runs without monero_c: the L3 cases skip themselves when MONERO_LIB_PATH
-      # is unset, leaving the L1/L2 tiers. native.yml is what builds the library
-      # and turns those skips into failures (REQUIRE_MONERO_FFI=1).
+      # Runs without monero_c: the tests that need the library skip themselves
+      # when MONERO_LIB_PATH is unset. native.yml is what builds the library and
+      # turns those skips into failures (REQUIRE_MONERO_FFI=1).
       - name: wallet_monero
         working-directory: packages/wallet_monero
         env:
@@ -136,7 +136,7 @@ jobs:
       # cannot resolve its symbols under `flutter test` without the build above).
       # These tests are the only place that substitution is shown to be sound —
       # without them the fast tests prove something about a backend we do not
-      # ship. See docs/testing.md.
+      # ship.
       #
       # REQUIRE_NATIVE_CRYPTO=1 makes the tests FAIL rather than skip when the
       # backend is unavailable, so a broken setup step can't turn this job green

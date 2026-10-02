@@ -13,8 +13,10 @@ export 'src/export_logs_dialog.dart';
 // Onboarding views — presentational (injected labels + callbacks).
 export 'src/onboarding/create_password_view.dart';
 export 'src/onboarding/create_wallet_view.dart';
+export 'src/onboarding/desktop_generate_seed_view.dart';
 export 'src/onboarding/fiat_setup_view.dart';
 export 'src/onboarding/generate_seed_view.dart';
+export 'src/onboarding/onboarding_scaffold.dart';
 export 'src/onboarding/restore_wallet_view.dart';
 export 'src/onboarding/scan_from_card.dart';
 export 'src/onboarding/scan_qr_view.dart';
@@ -23,6 +25,7 @@ export 'src/onboarding/unlock_view.dart';
 export 'src/onboarding/welcome_view.dart';
 
 // Wallet-coupled widgets (depend on wallet_domain / wallet_fiat).
+export 'src/wallet/amount_entry_controller.dart';
 export 'src/wallet/coin_badge.dart';
 export 'src/wallet/coin_mark.dart';
 export 'src/wallet/confirm_send_view.dart';

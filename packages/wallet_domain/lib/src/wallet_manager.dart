@@ -119,6 +119,16 @@ class WalletManager with ChangeNotifier {
 
   void setWalletPassword(String password) => _password = password;
 
+  /// True if [password] decrypts the stored seed. The desktop unlock verifies
+  /// here before proceeding; mobile unlocks via biometric-gated storage instead.
+  Future<bool> verifyWalletPassword(String password) async {
+    try {
+      return await SeedStore.load(password) != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Mints a random password. Used on mobile, where the user authenticates via
   /// the device rather than typing one; [restoreAll] persists it to the
   /// keystore.

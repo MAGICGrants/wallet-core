@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:wallet_fiat/wallet_fiat.dart' show FiatCurrency;
 
 import '../design/brand.dart';
 import '../design/brand_button.dart';
@@ -38,10 +39,12 @@ class FiatSetupLabels {
 /// [ModeSelectCard]s (Tor-Only / Clearnet / Disabled) and — unless disabled — a
 /// currency picker, plus a bottom continue button. Presentational only: mode is
 /// an int index (0=torOnly, 1=clearnet, 2=disabled) so the view doesn't couple
-/// to any fiat enum; the app supplies strings, currencies and callbacks.
+/// to any fiat enum; the app supplies strings and callbacks.
 class FiatSetupView extends StatelessWidget {
   final FiatSetupLabels labels;
-  final List<FiatCurrencyOption> currencies;
+
+  /// The currencies offered; the shared table unless a caller narrows it.
+  final List<FiatCurrency> currencies;
   final int modeIndex;
   final String currency;
 
@@ -57,7 +60,7 @@ class FiatSetupView extends StatelessWidget {
   const FiatSetupView({
     super.key,
     required this.labels,
-    required this.currencies,
+    this.currencies = FiatCurrency.all,
     required this.modeIndex,
     required this.currency,
     required this.offerTorOnly,

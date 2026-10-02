@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'brand.dart';
+import 'click_cursor.dart';
 
 /// Tinted-track segmented control with a raised pill for the selected option.
 /// [dense] is the compact bordered variant (Receive's address-type toggle);
@@ -41,7 +42,7 @@ class BrandSegmented extends StatelessWidget {
 
   Widget _segment(int i) {
     final selected = i == selectedIndex;
-    return GestureDetector(
+    return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: () => onSelect(i),
       child: Container(

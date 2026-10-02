@@ -109,8 +109,11 @@ void main(List<String> args) {
   final root = Directory(outPath);
   final manifestFile = File('${root.path}/MANIFEST.json');
 
-  final wm = _tryGetWalletManager();
-  if (wm == null) {
+  final nodeWm = _tryGetWalletManager();
+  final lwsWm = _tryGetLWSFWalletManager();
+  final wm = _Managers(nodeWm, lwsWm);
+  final ffiReady = nodeWm != null && lwsWm != null;
+  if (!ffiReady) {
     stderr.writeln(
       'monero_c could not be loaded (libPath="${monero.libPath}").\n'
       'The wallet-file fixtures need it; set MONERO_LIB_PATH to an absolute\n'
@@ -128,11 +131,16 @@ void main(List<String> args) {
   final entries = <String, Object?>{};
   final failures = <String>[];
   for (final fixture in _fixtures) {
-    if (fixture.needsFfi && wm == null) {
+    if (fixture.needsFfi && !ffiReady) {
       stdout.writeln('skip  ${fixture.name} (needs monero_c)');
       continue;
     }
-    final dir = Directory('${target.path}/${fixture.name}')..createSync(recursive: true);
+    // Start each fixture from an empty dir so re-runs are idempotent: wallet2's
+    // recoveryWallet refuses to overwrite an existing wallet file. (Safe: verify
+    // uses a temp dir, the real dirs are gitignored, MANIFEST.json is at the root.)
+    final dir = Directory('${target.path}/${fixture.name}');
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
+    dir.createSync(recursive: true);
     // Per fixture, so one bad entry reports itself and the rest still run.
     // Letting this throw is how the first CI run exited 255 having uploaded
     // nothing at all: the failure came from the *first* wallet fixture, so the
@@ -313,6 +321,14 @@ monero.WalletManager? _tryGetWalletManager() {
   }
 }
 
+monero.WalletManager? _tryGetLWSFWalletManager() {
+  try {
+    return monero.WalletManagerFactory_getLWSFWalletManager();
+  } catch (_) {
+    return null;
+  }
+}
+
 // ----- Fixtures -----
 
 class _Fixture {
@@ -322,28 +338,37 @@ class _Fixture {
   final bool needsFfi;
 
   /// Populates [dir] and returns the manifest entry for it.
-  final Map<String, Object?> Function(monero.WalletManager? wm, Directory dir) build;
+  final Map<String, Object?> Function(_Managers wm, Directory dir) build;
+}
+
+/// Node wallets are wallet2 files (`path` + `.keys`); LWS wallets are lwsf's own
+/// single-file format. Each file must be built with its own factory, or the
+/// wallet layer (which opens LWS files via the lwsf manager) won't recognise it.
+class _Managers {
+  const _Managers(this.node, this.lws);
+  final monero.WalletManager? node;
+  final monero.WalletManager? lws;
 }
 
 /// The wallets.
 ///
-/// Two entries from testing.md's table are deliberately absent:
-/// `no_secret_service` and `app_lock_on_cold_start`. Neither is a wallet
-/// directory; they are runtime-environment scenarios (a Linux box with no
-/// Secret Service provider; a cold start with app lock on) and belong in the
-/// app's own integration tier, which is the only place that can arrange them.
+/// Two cases are deliberately absent: `no_secret_service` and
+/// `app_lock_on_cold_start`. Neither is a wallet directory; they are
+/// runtime-environment scenarios (a Linux box with no Secret Service provider;
+/// a cold start with app lock on) and belong in the app's own integration
+/// tier, which is the only place that can arrange them.
 /// Inventing directories for them here would look like coverage and provide none.
 final List<_Fixture> _fixtures = [
   // v1.0.12 LWS wallet created from a generated polyseed. `newWallet: true` is
   // the created-not-restored path.
   _Fixture('skylight_lws_polyseed', true, (wm, dir) {
-    final address = _polyseedWallet(wm!, path: '${dir.path}/mywallet', newWallet: true);
+    final address = _polyseedWallet(wm.lws!, path: '${dir.path}/mywallet', newWallet: true);
     return {'walletFile': 'mywallet', 'address': address, 'restoreHeight': 0, 'txCount': 0};
   }),
 
   // LWS wallet restored from a 25-word legacy seed.
   _Fixture('skylight_lws_legacy25', true, (wm, dir) {
-    final address = _recoveredWallet(wm!, path: '${dir.path}/mywallet', mnemonic: _legacy25);
+    final address = _recoveredWallet(wm.lws!, path: '${dir.path}/mywallet', mnemonic: _legacy25);
     return {
       'walletFile': 'mywallet',
       'address': address,
@@ -354,7 +379,11 @@ final List<_Fixture> _fixtures = [
 
   // Node-mode wallet: Skylight names the other mode's file `mywallet_node`.
   _Fixture('skylight_node', true, (wm, dir) {
-    final address = _recoveredWallet(wm!, path: '${dir.path}/mywallet_node', mnemonic: _legacy25);
+    final address = _recoveredWallet(
+      wm.node!,
+      path: '${dir.path}/mywallet_node',
+      mnemonic: _legacy25,
+    );
     return {
       'walletFile': 'mywallet_node',
       'address': address,
@@ -365,8 +394,8 @@ final List<_Fixture> _fixtures = [
 
   // Both mode files present. The two share a seed, so they must share an address.
   _Fixture('skylight_both_modes', true, (wm, dir) {
-    final lws = _recoveredWallet(wm!, path: '${dir.path}/mywallet', mnemonic: _legacy25);
-    final node = _recoveredWallet(wm, path: '${dir.path}/mywallet_node', mnemonic: _legacy25);
+    final lws = _recoveredWallet(wm.lws!, path: '${dir.path}/mywallet', mnemonic: _legacy25);
+    final node = _recoveredWallet(wm.node!, path: '${dir.path}/mywallet_node', mnemonic: _legacy25);
     if (lws != node) {
       throw StateError('the two modes derived different addresses from one seed');
     }
@@ -383,7 +412,11 @@ final List<_Fixture> _fixtures = [
   // Spice reports "no wallet" here and drops the user into onboarding on top of
   // an existing wallet.
   _Fixture('skylight_node_only', true, (wm, dir) {
-    final address = _recoveredWallet(wm!, path: '${dir.path}/mywallet_node', mnemonic: _legacy25);
+    final address = _recoveredWallet(
+      wm.node!,
+      path: '${dir.path}/mywallet_node',
+      mnemonic: _legacy25,
+    );
     File('${dir.path}/prefs.json').writeAsStringSync(
       jsonEncode({'connectionType': 'lws', 'connectionAddress': 'stagenet.example.com:38089'}),
     );
@@ -399,8 +432,12 @@ final List<_Fixture> _fixtures = [
 
   // Spice v2 names its files per coin.
   _Fixture('spice_v2_xmr', true, (wm, dir) {
-    final address = _recoveredWallet(wm!, path: '${dir.path}/mywallet_xmr', mnemonic: _legacy25);
-    _recoveredWallet(wm, path: '${dir.path}/mywallet_xmr_node', mnemonic: _legacy25);
+    final address = _recoveredWallet(
+      wm.lws!,
+      path: '${dir.path}/mywallet_xmr',
+      mnemonic: _legacy25,
+    );
+    _recoveredWallet(wm.node!, path: '${dir.path}/mywallet_xmr_node', mnemonic: _legacy25);
     return {
       'walletFile': 'mywallet_xmr',
       'address': address,
@@ -413,7 +450,7 @@ final List<_Fixture> _fixtures = [
   // disk to Skylight's LWS file, which is the point: the migration has to tell
   // them apart from the prefs, not the filename.
   _Fixture('spice_v1_legacy', true, (wm, dir) {
-    final address = _recoveredWallet(wm!, path: '${dir.path}/mywallet', mnemonic: _legacy25);
+    final address = _recoveredWallet(wm.lws!, path: '${dir.path}/mywallet', mnemonic: _legacy25);
     return {
       'walletFile': 'mywallet',
       'address': address,

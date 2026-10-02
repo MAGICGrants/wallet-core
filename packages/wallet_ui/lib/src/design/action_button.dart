@@ -35,6 +35,7 @@ class ActionButton extends StatelessWidget {
           child: Material(
             type: MaterialType.transparency,
             child: InkWell(
+              mouseCursor: WidgetStateMouseCursor.clickable,
               onTap: onPressed,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 13),

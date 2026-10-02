@@ -94,6 +94,11 @@ class EthereumChainWallet extends CryptoWallet {
 
   int get chainId => _chainId;
 
+  /// Token contract this wallet spends, or null for the native coin; ERC-20
+  /// wallets override. Stamped onto pending txs and re-checked in [commitTx].
+  @protected
+  String? get ownTokenContract => null;
+
   // ----- Metadata -----
 
   @override
@@ -724,6 +729,8 @@ class EthereumChainWallet extends CryptoWallet {
       rawHex: '0x${bytesToHex(raw)}',
       txHash: '0x${bytesToHex(keccak256(raw))}',
       to: destinationAddress,
+      chainId: _chainId,
+      tokenContractAddress: ownTokenContract,
     );
   }
 
@@ -739,6 +746,19 @@ class EthereumChainWallet extends CryptoWallet {
   Future<void> commitTx(PendingTransaction tx, String destinationAddress) async {
     if (tx is! EthereumPendingTx) {
       throw ArgumentError('EthereumChainWallet.commitTx requires an EthereumPendingTx');
+    }
+    // Only the asset that signed these bytes may broadcast them: every EVM wallet
+    // shares this commitTx and RPC, so without this a DAI wallet would relay a
+    // signed ETH transfer.
+    if (tx.chainId != _chainId || tx.tokenContractAddress != ownTokenContract) {
+      throw ArgumentError(
+        'pending tx was built for a different wallet '
+        '(chain ${tx.chainId} token ${Redact.id(tx.tokenContractAddress ?? 'native')}, '
+        'this wallet is chain $_chainId token ${Redact.id(ownTokenContract ?? 'native')})',
+      );
+    }
+    if (tx.to.toLowerCase() != destinationAddress.toLowerCase()) {
+      throw ArgumentError('pending tx destination does not match the confirmed address');
     }
     final hash = await _rpc.sendRawTransaction(tx.rawHex);
     // `tx.txHash` is keccak256 over the exact bytes being broadcast, so the node

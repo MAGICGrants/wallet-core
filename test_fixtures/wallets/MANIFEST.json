@@ -3,6 +3,50 @@
   "networkType": 2,
   "password": "fixture-password",
   "fixtures": {
+    "skylight_lws_polyseed": {
+      "walletFile": "mywallet",
+      "address": "56hNZTVouEDhDZfofcaUjWaKN2DPpyZjW4jJfa36BAHtR9FwTvgzf17hX4eN4v7vazgdjZqnK6cGvLZGRz7X168ZRmWi3XB",
+      "restoreHeight": 0,
+      "txCount": 0
+    },
+    "skylight_lws_legacy25": {
+      "walletFile": "mywallet",
+      "address": "59jqaPJK6JaCEJHcuVyBSTEuVbbVQrxnPF824wSUyqnJeCKT9B9cmaAjgGUQP56Q9pWfaxiWWa47odUGLzjBaHgg95C2Joo",
+      "restoreHeight": 1731707,
+      "txCount": 0
+    },
+    "skylight_node": {
+      "walletFile": "mywallet_node",
+      "address": "59jqaPJK6JaCEJHcuVyBSTEuVbbVQrxnPF824wSUyqnJeCKT9B9cmaAjgGUQP56Q9pWfaxiWWa47odUGLzjBaHgg95C2Joo",
+      "restoreHeight": 1731707,
+      "txCount": 0
+    },
+    "skylight_both_modes": {
+      "walletFile": "mywallet",
+      "address": "59jqaPJK6JaCEJHcuVyBSTEuVbbVQrxnPF824wSUyqnJeCKT9B9cmaAjgGUQP56Q9pWfaxiWWa47odUGLzjBaHgg95C2Joo",
+      "restoreHeight": 1731707,
+      "txCount": 0
+    },
+    "skylight_node_only": {
+      "walletFile": "mywallet_node",
+      "prefs": "prefs.json",
+      "address": "59jqaPJK6JaCEJHcuVyBSTEuVbbVQrxnPF824wSUyqnJeCKT9B9cmaAjgGUQP56Q9pWfaxiWWa47odUGLzjBaHgg95C2Joo",
+      "restoreHeight": 1731707,
+      "txCount": 0,
+      "expects": "the wallet layer switches connectionType to \"node\" rather than reporting none"
+    },
+    "spice_v2_xmr": {
+      "walletFile": "mywallet_xmr",
+      "address": "59jqaPJK6JaCEJHcuVyBSTEuVbbVQrxnPF824wSUyqnJeCKT9B9cmaAjgGUQP56Q9pWfaxiWWa47odUGLzjBaHgg95C2Joo",
+      "restoreHeight": 1731707,
+      "txCount": 0
+    },
+    "spice_v1_legacy": {
+      "walletFile": "mywallet",
+      "address": "59jqaPJK6JaCEJHcuVyBSTEuVbbVQrxnPF824wSUyqnJeCKT9B9cmaAjgGUQP56Q9pWfaxiWWa47odUGLzjBaHgg95C2Joo",
+      "restoreHeight": 1731707,
+      "txCount": 0
+    },
     "skylight_plaintext_prefs": {
       "prefs": "prefs.json",
       "keys": [

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../design/brand.dart';
+import '../design/click_cursor.dart';
 import '../design/brand_button.dart';
 import '../design/radio_dot.dart';
 import '../design/sheet.dart';
@@ -63,6 +64,7 @@ class ScanFromCard extends StatelessWidget {
         child: Material(
           type: MaterialType.transparency,
           child: InkWell(
+            mouseCursor: WidgetStateMouseCursor.clickable,
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 15),
@@ -116,6 +118,7 @@ class _ScanFromSheet extends StatefulWidget {
   /// Whether a restore point was already picked — with a null [initial], reopens
   /// on "I'm not sure" rather than the month picker.
   final bool chosen;
+
   const _ScanFromSheet({required this.initial, required this.labels, required this.chosen});
 
   @override
@@ -145,6 +148,64 @@ class _ScanFromSheetState extends State<_ScanFromSheet> {
     final labels = widget.labels;
     final locale = labels.locale;
     final now = DateTime.now();
+    // Desktop: centered modal card (no drag handle; the card owns the padding).
+    final desktop = isDesktopModal;
+
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!desktop) const SheetHandle(),
+        Text(labels.title, style: BrandText.sheetTitle),
+        const SizedBox(height: BrandSpacing.sm),
+        Text(labels.description, style: BrandText.bodyMuted),
+        const SizedBox(height: BrandSpacing.lg),
+        _SheetOption(
+          selected: _pickMonth,
+          title: labels.pickMonth,
+          onTap: () => setState(() => _pickMonth = true),
+          expanded: Row(
+            children: [
+              Expanded(
+                child: _ScanDropdown<int>(
+                  value: _month,
+                  items: [for (var m = 1; m <= 12; m++) m],
+                  label: (m) => DateFormat.MMMM(locale).format(DateTime(2000, m)),
+                  onChanged: (m) => setState(() => _month = m),
+                ),
+              ),
+              const SizedBox(width: BrandSpacing.sm),
+              Expanded(
+                child: _ScanDropdown<int>(
+                  value: _year,
+                  items: [for (var y = now.year; y >= 2014; y--) y],
+                  label: (y) => '$y',
+                  onChanged: (y) => setState(() => _year = y),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: BrandSpacing.md),
+        _SheetOption(
+          selected: !_pickMonth,
+          title: labels.notSure,
+          description: labels.notSureDesc,
+          onTap: () => setState(() => _pickMonth = false),
+        ),
+        const SizedBox(height: BrandSpacing.lg),
+        if (desktop)
+          Align(
+            alignment: Alignment.centerRight,
+            child: BrandButton(label: labels.done, expand: false, onPressed: _done),
+          )
+        else
+          BrandButton(label: labels.done, onPressed: _done),
+      ],
+    );
+
+    // The dialog wrapper supplies the padded surface; the sheet needs its own.
+    if (desktop) return content;
 
     // No keyboard padding here: showBrandSheet applies it once for the whole
     // sheet, and a second one lifts this clear off the keyboard.
@@ -157,52 +218,7 @@ class _ScanFromSheetState extends State<_ScanFromSheet> {
           BrandSpacing.xl,
           BrandSpacing.lg,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SheetHandle(),
-            Text(labels.title, style: BrandText.sheetTitle),
-            const SizedBox(height: BrandSpacing.sm),
-            Text(labels.description, style: BrandText.bodyMuted),
-            const SizedBox(height: BrandSpacing.lg),
-            _SheetOption(
-              selected: _pickMonth,
-              title: labels.pickMonth,
-              onTap: () => setState(() => _pickMonth = true),
-              expanded: Row(
-                children: [
-                  Expanded(
-                    child: _ScanDropdown<int>(
-                      value: _month,
-                      items: [for (var m = 1; m <= 12; m++) m],
-                      label: (m) => DateFormat.MMMM(locale).format(DateTime(2000, m)),
-                      onChanged: (m) => setState(() => _month = m),
-                    ),
-                  ),
-                  const SizedBox(width: BrandSpacing.sm),
-                  Expanded(
-                    child: _ScanDropdown<int>(
-                      value: _year,
-                      items: [for (var y = now.year; y >= 2014; y--) y],
-                      label: (y) => '$y',
-                      onChanged: (y) => setState(() => _year = y),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: BrandSpacing.md),
-            _SheetOption(
-              selected: !_pickMonth,
-              title: labels.notSure,
-              description: labels.notSureDesc,
-              onTap: () => setState(() => _pickMonth = false),
-            ),
-            const SizedBox(height: BrandSpacing.lg),
-            BrandButton(label: labels.done, onPressed: _done),
-          ],
-        ),
+        child: content,
       ),
     );
   }
@@ -227,7 +243,7 @@ class _SheetOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: AnimatedContainer(

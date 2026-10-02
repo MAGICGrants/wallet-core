@@ -34,6 +34,7 @@ class IconCircleButton extends StatelessWidget {
             color: color ?? BrandColors.card,
             shape: CircleBorder(side: BorderSide(color: BrandColors.border)),
             child: InkWell(
+              mouseCursor: WidgetStateMouseCursor.clickable,
               onTap: onPressed,
               customBorder: const CircleBorder(),
               child: Icon(icon, size: size * 0.5, color: BrandColors.ink),

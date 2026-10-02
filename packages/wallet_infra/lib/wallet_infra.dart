@@ -27,3 +27,4 @@ export 'src/ui/biometric_auth.dart';
 export 'src/ui/notification_service.dart';
 export 'src/ui/secure_clipboard.dart';
 export 'src/ui/secure_screen.dart';
+export 'src/ui/store_review.dart';

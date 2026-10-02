@@ -1,15 +1,19 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../design/brand.dart';
+import '../design/click_cursor.dart';
 import '../design/brand_button.dart';
 import '../design/brand_card.dart';
 import '../design/brand_screen_header.dart';
 import '../design/brand_segmented.dart';
 import '../design/mini_action_button.dart';
 import '../design/section_header.dart';
+import 'amount_entry_controller.dart';
+import 'format.dart';
 
 /// Translated strings for [SendView]. Injected so the view stays
 /// localization-agnostic — each app passes its own generated l10n.
@@ -28,6 +32,9 @@ class SendLabels {
   final String addressHint;
   final List<String> priorityLabels;
 
+  /// Screen-reader label for the unit chip that swaps coin and fiat entry.
+  final String switchUnit;
+
   const SendLabels({
     required this.title,
     required this.toLabel,
@@ -42,19 +49,21 @@ class SendLabels {
     required this.maxButton,
     required this.addressHint,
     required this.priorityLabels,
+    required this.switchUnit,
   });
 }
 
 /// The send screen body: a header; an optional asset/"From" section (Spice's
 /// multicoin dropdown, injected as [assetSection]); a "To" card (multi-line
 /// address field, OpenAlias spinner, paste/scan/contacts, selected-contact
-/// chip, inline error); an "Amount" card (amount field + MAX + available +
-/// fiat); a "Priority" section (segmented + per-priority network fee); and a
-/// Cancel/Send row.
+/// chip, inline error); an "Amount" card (amount field + unit swap + MAX, the
+/// converted amount, available + rate); a "Priority" section (segmented +
+/// per-priority network fee); and a Cancel/Send row.
 ///
 /// Presentational only — the app owns every controller, all validation, fee
 /// calculation, OpenAlias resolution, contact resolution, and the send/confirm
-/// flow. The view renders injected state and calls back.
+/// flow. The view renders injected state and calls back. The amount card reads
+/// everything it shows from [amount], so both apps render fiat identically.
 class SendView extends StatelessWidget {
   final SendLabels labels;
   final VoidCallback onBack;
@@ -83,18 +92,13 @@ class SendView extends StatelessWidget {
   final VoidCallback? onClearContact;
 
   // Amount card.
-  final TextEditingController amountController;
+  final AmountEntryController amount;
   final String amountError;
   final VoidCallback onMax;
-  final String coinSymbol;
 
-  /// Fiat estimate line (`≈ $x`). Always shown; right-aligned beside the
-  /// available line when [availableText] is present, else the whole bottom line.
-  final String amountFiatText;
-
-  /// Available-balance line (Skylight: `x available`, tappable for MAX). Null on
-  /// Spice, where available lives on the "From" card and the bottom line is just
-  /// the fiat estimate.
+  /// Available-balance line (Skylight: `x available`, tappable for MAX), left
+  /// of the rate. Null on Spice, where available lives on the "From" card and
+  /// the bottom line is just the rate.
   final String? availableText;
 
   /// Optional leading widget on the available line (Skylight's Monero glyph).
@@ -127,11 +131,9 @@ class SendView extends StatelessWidget {
     required this.openAliasResolving,
     required this.onPaste,
     required this.onPickContact,
-    required this.amountController,
+    required this.amount,
     required this.amountError,
     required this.onMax,
-    required this.coinSymbol,
-    required this.amountFiatText,
     required this.selectedPriority,
     required this.onSelectPriority,
     required this.feeValue,
@@ -178,8 +180,7 @@ class SendView extends StatelessWidget {
                       if (addressError.isNotEmpty) _errorText(addressError),
                       const SizedBox(height: 14),
                       _sectionLabel(labels.amount),
-                      _amountCard(),
-                      if (amountError.isNotEmpty) _errorText(amountError),
+                      ListenableBuilder(listenable: amount, builder: (_, _) => _amountSection()),
                       const SizedBox(height: 14),
                       _sectionLabel(labels.priorityHeading),
                       _prioritySection(),
@@ -269,7 +270,7 @@ class SendView extends StatelessWidget {
                 ],
               ),
             ),
-            GestureDetector(
+            Tappable(
               behavior: HitTestBehavior.opaque,
               onTap: onClearContact,
               child: Container(
@@ -370,117 +371,23 @@ class SendView extends StatelessWidget {
     );
   }
 
-  Widget _amountCard() {
-    return BrandCard(
-      padding: const EdgeInsets.fromLTRB(14, 15, 14, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: amountController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  textInputAction: TextInputAction.done,
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+(\.\d*)?'))],
-                  style: TextStyle(
-                    fontFamily: 'Ubuntu Mono',
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    height: 1,
-                    color: BrandColors.ink,
-                  ),
-                  decoration: InputDecoration(
-                    isCollapsed: true,
-                    border: InputBorder.none,
-                    hintText: '0.000000',
-                    hintStyle: TextStyle(
-                      fontFamily: 'Ubuntu Mono',
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                      height: 1,
-                      color: BrandColors.inkFaint,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                coinSymbol,
-                style: TextStyle(
-                  fontFamily: 'Ubuntu Mono',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: BrandColors.inkMuted,
-                ),
-              ),
-              const SizedBox(width: 10),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onMax,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: BrandColors.surfaceAccent,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    labels.maxButton,
-                    style: TextStyle(
-                      fontFamily: 'Ubuntu Mono',
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                      color: BrandColors.primaryDeep,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 11),
-          Container(height: 1, color: BrandColors.surfaceTinted),
-          const SizedBox(height: 11),
-          _amountBottomLine(),
-        ],
-      ),
-    );
-  }
-
-  Widget _amountBottomLine() {
-    final fiat = Text(
-      amountFiatText,
-      style: TextStyle(fontFamily: 'Ubuntu Mono', fontSize: 12, color: BrandColors.inkMuted),
-    );
-    // Spice: no available line here (it's on the "From" card), so the bottom
-    // line is just the fiat estimate, left-aligned.
-    if (availableText == null) return fiat;
-
-    Widget availableLine = Row(
+  Widget _amountSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (availableLeading != null) ...[availableLeading!, const SizedBox(width: 6)],
-        Flexible(
-          child: Text(
-            availableText!,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontFamily: 'Ubuntu Mono', fontSize: 12, color: BrandColors.inkMuted),
+        BrandCard(
+          padding: const EdgeInsets.fromLTRB(14, 15, 14, 14),
+          child: SendAmountCard(
+            amount: amount,
+            maxLabel: labels.maxButton,
+            switchUnitLabel: labels.switchUnit,
+            onMax: onMax,
+            availableText: availableText,
+            availableLeading: availableLeading,
+            onAvailableTap: onAvailableTap,
           ),
         ),
-      ],
-    );
-    if (onAvailableTap != null) {
-      availableLine = GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onAvailableTap,
-        child: availableLine,
-      );
-    }
-    return Row(
-      children: [
-        Expanded(child: availableLine),
-        const SizedBox(width: 10),
-        fiat,
+        if (amountError.isNotEmpty) _errorText(amountError),
       ],
     );
   }
@@ -505,5 +412,311 @@ class SendView extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// The amount-entry card body: the amount field (with the fiat-symbol prefix and
+/// decimals-limited input), the tappable unit chip that swaps coin/fiat entry,
+/// MAX, the converted amount, and the available + rate line. Shared by
+/// [SendView] and the apps' desktop send forms so fiat entry renders
+/// identically. Renders the content only — wrap it in your own card container
+/// (e.g. a [BrandCard]). Rebuilds off [amount], so wrap in a [ListenableBuilder]
+/// on it if the parent doesn't already.
+class SendAmountCard extends StatelessWidget {
+  const SendAmountCard({
+    super.key,
+    required this.amount,
+    required this.maxLabel,
+    required this.switchUnitLabel,
+    required this.onMax,
+    this.availableText,
+    this.availableLeading,
+    this.onAvailableTap,
+  });
+
+  final AmountEntryController amount;
+  final String maxLabel;
+
+  /// Screen-reader label for the unit chip that swaps coin and fiat entry.
+  final String switchUnitLabel;
+  final VoidCallback onMax;
+
+  /// Available-balance line, left of the rate. Null omits it, leaving the
+  /// bottom line as just the rate.
+  final String? availableText;
+  final Widget? availableLeading;
+  final VoidCallback? onAvailableTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final quote = amount.quote;
+    final fiatEntry = amount.unit == AmountUnit.fiat && quote != null;
+    final converted = _convertedText();
+    final rate = quote == null
+        ? null
+        : '1 ${amount.coinSymbol} ≈ ${formatFiat(quote.rate, quote.currency)}';
+    final fiatDecimals = quote?.currency.decimals ?? 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _AmountField(
+                amount: amount,
+                prefix: fiatEntry ? quote.currency.symbol : '',
+                hint: fiatEntry
+                    ? (fiatDecimals == 0 ? '0' : '0.${'0' * fiatDecimals}')
+                    : '0.000000',
+                decimals: fiatEntry ? fiatDecimals : amount.coinDecimals,
+              ),
+            ),
+            const SizedBox(width: 10),
+            if (quote != null)
+              _unitChip(fiatEntry ? quote.currency.code : amount.coinSymbol)
+            else
+              Text(amount.coinSymbol, style: _unitStyle),
+            const SizedBox(width: 10),
+            Tappable(
+              behavior: HitTestBehavior.opaque,
+              onTap: onMax,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 12),
+                decoration: BoxDecoration(
+                  color: BrandColors.surfaceAccent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  maxLabel,
+                  style: TextStyle(
+                    fontFamily: 'Ubuntu Mono',
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: BrandColors.primaryDeep,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (converted != null) ...[
+          const SizedBox(height: 9),
+          // Tapping the other unit swaps to it, like the chip.
+          Tappable(
+            behavior: HitTestBehavior.opaque,
+            onTap: amount.swap,
+            child: SizedBox(
+              width: double.infinity,
+              height: 17,
+              child: converted.isEmpty
+                  ? null
+                  : FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        converted,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontFamily: 'Ubuntu Mono',
+                          fontSize: 13,
+                          color: BrandColors.inkMuted,
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+        ],
+        if (availableText != null || rate != null) ...[
+          const SizedBox(height: 11),
+          Container(height: 1, color: BrandColors.surfaceTinted),
+          const SizedBox(height: 11),
+          _amountBottomLine(rate),
+        ],
+      ],
+    );
+  }
+
+  TextStyle get _unitStyle => TextStyle(
+    fontFamily: 'Ubuntu Mono',
+    fontSize: 13,
+    fontWeight: FontWeight.w700,
+    color: BrandColors.inkMuted,
+  );
+
+  /// The unit being typed, tappable to swap to the other one.
+  Widget _unitChip(String label) {
+    return Semantics(
+      button: true,
+      label: switchUnitLabel,
+      child: Tappable(
+        behavior: HitTestBehavior.opaque,
+        onTap: amount.swap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 10),
+          decoration: BoxDecoration(
+            color: BrandColors.surfaceSunken,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: BrandColors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: _unitStyle),
+              const SizedBox(width: 4),
+              Icon(Icons.swap_vert, size: 15, color: BrandColors.inkMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The amount in the unit not being typed: `≈ $150.00` under a coin amount,
+  /// the exact coin amount under a fiat one. Empty while the field is; null
+  /// without a rate, when there is nothing to convert to.
+  String? _convertedText() {
+    final quote = amount.quote;
+    if (quote == null) return null;
+    if (amount.isEmpty) return '';
+    if (amount.unit == AmountUnit.fiat) return '${amount.coinText} ${amount.coinSymbol}';
+    final minor = amount.fiatMinorUnits ?? BigInt.zero;
+    final value = minor.toDouble() / math.pow(10, quote.currency.decimals);
+    return '≈ ${formatFiat(value, quote.currency)}';
+  }
+
+  Widget _amountBottomLine(String? rate) {
+    final style = TextStyle(fontFamily: 'Ubuntu Mono', fontSize: 12, color: BrandColors.inkMuted);
+    final rateText = rate == null ? null : Text(rate, style: style);
+    // No available line (Spice shows it on the "From" card), so the bottom line
+    // is just the rate.
+    if (availableText == null) return rateText ?? const SizedBox.shrink();
+
+    Widget availableLine = Row(
+      children: [
+        if (availableLeading != null) ...[availableLeading!, const SizedBox(width: 6)],
+        Flexible(
+          child: Text(availableText!, overflow: TextOverflow.ellipsis, style: style),
+        ),
+      ],
+    );
+    if (onAvailableTap != null) {
+      availableLine = Tappable(
+        behavior: HitTestBehavior.opaque,
+        onTap: onAvailableTap,
+        child: availableLine,
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: availableLine),
+        if (rateText != null) ...[const SizedBox(width: 10), rateText],
+      ],
+    );
+  }
+}
+
+/// The amount input, sized to fit. The font shrinks until the whole amount and
+/// its fiat prefix fit the width, so every digit stays visible and the field
+/// never scrolls.
+class _AmountField extends StatelessWidget {
+  const _AmountField({
+    required this.amount,
+    required this.prefix,
+    required this.hint,
+    required this.decimals,
+  });
+
+  final AmountEntryController amount;
+
+  /// The fiat symbol while typing fiat; empty for the coin.
+  final String prefix;
+  final String hint;
+
+  /// Fraction digits the field accepts: the coin's, or the currency's.
+  final int decimals;
+
+  static const _baseSize = 26.0;
+  static const _minSize = 8.0;
+
+  /// Room for the caret after the last digit.
+  static const _caretAllowance = 4.0;
+
+  /// Letter spacing is pinned so the theme's (Material 3 merges 0.5 into a
+  /// TextField) can't widen the drawn text past what [_fittedSize] measured.
+  static TextStyle _style(double size, Color color) => TextStyle(
+    fontFamily: 'Ubuntu Mono',
+    fontSize: size,
+    fontWeight: FontWeight.w700,
+    height: 1,
+    letterSpacing: 0,
+    color: color,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    return SizedBox(
+      // Fixed at the full size so the card doesn't shrink as digits are added.
+      height: scaler.scale(_baseSize),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final shown = amount.field.text.isEmpty ? hint : amount.field.text;
+          final size = _fittedSize(context, '$prefix$shown', constraints.maxWidth);
+          final style = _style(size, BrandColors.ink);
+          return Row(
+            children: [
+              if (prefix.isNotEmpty) Text(prefix, style: style),
+              Expanded(
+                child: TextField(
+                  controller: amount.field,
+                  keyboardType: TextInputType.numberWithOptions(decimal: decimals > 0),
+                  textInputAction: TextInputAction.done,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(decimals > 0 ? '^\\d+(\\.\\d{0,$decimals})?' : r'^\d+'),
+                    ),
+                  ],
+                  style: style,
+                  decoration: InputDecoration(
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    hintText: hint,
+                    hintStyle: _style(size, BrandColors.inkFaint),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  double _fittedSize(BuildContext context, String text, double maxWidth) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    double widthAt(double size) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: _style(size, BrandColors.ink)),
+        textDirection: direction,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width + _caretAllowance;
+    }
+
+    // Width is close to linear in font size, so one proportional step nearly
+    // always lands; the extra passes absorb non-linear system text scaling.
+    var size = _baseSize;
+    for (var pass = 0; pass < 3 && size > _minSize; pass++) {
+      final width = widthAt(size);
+      if (width <= maxWidth) break;
+      size = math.max(_minSize, (size * maxWidth / width).floorToDouble());
+    }
+    return size;
   }
 }

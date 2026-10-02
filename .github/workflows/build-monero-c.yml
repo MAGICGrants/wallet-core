@@ -1,4 +1,4 @@
-name: Build monero_c
+name: Update app monero_c libraries
 
 on:
   workflow_dispatch:
@@ -350,7 +350,7 @@ jobs:
           title: "Update monero_c libraries"
           body: |
             Rebuilt monero_c libraries for all supported architectures, produced by
-            wallet-core's `Build monero_c` workflow:
+            wallet-core's `Update app monero_c libraries` workflow:
 
             - `linux/monero_libwallet2_api_c.so` (x86_64-linux-gnu)
             - `android/app/src/main/jniLibs/x86_64/libmonero_libwallet2_api_c.so`

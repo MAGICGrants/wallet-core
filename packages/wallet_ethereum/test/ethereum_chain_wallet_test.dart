@@ -663,6 +663,68 @@ void main() {
     });
   });
 
+  group('a pending tx is bound to the wallet that built it', () {
+    // EVM wallets share one commitTx and RPC; the signed bytes decide what moves,
+    // so committing one asset's tx through another must be refused before the node.
+    final oneToken = BigInt.parse('1000000000000000000');
+
+    Future<void> fundNative() async {
+      rpc.balanceValue = _twoEth;
+      await restore();
+      await connectAndRefresh();
+    }
+
+    Future<DaiWallet> fundedDaiOn(FakeEthereumRpc r) async {
+      r.balanceValue = _twoEth;
+      r.ethCallValue = _hex(BigInt.parse('5000000000000000000'));
+      final d = DaiWallet(rpc: r, explorer: FakeEthereumExplorer());
+      addTearDown(d.dispose);
+      await restore(d);
+      await connectAndRefresh(d);
+      return d;
+    }
+
+    test('a token wallet refuses to broadcast a native ETH transfer', () async {
+      await fundNative();
+      final tokenRpc = FakeEthereumRpc();
+      final dai = await fundedDaiOn(tokenRpc);
+      final ethTx = await wallet.createTx(_theirs, oneToken, false);
+
+      await expectLater(dai.commitTx(ethTx, _theirs), throwsA(isA<ArgumentError>()));
+      expect(tokenRpc.broadcasts, isEmpty, reason: 'rejected before it reaches the node');
+    });
+
+    test('the native wallet refuses to broadcast a token transfer', () async {
+      await fundNative();
+      final dai = await fundedDaiOn(FakeEthereumRpc());
+      final daiTx = await dai.createTx(_theirs, oneToken, false);
+
+      await expectLater(wallet.commitTx(daiTx, _theirs), throwsA(isA<ArgumentError>()));
+      expect(rpc.broadcasts, isEmpty);
+    });
+
+    test('a tx signed for another chain is refused', () async {
+      await fundNative();
+      final sepoliaRpc = FakeEthereumRpc(chainIdValue: 11155111)..balanceValue = _twoEth;
+      final sepolia = EthereumSepoliaWallet(rpc: sepoliaRpc, explorer: FakeEthereumExplorer());
+      addTearDown(sepolia.dispose);
+      await restore(sepolia);
+      await connectAndRefresh(sepolia);
+      final sepoliaTx = await sepolia.createTx(_theirs, oneToken, false);
+
+      await expectLater(wallet.commitTx(sepoliaTx, _theirs), throwsA(isA<ArgumentError>()));
+      expect(rpc.broadcasts, isEmpty);
+    });
+
+    test('a tx paired with the wrong confirmed destination is refused', () async {
+      await fundNative();
+      final tx = await wallet.createTx(_theirs, oneToken, false);
+      // The tx was signed to _theirs; the confirm screen hands commit _me.
+      await expectLater(wallet.commitTx(tx, _me), throwsA(isA<ArgumentError>()));
+      expect(rpc.broadcasts, isEmpty);
+    });
+  });
+
   group('receipt status reaches the history', () {
     // The field with four writers and no readers. A reverted transaction (on
     // chain, gas spent, funds not moved) was recorded and displayed as

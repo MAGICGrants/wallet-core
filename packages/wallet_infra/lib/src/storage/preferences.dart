@@ -17,6 +17,8 @@ class SettingsKeys {
   // Marks that the fiat API was turned off *by* disabling global Tor (not by the
   // user), so re-enabling Tor can restore it.
   static const String fiatAutoDisabledByTor = 'fiatAutoDisabledByTor';
+  // The unit the send screen's amount was last typed in: `coin` or `fiat`.
+  static const String sendAmountUnit = 'sendAmountUnit';
   static const String notificationsEnabled = 'notificationsEnabled';
   static const String backgroundSyncEnabled = 'backgroundSyncEnabled';
   static const String foregroundSyncEnabled = 'foregroundSyncEnabled';
@@ -27,6 +29,10 @@ class SettingsKeys {
   static const String torMode = 'torMode';
   static const String torSocksPort = 'torSocksPort';
   static const String torUseOrbot = 'torUseOrbot';
+  // Store review (StoreReview): a send made the user eligible, and the day the
+  // store was last asked. The day, not the moment -- this store is plaintext.
+  static const String storeReviewEligible = 'storeReviewEligible';
+  static const String storeReviewLastAskedDay = 'storeReviewLastAskedDay';
 }
 
 /// Non-secret key/value storage.

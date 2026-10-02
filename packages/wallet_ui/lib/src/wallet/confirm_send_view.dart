@@ -103,16 +103,23 @@ class ConfirmSendView extends StatelessWidget {
               children: [
                 CoinMark(coinSymbol: coinSymbol, iconAsset: iconAsset, size: 22),
                 const SizedBox(width: 9),
+                // One line at any length: the font shrinks so every digit of
+                // the amount being sent stays visible.
                 Flexible(
-                  child: Text(
-                    amountText,
-                    textAlign: TextAlign.end,
-                    style: TextStyle(
-                      fontFamily: 'Ubuntu Mono',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
-                      color: BrandColors.ink,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      amountText,
+                      maxLines: 1,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(
+                        fontFamily: 'Ubuntu Mono',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                        color: BrandColors.ink,
+                      ),
                     ),
                   ),
                 ),
@@ -174,6 +181,9 @@ class ConfirmSendView extends StatelessWidget {
       ),
     ];
 
+    // Desktop modal: the card owns the edge padding.
+    final hpad = isDesktopModal ? 0.0 : 22.0;
+
     return PopScope(
       // Block drag/back dismissal while the commit is in flight.
       canPop: !loading,
@@ -182,14 +192,14 @@ class ConfirmSendView extends StatelessWidget {
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.86),
           child: Padding(
-            padding: const EdgeInsets.only(top: 10),
+            padding: EdgeInsets.only(top: isDesktopModal ? 0 : 10),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SheetHandle(),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 16),
+                  padding: EdgeInsets.fromLTRB(hpad, 0, hpad, 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -218,7 +228,7 @@ class ConfirmSendView extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 22),
+                          padding: EdgeInsets.symmetric(horizontal: hpad),
                           child: BrandCard(
                             radius: 18,
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -234,7 +244,7 @@ class ConfirmSendView extends StatelessWidget {
                         ),
                         if (showHighFeeWarning && highFeeWarning != null)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(22, 12, 22, 0),
+                            padding: EdgeInsets.fromLTRB(hpad, 12, hpad, 0),
                             child: _highFeeWarning(
                               highFeeWarning!,
                               highFeeToken ?? '',
@@ -246,23 +256,20 @@ class ConfirmSendView extends StatelessWidget {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
-                  child: Column(
-                    children: [
-                      BrandButton(
-                        label: labels.send,
-                        icon: Icons.north_east,
-                        iconTrailing: true,
-                        loading: loading,
-                        onPressed: onConfirm,
-                      ),
-                      const SizedBox(height: 2),
-                      BrandButton.ghost(
-                        label: labels.cancel,
-                        color: BrandColors.inkMuted,
-                        onPressed: loading ? null : () => Navigator.of(context).pop(),
-                      ),
-                    ],
+                  padding: EdgeInsets.fromLTRB(hpad, 18, hpad, 8),
+                  child: SheetActions(
+                    primary: BrandButton(
+                      label: labels.send,
+                      icon: Icons.north_east,
+                      iconTrailing: true,
+                      loading: loading,
+                      onPressed: onConfirm,
+                    ),
+                    secondary: BrandButton.ghost(
+                      label: labels.cancel,
+                      color: BrandColors.inkMuted,
+                      onPressed: loading ? null : () => Navigator.of(context).pop(),
+                    ),
                   ),
                 ),
               ],
