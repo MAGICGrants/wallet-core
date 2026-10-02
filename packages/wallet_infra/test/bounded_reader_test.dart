@@ -190,7 +190,9 @@ void main() {
       const part1 = '{"jsonrpc":"2.0","id":1,';
       const part2 = '"result":{"baseFeePerGas":"0x7"}}';
       final source = _Source();
-      source.send('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n');
+      source.send(
+        'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n',
+      );
       source.send('${part1.length.toRadixString(16)}\r\n$part1\r\n');
       source.send('${part2.length.toRadixString(16)}\r\n$part2\r\n');
       source.send('0\r\n\r\n');

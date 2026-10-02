@@ -238,7 +238,11 @@ List<int> _dechunk(List<int> bytes, int bodyStart) {
   while (i < bytes.length) {
     final crlf = _indexOfBytes(bytes, _crlf, i);
     if (crlf < 0) return bytes;
-    final sizeStr = ascii.decode(bytes.sublist(i, crlf), allowInvalid: true).split(';').first.trim();
+    final sizeStr = ascii
+        .decode(bytes.sublist(i, crlf), allowInvalid: true)
+        .split(';')
+        .first
+        .trim();
     final size = int.tryParse(sizeStr, radix: 16);
     if (size == null) return bytes;
     if (size == 0) break; // final chunk
