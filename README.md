@@ -173,7 +173,8 @@ really owns. It covers a send with change from the first account, the same from
 a second account, and a sweep of each account back to itself; Monero refuses
 to build any of them if LWSF gets the change address wrong. It then reads the
 submitted transaction back and checks that every output pays who it should,
-and opens to the right amount.
+and opens to the right amount, and that the amount the wallet reports sending,
+before and after the send, is the amount the transaction pays.
 
 It needs a host build. The backend loads the library by name in each isolate
 it spawns, so its directory goes on the loader path too, as in `native.yml`:

@@ -32,7 +32,8 @@ import 'support/monero_tx.dart';
 /// wallet reported, every ring must hold one of the wallet's outputs, and
 /// every output must open, under the recipient's or the wallet's view key, to
 /// the amount it should carry, with the change in the first address of the
-/// account it was spent from.
+/// account it was spent from. The amount the wallet reports sending, and the
+/// recipient amount in its history, must be what the transaction pays.
 ///
 /// Runs in `native.yml`, which builds the library and sets MONERO_LIB_PATH
 /// and the loader path (the backend loads the library by name in each isolate
@@ -190,9 +191,10 @@ Future<void> _send(
   final recipient = Monero.fromPrivateSpendKey(
     MoneroTestCrypto.scalarBytes(MoneroTestCrypto.randomScalar()),
   );
+  final destination = sweep ? keys.subaddress(0, majorIndex: account) : recipient.primaryAddress;
   final pending = await backend.createTransaction(
     wallet,
-    destinations: [sweep ? keys.subaddress(0, majorIndex: account) : recipient.primaryAddress],
+    destinations: [destination],
     amounts: [sweep ? BigInt.zero : _sendAmount],
     isSweepAll: sweep,
     mixinCount: MoneroConsts.mixinCount,
@@ -265,16 +267,34 @@ Future<void> _send(
   final paidTotal = paid.fold(BigInt.zero, (a, b) => a + b);
   expect(spentTotal, paidTotal + keptTotal + fee, reason: 'inputs = outputs + fee');
 
+  final BigInt sent;
   if (sweep) {
-    // The reported amount is not compared: for a sweep, LWSF computes it from
-    // its fee estimate before building the transaction, and then settles the
-    // difference from the actual fee in the output. The outputs are checked.
     expect(spentTotal, total, reason: 'a sweep spends everything in the account');
     expect(paid, isEmpty);
-    expect(keptTotal, total - fee);
+    // The destination, which is the change address, gets everything less the
+    // fee. The other output carries nothing; it is there because a
+    // transaction needs two.
+    expect(kept, unorderedEquals([total - fee, BigInt.zero]));
+    sent = total - fee;
   } else {
     expect(paid, [_sendAmount]);
-    expect(reportedAmount, _sendAmount);
     expect(keptTotal, greaterThan(BigInt.zero), reason: 'this send has change');
+    sent = _sendAmount;
   }
+
+  // What the wallet says it sent, before the send is confirmed and in its
+  // history afterwards, is what the transaction pays the destination. A sweep
+  // settles its fee after the transfer amounts are first computed, so a value
+  // kept from before then is off.
+  expect(reportedAmount, sent, reason: 'the amount the confirmation screen shows');
+  final history = await backend.history(wallet);
+  await backend.historyRefresh(history);
+  final entry = (await backend.historyTransactions(
+    wallet,
+    history,
+    withTxKeys: false,
+  )).singleWhere((t) => t.hash == txid);
+  expect(entry.amount, sent);
+  expect(entry.fee, fee);
+  expect(entry.destinations, [(address: destination, amount: sent)]);
 }
