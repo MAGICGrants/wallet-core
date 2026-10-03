@@ -136,6 +136,11 @@ class FakeMoneroBackend extends MoneroBackend {
   Completer<void>? pauseNextWalletStats;
   Completer<void>? walletStatsStarted;
 
+  /// The same pair for [daemonBlockChainHeight], which the wallet starts
+  /// without awaiting: lets a test pin that fetch inside its native call.
+  Completer<void>? pauseNextDaemonHeight;
+  Completer<void>? daemonHeightStarted;
+
   void _record(String name) => calls.add(name);
 
   bool called(String name) => calls.contains(name);
@@ -166,6 +171,8 @@ class FakeMoneroBackend extends MoneroBackend {
     closeStarted = null;
     pauseNextWalletStats = null;
     walletStatsStarted = null;
+    pauseNextDaemonHeight = null;
+    daemonHeightStarted = null;
     feeEstimateError = null;
     backgroundSyncTypes.clear();
     backgroundSyncSetups.clear();
@@ -347,6 +354,14 @@ class FakeMoneroBackend extends MoneroBackend {
   @override
   Future<int> daemonBlockChainHeight(NativeHandle wallet) async {
     _record('daemonBlockChainHeight');
+    if (daemonHeightStarted != null && !daemonHeightStarted!.isCompleted) {
+      daemonHeightStarted!.complete();
+    }
+    final gate = pauseNextDaemonHeight;
+    if (gate != null) {
+      pauseNextDaemonHeight = null;
+      await gate.future;
+    }
     return chainHeight;
   }
 

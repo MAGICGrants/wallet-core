@@ -126,4 +126,57 @@ void main() {
 
     expect(backend.called('closeWallet'), isTrue);
   });
+
+  group('the daemon-height fetch is not awaited by the tick that starts it', () {
+    // So draining the ticks does not cover it, and it can still be inside its
+    // native call on the handle when the wallet is closed.
+    Future<void> startPinnedFetch(Completer<void> gate) async {
+      await openIn('node');
+      await wallet.connectToDaemonImpl(address: 'node.example.com:18081');
+      backend.pauseNextDaemonHeight = gate;
+      backend.daemonHeightStarted = Completer<void>();
+      await wallet.loadSyncedHeight();
+      await backend.daemonHeightStarted!.future;
+    }
+
+    test('delete waits for it to come out', () async {
+      final gate = Completer<void>();
+      await startPinnedFetch(gate);
+
+      final deleting = wallet.delete();
+      await pumpEventQueue();
+
+      expect(
+        backend.called('closeWallet'),
+        isFalse,
+        reason: 'the handle was freed with the daemon-height fetch still inside its native call',
+      );
+
+      gate.complete();
+      await deleting;
+
+      expect(backend.called('closeWallet'), isTrue);
+    });
+
+    test('dispose waits for it too', () async {
+      final gate = Completer<void>();
+      await startPinnedFetch(gate);
+
+      wallet.dispose();
+      await pumpEventQueue();
+
+      expect(
+        backend.called('closeWallet'),
+        isFalse,
+        reason: 'the handle was freed with the daemon-height fetch still inside its native call',
+      );
+
+      gate.complete();
+      await pumpEventQueue();
+
+      expect(backend.called('closeWallet'), isTrue);
+      // tearDown disposes `wallet`, and this one already is.
+      wallet = MoneroWallet(backend: backend);
+    });
+  });
 }

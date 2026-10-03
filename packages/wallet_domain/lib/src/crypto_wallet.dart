@@ -330,6 +330,17 @@ abstract class CryptoWallet with ChangeNotifier {
   // Held during a connection-change rebuild that closes and reopens the native
   // wallet: the refresh/connection timers must not touch a handle being freed.
   bool _syncSuspended = false;
+
+  /// [runWithSyncSuspended]'s nesting depth, so an inner call cannot
+  /// un-suspend an outer one.
+  ///
+  /// A plain flag made this primitive unsafe to nest, and nesting is reachable:
+  /// the connection-change rebuild wraps `_rebuildForConnectionType`, which
+  /// re-opens the wallet, and an open now configures background sync inside its
+  /// own suspension. With a flag the inner `finally` cleared the outer's
+  /// protection and the timers resumed against a half-rebuilt wallet.
+  int _syncSuspendDepth = 0;
+
   DateTime? _lastSyncCheckpoint;
   DateTime? _lastConnectivityCheck;
 
@@ -1690,15 +1701,6 @@ abstract class CryptoWallet with ChangeNotifier {
   /// native lib, not a Dart exception. Draining the in-flight guards means the
   /// handle is only freed once no native call is outstanding.
   @protected
-  /// Nesting depth, so an inner call cannot un-suspend an outer one.
-  ///
-  /// A plain flag made this primitive unsafe to nest, and nesting is reachable:
-  /// the connection-change rebuild wraps `_rebuildForConnectionType`, which
-  /// re-opens the wallet, and an open now configures background sync inside its
-  /// own suspension. With a flag the inner `finally` cleared the outer's
-  /// protection and the timers resumed against a half-rebuilt wallet.
-  int _syncSuspendDepth = 0;
-
   Future<T> runWithSyncSuspended<T>(Future<T> Function() action) async {
     _syncSuspendDepth++;
     _syncSuspended = true;
