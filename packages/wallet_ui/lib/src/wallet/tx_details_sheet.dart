@@ -352,11 +352,15 @@ class _TxDetailsSheet extends StatelessWidget {
     );
   }
 
-  Widget _copyIcon(BuildContext context, String text) => Tappable(
+  Widget _copyIcon(
+    BuildContext context,
+    String text, {
+    EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+  }) => Tappable(
     behavior: HitTestBehavior.opaque,
     onTap: () => _copy(context, text),
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: padding,
       child: Icon(Icons.copy_outlined, size: 15, color: BrandColors.inkFaint),
     ),
   );
@@ -380,18 +384,25 @@ class _TxDetailsSheet extends StatelessWidget {
               padding: const EdgeInsets.only(top: 10),
               child: Row(
                 children: [
-                  Flexible(
+                  Text(shortenMiddle(r.address, head: 6, tail: 4), style: _mutedMono),
+                  _copyIcon(context, r.address),
+                  // Laid out like [_row]'s value: all the spare width, the text at
+                  // its end, then a 10px gap and the icon flush right, so the
+                  // amount lines up with the column above. A Flexible address
+                  // beside a Spacer split that width, and when the address was
+                  // shorter than its half the rest landed after the amount.
+                  Expanded(
                     child: Text(
-                      shortenMiddle(r.address, head: 6, tail: 4),
-                      style: _mutedMono,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      _fmtAmount(r.amountBaseUnits),
+                      textAlign: TextAlign.end,
+                      style: _valueStyle,
                     ),
                   ),
-                  _copyIcon(context, r.address),
-                  const Spacer(),
-                  Text(_fmtAmount(r.amountBaseUnits), style: _valueStyle),
-                  _copyIcon(context, _fmtAmount(r.amountBaseUnits)),
+                  _copyIcon(
+                    context,
+                    _fmtAmount(r.amountBaseUnits),
+                    padding: const EdgeInsets.only(left: 10, top: 6, bottom: 6),
+                  ),
                 ],
               ),
             ),

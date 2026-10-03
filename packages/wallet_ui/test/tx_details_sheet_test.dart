@@ -205,6 +205,26 @@ void main() {
       await tester.pump(const Duration(seconds: 61));
     });
 
+    testWidgets('the amount and its icon line up with the values above', (tester) async {
+      await open(tester, withRecipients([TxRecipient(addrA, BigInt.from(1000000000000))]));
+      await tester.ensureVisible(find.text('1.0000 XMR'));
+      await tester.pumpAndSettle();
+
+      // The confirmations row ('5') sets the value column and the icon column.
+      final row = find.ancestor(of: find.text('5'), matching: find.byType(Row)).first;
+      final rowIcon = find.descendant(of: row, matching: find.byIcon(Icons.copy_outlined));
+      final amountIcon = lineIcons('4AdUnd…F8Fh').at(1);
+
+      expect(
+        tester.getRect(find.text('1.0000 XMR')).right,
+        moreOrLessEquals(tester.getRect(find.text('5')).right, epsilon: 0.01),
+      );
+      expect(
+        tester.getRect(amountIcon).right,
+        moreOrLessEquals(tester.getRect(rowIcon).right, epsilon: 0.01),
+      );
+    });
+
     testWidgets('a second recipient gets its own pair, bound to its own values', (tester) async {
       final copied = mockClipboard(tester);
       await open(

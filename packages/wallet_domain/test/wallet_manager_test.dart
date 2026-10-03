@@ -246,6 +246,103 @@ void main() {
     });
   });
 
+  group('the typed desktop password stays out of the keystore', () {
+    // `holdsWalletPassword` is pinned in each test: the default follows the
+    // host, and `flutter test` runs on a desktop OS.
+    Future<void> restoreWith(WalletManager m) =>
+        m.restoreAll(seed: const Bip39Seed(_bip39), from: RestorePoint.date(DateTime.utc(2026)));
+
+    test('restoring writes no copy of it', () async {
+      installSpice();
+      WalletSecrets.holdsWalletPassword = false;
+      final m = manager([FakeWallet('BTC')])..setWalletPassword('typed');
+
+      await restoreWith(m);
+
+      expect(secrets.values.containsKey(walletPasswordStorageKey), isFalse);
+      m.dispose();
+    });
+
+    test('a copy an earlier build stored is never loaded', () async {
+      installSpice();
+      WalletSecrets.holdsWalletPassword = false;
+      await storeMobileWalletPassword('typed');
+      final btc = FakeWallet('BTC', existing: true);
+      final m = manager([btc]);
+
+      await m.loadCachedDisplayState();
+      expect(m.hasPassword, isFalse, reason: 'nothing may decrypt before the unlock');
+      await m.openAll();
+      expect(btc.openCount, 0);
+      expect(await m.loadMobileWalletPassword(), isFalse);
+      m.dispose();
+    });
+
+    test('unlocking checks it against the stored seed', () async {
+      installSpice();
+      WalletSecrets.holdsWalletPassword = false;
+      final m = manager([FakeWallet('BTC')])..setWalletPassword('typed');
+      await restoreWith(m);
+      m.clearPassword();
+
+      expect(await m.unlockWithTypedPassword('wrong'), isFalse);
+      expect(m.hasPassword, isFalse);
+      expect(await m.unlockWithTypedPassword('typed'), isTrue);
+      expect(m.hasPassword, isTrue);
+      m.dispose();
+    });
+
+    test('the first right unlock deletes a copy an earlier build stored', () async {
+      installSpice();
+      WalletSecrets.holdsWalletPassword = false;
+      final m = manager([FakeWallet('BTC')])..setWalletPassword('typed');
+      await restoreWith(m);
+      m.clearPassword();
+      await storeMobileWalletPassword('typed');
+
+      await m.unlockWithTypedPassword('wrong');
+      expect(secrets.values[walletPasswordStorageKey], 'typed', reason: 'kept until proven');
+      await m.unlockWithTypedPassword('typed');
+      expect(secrets.values.containsKey(walletPasswordStorageKey), isFalse);
+      m.dispose();
+    });
+
+    test('a wallet with no seed store unlocks as before, its open being the check', () async {
+      installSkylight();
+      WalletSecrets.holdsWalletPassword = false;
+      final m = manager([FakeWallet('XMR', existing: true)]);
+
+      expect(await m.unlockWithTypedPassword('typed'), isTrue);
+      m.dispose();
+    });
+
+    test('restoring with a generated password is refused', () async {
+      installSpice();
+      WalletSecrets.holdsWalletPassword = false;
+      final btc = FakeWallet('BTC');
+      final m = manager([btc])..useGeneratedPassword();
+
+      await expectLater(restoreWith(m), throwsStateError);
+      expect(btc.restores, isEmpty, reason: 'nobody could open a wallet encrypted with it');
+      expect(await SeedStore.exists(), isFalse);
+      m.dispose();
+    });
+
+    test('mobile still keeps its generated password in the keystore', () async {
+      installSpice();
+      WalletSecrets.holdsWalletPassword = true;
+      final m = manager([FakeWallet('BTC')])..useGeneratedPassword();
+
+      await restoreWith(m);
+
+      expect(secrets.values[walletPasswordStorageKey], isNotNull);
+      final fresh = manager([FakeWallet('BTC', existing: true)]);
+      expect(await fresh.loadMobileWalletPassword(), isTrue);
+      m.dispose();
+      fresh.dispose();
+    });
+  });
+
   group('the seed store persists the original mnemonic on restore', () {
     test('Spice persists the seed so later coins can bootstrap', () async {
       installSpice();
@@ -483,6 +580,9 @@ void main() {
 
     test('falls back to the stored password, as a background isolate must', () async {
       installSkylight();
+      // Background isolates run only on mobile, the platforms that keep the
+      // password in the keystore.
+      WalletSecrets.holdsWalletPassword = true;
       await storeMobileWalletPassword('kept-in-the-keystore');
       final xmr = await openWallet('XMR');
       final m = manager([xmr]);
