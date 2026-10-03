@@ -206,7 +206,9 @@ abstract class MoneroBackend {
     required bool lightWallet,
   });
 
-  Future<void> connectToDaemon(NativeHandle wallet);
+  /// Whether the wallet reached the server (for LWS: logged in). When false,
+  /// [walletErrorString] gives the reason, if the library recorded one.
+  Future<bool> connectToDaemon(NativeHandle wallet);
   Future<int> connected(NativeHandle wallet);
   Future<bool> synchronized(NativeHandle wallet);
 
@@ -266,7 +268,9 @@ abstract class MoneroBackend {
   /// spend key into a process with no user present.
   Future<bool> isBackgroundWallet(NativeHandle wallet);
 
-  Future<void> refresh(NativeHandle wallet);
+  /// A one-shot `Wallet_refresh`; true when it succeeded. For LWS that means
+  /// the server answered, which the wallet uses as its connection state.
+  Future<bool> refresh(NativeHandle wallet);
   Future<void> startRefresh(NativeHandle wallet);
   Future<void> pauseRefresh(NativeHandle wallet);
   Future<void> setAutoRefreshInterval(NativeHandle wallet, int millis);
@@ -297,7 +301,10 @@ abstract class MoneroBackend {
   Future<int> getRefreshFromBlockHeight(NativeHandle wallet);
   Future<void> setRefreshFromBlockHeight(NativeHandle wallet, int height);
 
-  Future<void> setCaFilePath(NativeHandle wallet, String path);
+  /// Makes the PEM file at [path] the only trust store for the wallet's TLS
+  /// connection to its server (LWS or node), from the next [init]. False when
+  /// the library cannot take it.
+  Future<bool> setCaFilePath(NativeHandle wallet, String path);
 
   /// Present only in `magicgrants/monero_c`, which is why the build pins that
   /// fork.

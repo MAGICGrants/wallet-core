@@ -120,6 +120,36 @@ void main() {
     expect(_qrSize(tester), const Size.square(200), reason: 'shrinks back');
   });
 
+  testWidgets('the code is laid out once and scaled, so it grows smoothly', (tester) async {
+    // qr_flutter rounds each module to half a pixel: a code re-laid out at
+    // every frame's size grows in steps of half a pixel per module.
+    _useScreen(tester, const Size(375, 812));
+    await tester.pumpWidget(const _Host());
+
+    await tester.tap(find.byType(QrImageView));
+    await tester.pump();
+    var last = 200.0;
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(_qrSize(tester), const Size.square(288), reason: 'laid out at its destination');
+      final shown = tester.getRect(find.byType(QrImageView)).width;
+      expect(shown, greaterThan(last), reason: 'on screen it grows every frame');
+      expect(shown, lessThan(288));
+      last = shown;
+    }
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byType(QrImageView)).size, const Size.square(288));
+
+    await tester.tap(find.byType(QrImageView));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(_qrSize(tester), const Size.square(200), reason: 'laid out at its destination');
+    final shown = tester.getRect(find.byType(QrImageView)).width;
+    expect(shown, inExclusiveRange(200, 288), reason: 'scaled down from the enlarged size');
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byType(QrImageView)).size, const Size.square(200));
+  });
+
   testWidgets('in landscape it stops at the viewport\'s height, all of it on screen', (
     tester,
   ) async {

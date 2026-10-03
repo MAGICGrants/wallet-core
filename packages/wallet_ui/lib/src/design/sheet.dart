@@ -1,8 +1,7 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/material.dart';
 
 import 'brand.dart';
+import 'desktop_layout.dart';
 import 'desktop_modal.dart';
 
 /// Presents a brand-styled modal bottom sheet (paper ground, rounded top,
@@ -63,11 +62,11 @@ Future<T?> showBrandSheet<T>({
 @visibleForTesting
 bool? debugIsDesktopModalOverride;
 
-/// True on desktop, where a sheet is a centered [DesktopModalCard] that owns the
-/// content padding. Sheet contents use this to drop their own edge padding there
-/// (mobile keeps it, so mobile layout is unchanged).
-bool get isDesktopModal =>
-    debugIsDesktopModalOverride ?? (Platform.isLinux || Platform.isWindows || Platform.isMacOS);
+/// True in the desktop layout ([isDesktopLayout]), where a sheet is a centered
+/// [DesktopModalCard] that owns the content padding. Sheet contents use this to
+/// drop their own edge padding there (mobile keeps it, so mobile layout is
+/// unchanged).
+bool get isDesktopModal => debugIsDesktopModalOverride ?? isDesktopLayout;
 
 /// A sheet's primary + secondary action buttons. Stacked (primary above
 /// secondary) on a mobile sheet; side by side (secondary left, primary right) in

@@ -50,6 +50,10 @@ class WalletManager with ChangeNotifier {
   final Map<String, CryptoWallet> _wallets;
 
   String? _password;
+
+  /// Whether [_password] came from [useGeneratedPassword] rather than the user.
+  bool _passwordIsGenerated = false;
+
   bool _testnetCoinsEnabled = false;
   Timer? _notifyDebounce;
 
@@ -117,10 +121,14 @@ class WalletManager with ChangeNotifier {
 
   bool get hasPassword => _password != null;
 
-  void setWalletPassword(String password) => _password = password;
+  void setWalletPassword(String password) {
+    _password = password;
+    _passwordIsGenerated = false;
+  }
 
-  /// True if [password] decrypts the stored seed. The desktop unlock verifies
-  /// here before proceeding; mobile unlocks via biometric-gated storage instead.
+  /// True if [password] decrypts the stored seed. The desktop unlock checks
+  /// here, through [unlockWithTypedPassword]; mobile unlocks via biometric-gated
+  /// storage instead.
   Future<bool> verifyWalletPassword(String password) async {
     try {
       return await SeedStore.load(password) != null;
@@ -129,10 +137,36 @@ class WalletManager with ChangeNotifier {
     }
   }
 
+  /// The desktop unlock: true if the typed [password] is right, in which case it
+  /// is held in memory for this session and nowhere else.
+  ///
+  /// Checked against the stored seed. A wallet from before the seed store has
+  /// none, so its password is taken as given and the open that follows is the
+  /// only check, as it always was.
+  ///
+  /// A right password also deletes any copy of it in the keystore. Earlier
+  /// builds wrote the typed password there too, and a desktop OS never reads it
+  /// back.
+  Future<bool> unlockWithTypedPassword(String password) async {
+    if (await SeedStore.exists() && !await verifyWalletPassword(password)) return false;
+    setWalletPassword(password);
+    if (!WalletSecrets.holdsWalletPassword) {
+      try {
+        await deleteMobileWalletPassword();
+      } catch (e) {
+        log(LogLevel.error, '[WalletManager] Failed to delete stored password: $e');
+      }
+    }
+    return true;
+  }
+
   /// Mints a random password. Used on mobile, where the user authenticates via
   /// the device rather than typing one; [restoreAll] persists it to the
   /// keystore.
-  void useGeneratedPassword() => _password = genWalletPassword();
+  void useGeneratedPassword() {
+    _password = genWalletPassword();
+    _passwordIsGenerated = true;
+  }
 
   /// Clears the in-memory password, e.g. on background with app lock enabled.
   void clearPassword() => _password = null;
@@ -151,13 +185,20 @@ class WalletManager with ChangeNotifier {
     return true;
   }
 
+  /// Writes the password to the keystore. A no-op on a desktop OS, where it is
+  /// typed at every launch; see [WalletSecrets.holdsWalletPassword].
   Future<void> persistMobileWalletPassword() async {
     final password = _password;
     if (password == null) throw StateError('Cannot persist password: none set');
+    if (!WalletSecrets.holdsWalletPassword) return;
     await storeMobileWalletPassword(password);
   }
 
+  /// Takes the password from the keystore. Always false on a desktop OS, so
+  /// nothing there opens or decrypts before the user types the password, even
+  /// if an earlier build left a copy behind.
   Future<bool> loadMobileWalletPassword() async {
+    if (!WalletSecrets.holdsWalletPassword) return false;
     final stored = await getMobileWalletPassword();
     if (stored == null) return false;
     _password = stored;
@@ -174,7 +215,7 @@ class WalletManager with ChangeNotifier {
   }
 
   Future<void> openAll({String? password, bool displayOnly = false}) async {
-    if (password != null) _password = password;
+    if (password != null) setWalletPassword(password);
 
     await loadCachedDisplayState();
     if (displayOnly) return;
@@ -205,7 +246,8 @@ class WalletManager with ChangeNotifier {
     // Cached balances live in the password-encrypted cache. With app lock off
     // the password can be auto-loaded and the numbers shown immediately; with
     // it on we must not decrypt before the user authenticates, so hydration is
-    // deferred to the post-unlock open path.
+    // deferred to the post-unlock open path. A desktop OS has no stored
+    // password to load, so there it waits for the typed one the same way.
     final appLockEnabled =
         await SharedPreferencesService.get<bool>(DomainPreferenceKeys.appLockEnabled) ?? false;
     if (_password == null && !appLockEnabled) await loadMobileWalletPassword();
@@ -507,6 +549,11 @@ class WalletManager with ChangeNotifier {
   Future<void> restoreAll({required SeedSource seed, required RestorePoint from}) async {
     if (_password == null) {
       throw StateError('Wallet password must be set before restoring wallets.');
+    }
+    // A desktop OS keeps no copy of the password, so a wallet encrypted with one
+    // the user never typed could not be opened again.
+    if (_passwordIsGenerated && !WalletSecrets.holdsWalletPassword) {
+      throw StateError('On a desktop OS the wallet password must be the one the user typed.');
     }
     if (!_seedPolicy.accepts(seed.format)) {
       throw UnsupportedSeedFormatException(

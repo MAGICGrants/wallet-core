@@ -126,6 +126,17 @@ ParsedHttpResponse parseHttpResponse(String rawResponse) {
 /// `.timeout()` at the call site: that completed the caller's future while the
 /// subscription stayed attached, so a hostile or merely slow server kept
 /// arriving into a buffer nobody would look at. See [readHttpResponse].
+///
+/// [timeout] covers only that read. Setting up the tunnel before it is bounded
+/// the same way, inside [SOCKSSocket]: [handshakeTimeout] for each of the
+/// connect to the proxy, its replies to the greeting and the CONNECT, and the
+/// TLS handshake. When one runs out the socket is torn down, or for the TLS
+/// handshake, as soon as the handshake lets go of it. Without that, a port that
+/// is not a SOCKS5 proxy (an HTTP proxy's, Tor's ControlPort) left the request
+/// pending for as long as the caller waited.
+///
+/// [securityContext] is the trust store for an `https` [url]; null means
+/// Dart's default, the OS roots.
 Future<ParsedHttpResponse> makeSocksHttpRequest(
   String method,
   String url,
@@ -133,6 +144,8 @@ Future<ParsedHttpResponse> makeSocksHttpRequest(
   Object? body,
   int maxBytes = kDefaultMaxResponseBytes,
   Duration? timeout,
+  Duration handshakeTimeout = kSocksHandshakeTimeout,
+  SecurityContext? securityContext,
 }) async {
   final uri = Uri.parse(url);
 
@@ -140,6 +153,8 @@ Future<ParsedHttpResponse> makeSocksHttpRequest(
     proxyHost: proxyInfo.host.address,
     proxyPort: proxyInfo.port,
     sslEnabled: uri.scheme == 'https',
+    securityContext: securityContext,
+    handshakeTimeout: handshakeTimeout,
   );
 
   try {

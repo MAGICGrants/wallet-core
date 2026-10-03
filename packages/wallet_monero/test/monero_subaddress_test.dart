@@ -64,6 +64,8 @@ void main() {
     SharedPreferencesService.store = MemoryPreferenceStore();
     WalletSecrets.store = MemorySecretStore();
     WalletAppConfig.install(WalletAppConfig.spice, directories: FixedDirectories(tmp));
+    // Stands in for the packaged CA bundle, which needs a Flutter binding to load.
+    useTestCaBundle();
     logs = MemoryLogSink();
     WalletLog.sink = logs;
     WalletLog.isVerbose = () async => true;
@@ -82,6 +84,7 @@ void main() {
   tearDown(() {
     wallet.dispose();
     WalletAppConfig.resetForTesting();
+    CaBundle.resetForTesting();
     SharedPreferencesService.resetForTesting();
     WalletSecrets.resetForTesting();
     TorSettingsService.sharedInstance.resetForTesting();

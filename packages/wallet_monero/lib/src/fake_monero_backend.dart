@@ -107,6 +107,17 @@ class FakeMoneroBackend extends MoneroBackend {
   /// the scheme the wallet derived for a host rather than infer it.
   final List<({String daemonAddress, bool useSsl})> initCalls = [];
 
+  /// Every path handed to [setCaFilePath], and what the call answers.
+  final List<String> caFilePaths = [];
+  bool setCaFilePathResult = true;
+
+  /// What [connectToDaemon] answers, and the reason it records for a failure.
+  bool connectToDaemonResult = true;
+  String? connectToDaemonError;
+
+  /// What the one-shot [refresh] answers.
+  bool refreshResult = true;
+
   int _nextId = 1;
   int _newId() => _nextId++;
 
@@ -143,6 +154,11 @@ class FakeMoneroBackend extends MoneroBackend {
     setRefreshHeights.clear();
     managersRequested.clear();
     initCalls.clear();
+    caFilePaths.clear();
+    setCaFilePathResult = true;
+    connectToDaemonResult = true;
+    connectToDaemonError = null;
+    refreshResult = true;
     createTransactionRequests.clear();
     txKeyRequests.clear();
     transactions = [];
@@ -312,7 +328,12 @@ class FakeMoneroBackend extends MoneroBackend {
   }
 
   @override
-  Future<void> connectToDaemon(NativeHandle wallet) async => _record('connectToDaemon');
+  Future<bool> connectToDaemon(NativeHandle wallet) async {
+    _record('connectToDaemon');
+    final error = connectToDaemonError;
+    if (error != null) errorStrings[wallet.id] = error;
+    return connectToDaemonResult;
+  }
 
   @override
   Future<int> connected(NativeHandle wallet) async => connectedValue;
@@ -428,7 +449,10 @@ class FakeMoneroBackend extends MoneroBackend {
       _backgroundWallets.contains(wallet.id);
 
   @override
-  Future<void> refresh(NativeHandle wallet) async => _record('refresh');
+  Future<bool> refresh(NativeHandle wallet) async {
+    _record('refresh');
+    return refreshResult;
+  }
 
   @override
   Future<void> startRefresh(NativeHandle wallet) async => _record('startRefresh');
@@ -529,7 +553,11 @@ class FakeMoneroBackend extends MoneroBackend {
   }
 
   @override
-  Future<void> setCaFilePath(NativeHandle wallet, String path) async => _record('setCaFilePath');
+  Future<bool> setCaFilePath(NativeHandle wallet, String path) async {
+    caFilePaths.add(path);
+    _record('setCaFilePath');
+    return setCaFilePathResult;
+  }
 
   @override
   Future<BigInt?> estimateTransactionFee(

@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -48,8 +49,24 @@ class WalletSecrets {
 
   static SecretStore store = const KeychainSecretStore();
 
-  static void resetForTesting() => store = const KeychainSecretStore();
+  /// Whether [store] keeps the wallet password on this platform.
+  ///
+  /// True on Android and iOS, the iOS build on a Mac included: the password is
+  /// minted at onboarding, nobody types it, and it lives in the keystore behind
+  /// App Lock when that is on. False on Linux, Windows and macOS, where the user
+  /// types it at every launch and it is held in memory only. A stored copy there
+  /// would make typing it unnecessary: for the app, and on Windows and Linux for
+  /// any process running as the same user (see `secureStorage`). The same split
+  /// as `WalletFileCrypto.defaultIterations`, and for the same reason.
+  static bool holdsWalletPassword = _platformHoldsWalletPassword;
+
+  static void resetForTesting() {
+    store = const KeychainSecretStore();
+    holdsWalletPassword = _platformHoldsWalletPassword;
+  }
 }
+
+final bool _platformHoldsWalletPassword = Platform.isAndroid || Platform.isIOS;
 
 /// Mints a random wallet password: 16 bytes from [Random.secure], hex-encoded.
 ///

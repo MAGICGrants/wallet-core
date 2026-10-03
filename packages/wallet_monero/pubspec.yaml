@@ -16,9 +16,10 @@ dependencies:
   wallet_infra:
     path: ../wallet_infra
 
-  # One monero_c for both apps: Monero v0.18.5.3. Its lwsf pin adds the armv7 +
-  # mingw build fixes still in review upstream (vtnerd/lwsf#17); track vtnerd's
-  # lwsf again once that merges.
+  # One monero_c for both apps: Monero v0.18.5.3. Its lwsf pin adds changes not
+  # yet in vtnerd's lwsf: the armv7 + mingw build fixes (in review as
+  # vtnerd/lwsf#17) and the TLS and sweep-amount fixes. Track vtnerd's lwsf
+  # again once those are upstream.
   #
   # Only the Apple ABIs read monero_c's .exp export list, and ld turns its
   # entries into initial undefines, so it must name only symbols
@@ -27,7 +28,7 @@ dependencies:
   monero:
     git:
       url: https://github.com/magicgrants/monero_c
-      ref: 3ca8418f5888883e1bb6e3a6a919260e71a49647
+      ref: e31cbe2cc595fa9d640b35ffb45dc3afa91ec7b0
       path: impls/monero.dart
 
   polyseed: 0.0.7

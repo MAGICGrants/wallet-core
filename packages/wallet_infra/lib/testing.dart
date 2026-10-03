@@ -12,5 +12,8 @@
 /// ```
 library;
 
+export 'src/testing/ca_bundle.dart';
 export 'src/testing/fast_test_pbkdf2.dart';
 export 'src/testing/memory_stores.dart';
+export 'src/testing/test_pki.dart';
+export 'src/testing/tls_test_servers.dart';

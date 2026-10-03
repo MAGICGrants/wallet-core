@@ -65,6 +65,15 @@ class MoneroWallet extends CryptoWallet {
 
   bool _daemonInitialised = false;
 
+  /// LWS only: whether the last login or refresh reached the server.
+  ///
+  /// LWSF's own `connected()` is false after every login until a refresh has
+  /// set up its `/feed` (or given up on it), and false in poll mode whenever
+  /// the keep-alive socket happens to be closed. Read straight after a
+  /// successful login, it made every connect look failed, and the reconnect
+  /// that followed re-ran `init`, which logs out again.
+  bool _lwsSessionUp = false;
+
   int? _daemonTargetHeight;
 
   /// Last `Wallet_synchronized` reading, before [_syncedGivenHeights] narrows
@@ -740,8 +749,20 @@ class MoneroWallet extends CryptoWallet {
   }
 
   @override
-  Future<bool> needsRebuildForCurrentConnection() async =>
-      _wallet != null && _loadedKind != _desiredKind;
+  Future<bool> needsRebuildForCurrentConnection() async => _awaitingRebuild;
+
+  /// The open wallet belongs to the other mode: the user saved an LWS↔node
+  /// change and [applyConnectionChange] has not swapped the wallet yet.
+  bool get _awaitingRebuild => _wallet != null && _loadedKind != _desiredKind;
+
+  /// Not active while [_awaitingRebuild]. In that gap the connection type
+  /// already names the new mode while the open wallet is still the old one, so
+  /// every mode-dependent call goes wrong: the LWS one-shot `Wallet_refresh` on
+  /// a node wallet mid-scan blocks until the scan finishes, and the old
+  /// wallet's connection state is read as the new one's. The timers, [load] and
+  /// the manager's sync all skip an inactive wallet; the rebuild ends the gap.
+  @override
+  bool get isActive => super.isActive && !_awaitingRebuild;
 
   /// Applies a connection change from the settings form. The predicate above
   /// detects that a rebuild is needed; this performs it.
@@ -817,6 +838,7 @@ class MoneroWallet extends CryptoWallet {
     _history = null;
     _loadedKind = null;
     _daemonInitialised = false;
+    _lwsSessionUp = false;
     _reportedSynchronized = false;
     _isBackgroundWallet = false;
     // Keyed on the handle, and a freed handle's address can be reused by the
@@ -902,6 +924,7 @@ class MoneroWallet extends CryptoWallet {
       // nulls the wallet also nulls this, and this one did not.
       _loadedKind = null;
       _daemonInitialised = false;
+      _lwsSessionUp = false;
       // Same reasoning as above, applied to the two fields added since: both are
       // properties of the handle that was just freed.
       _isBackgroundWallet = false;
@@ -937,21 +960,34 @@ class MoneroWallet extends CryptoWallet {
       return;
     }
 
-    if (Platform.isAndroid) {
-      // Android's system CA store isn't visible to the bundled OpenSSL.
-      final cacert = await getCacertFile();
-      await _backend.setCaFilePath(wallet, cacert.path);
-    }
+    // Read once: the type can change while this awaits below, and an init whose
+    // lightWallet flag disagrees with the open wallet's factory aborts.
+    final nodeMode = _isNodeMode;
 
     // There is no user SSL toggle: a routable clearnet host is forced to https; a
     // local or onion host, already confidential without TLS, stays http.
     final useSsl = _addressRequiresSsl(address);
+
+    // TLS is verified against the bundled CA set, in both modes and on every
+    // platform, so every platform trusts the same roots. Without the file the
+    // library would trust a different store on each (the Windows store, a
+    // distro's /etc/ssl, nothing at all on Android and iOS). A library that
+    // cannot take the file is refused rather than trusted.
+    if (useSsl) {
+      final caFile = await CaBundle.path();
+      if (!await _backend.setCaFilePath(wallet, caFile)) {
+        throw StateError(
+          'The Monero library did not accept the CA bundle at $caFile; '
+          'refusing a TLS connection it cannot verify.',
+        );
+      }
+    }
     final daemonAddress = '${useSsl ? 'https://' : 'http://'}$address';
     final proxyAddress = (proxyPort != null && proxyPort.isNotEmpty) ? '127.0.0.1:$proxyPort' : '';
 
     // Extra check to require Tor or a SOCKS proxy for LWS connections since they
     // carry the view key
-    if (!_isNodeMode) {
+    if (!nodeMode) {
       requireConfidentialChannel(
         Uri.parse(daemonAddress),
         carrying: 'the private view key',
@@ -959,28 +995,39 @@ class MoneroWallet extends CryptoWallet {
       );
     }
 
-    walletLog(LogLevel.info, 'Connecting: ssl=$useSsl lightWallet=${!_isNodeMode}');
+    walletLog(LogLevel.info, 'Connecting: ssl=$useSsl lightWallet=${!nodeMode}');
 
     await _backend.init(
       wallet,
       daemonAddress: daemonAddress,
       proxyAddress: proxyAddress,
       useSsl: useSsl,
-      lightWallet: !_isNodeMode,
+      lightWallet: !nodeMode,
     );
-    await _backend.connectToDaemon(wallet);
+    final connected = await _backend.connectToDaemon(wallet);
+    _lwsSessionUp = !nodeMode && connected;
 
     // A full node also needs its background refresh thread started; LWS lets
     // the server scan.
-    if (_isNodeMode) {
+    if (nodeMode) {
       await _backend.setAutoRefreshInterval(wallet, 10000);
       await _backend.startRefresh(wallet);
     }
 
     _daemonInitialised = true;
 
+    // The library reports why a connect failed (a rejected certificate, a
+    // refused login) only through its error string, so a failed connect is
+    // always logged, with that reason when there is one.
     final error = await _backend.walletErrorString(wallet);
-    if (error.isNotEmpty) walletLog(LogLevel.warn, 'connectToDaemon error: $error');
+    if (!connected) {
+      walletLog(
+        LogLevel.warn,
+        'connectToDaemon failed: ${error.isEmpty ? 'no reason given by the library' : error}',
+      );
+    } else if (error.isNotEmpty) {
+      walletLog(LogLevel.warn, 'connectToDaemon error: $error');
+    }
   }
 
   @override
@@ -1005,31 +1052,48 @@ class MoneroWallet extends CryptoWallet {
 
     walletLog(LogLevel.info, 'Probing ${isNode ? 'node' : 'LWS'} (tor=$useTor)');
 
-    late int statusCode;
-    String body = '';
+    // The probe trusts the same CA set as the wallet's own connection, so it
+    // passes only for a server the wallet can then verify.
+    final securityContext = useSsl ? await CaBundle.securityContext() : null;
 
+    // Tor's proxy and a custom one both go through the SOCKS5 client, which
+    // hands the hostname to the proxy instead of resolving it here. HttpClient
+    // cannot use a SOCKS proxy at all: `findProxy` accepts only `PROXY host:port`
+    // and `DIRECT`, and any other value throws before a connection is made. A
+    // custom proxy is dialled on 127.0.0.1, as the wallet's own connection does,
+    // so the probe checks the proxy the wallet will actually use.
+    ({InternetAddress host, int port})? proxyInfo;
     if (useTor) {
       final torSettings = TorSettingsService.sharedInstance;
       if (torSettings.torMode == TorMode.disabled) {
         throw Exception('Tor is disabled. Please go back and enable it.');
       }
-      final proxyInfo = await torSettings.getProxy();
+      proxyInfo = await torSettings.getProxy();
       if (proxyInfo == null) throw Exception('Could not resolve a Tor proxy.');
+    } else if (proxyPort != null && proxyPort.isNotEmpty) {
+      // Refused rather than ignored: probing directly would show the server the
+      // IP address the user configured a proxy to hide.
+      final port = int.tryParse(proxyPort);
+      if (port == null) throw Exception('The proxy port "$proxyPort" is not a number.');
+      proxyInfo = (host: InternetAddress.loopbackIPv4, port: port);
+    }
 
+    late int statusCode;
+    String body = '';
+
+    if (proxyInfo != null) {
       final response = await makeSocksHttpRequest(
         isNode ? 'GET' : 'POST',
         url,
         proxyInfo,
         maxBytes: maxProbeResponseBytes,
         timeout: const Duration(seconds: 20),
+        securityContext: securityContext,
       );
       statusCode = response.statusCode;
       body = response.body;
     } else {
-      final client = HttpClient();
-      if (proxyPort != null && proxyPort.isNotEmpty) {
-        client.findProxy = (_) => 'SOCKS localhost:$proxyPort';
-      }
+      final client = HttpClient(context: securityContext);
       try {
         final request = isNode
             ? await client.getUrl(Uri.parse(url))
@@ -1095,13 +1159,17 @@ class MoneroWallet extends CryptoWallet {
   Future<bool> getIsConnected() async {
     final wallet = _wallet;
     if (wallet == null || !_daemonInitialised) return false;
-    return await _backend.connected(wallet) != 0;
+    if (await _backend.connected(wallet) != 0) return true;
+    // LWS reached the server on its last login or refresh; see [_lwsSessionUp].
+    return _lwsSessionUp;
   }
 
   @override
   Future<void> refresh() async {
     final wallet = _wallet;
-    if (wallet == null || !_daemonInitialised) return;
+    // Not on a wallet awaiting its rebuild: with the type flipped to LWS, a
+    // node wallet would get the blocking one-shot below; see [isActive].
+    if (wallet == null || !_daemonInitialised || _awaitingRebuild) return;
 
     if (_isNodeMode) {
       // Nudge the background scan thread rather than scanning here. Both apps do
@@ -1115,8 +1183,8 @@ class MoneroWallet extends CryptoWallet {
       return;
     }
 
-    // LWS: the server does the scanning, so this is a cheap local read.
-    await _backend.refresh(wallet);
+    // LWS: the server does the scanning; this fetches what it found.
+    _lwsSessionUp = await _backend.refresh(wallet);
   }
 
   @override
@@ -1909,6 +1977,7 @@ class MoneroWallet extends CryptoWallet {
             body: body,
             maxBytes: maxProbeResponseBytes,
             timeout: const Duration(seconds: 20),
+            securityContext: url.scheme == 'https' ? await CaBundle.securityContext() : null,
           );
           httpStatus = response.statusCode;
         } else {
@@ -1936,7 +2005,11 @@ class MoneroWallet extends CryptoWallet {
   Future<int> Function(Uri url, String body) postJson = _postJson;
 
   static Future<int> _postJson(Uri url, String body) async {
-    final client = HttpClient();
+    // The request carries the view key, so it trusts the same CA set as the
+    // wallet's own connection to this server.
+    final client = HttpClient(
+      context: url.scheme == 'https' ? await CaBundle.securityContext() : null,
+    );
     try {
       final request = await client.postUrl(url);
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');

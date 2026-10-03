@@ -47,6 +47,9 @@ jobs:
              artifacts/monero_libwallet2_api_c.so
           bash scripts/fix-linux-moneroc-execstack.sh artifacts/monero_libwallet2_api_c.so
 
+      - name: OpenSSL reads nothing from the build host
+        run: bash scripts/check-moneroc-openssldir.sh artifacts/monero_libwallet2_api_c.so
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: monero-c-x86_64-linux-gnu
@@ -94,13 +97,6 @@ jobs:
         working-directory: packages/wallet_monero
         run: dart run tool/make_fixtures.dart
 
-      # The LWS TLS MITM test connects to a routable NAME that must resolve to
-      # the local TLS server (a bare IP is treated as local and stays plaintext,
-      # so no handshake runs). Map it to loopback; the test fails under
-      # REQUIRE_MONERO_FFI if it is missing.
-      - name: Map the LWS MITM test host to loopback
-        run: echo "127.0.0.1 mitm.test" | sudo tee -a /etc/hosts
-
       # REQUIRE_* turns "not available" from a skip into a failure, so a broken
       # build or missing fixtures cannot leave this job green.
       - name: wallet_monero (monero_c + fixtures)
@@ -109,6 +105,14 @@ jobs:
           REQUIRE_MONERO_FFI: '1'
           REQUIRE_FIXTURE_CORPUS: '1'
         run: flutter test --no-pub
+
+      # Mozilla adds and distrusts roots every few months. Checked nightly rather
+      # than per push, so a date cannot turn an unrelated pull request red.
+      - name: The CA bundle is recent
+        working-directory: packages/wallet_infra
+        env:
+          CHECK_CACERT_AGE: '1'
+        run: flutter test --no-pub test/cacert_test.dart
 
       # Uploaded unconditionally, and it is `MANIFEST.generated.json` rather than
       # `MANIFEST.json` on purpose. The verify step writes the former whether it
@@ -123,3 +127,67 @@ jobs:
           name: fixture-manifest
           path: test_fixtures/wallets/MANIFEST.generated.json
           if-no-files-found: warn
+
+  # The same TLS checks against the Windows build, on Windows: the one platform
+  # where the library has a system store to fall back to (epee loads the Windows
+  # ROOT store), and so where a path that skipped the CA bundle would go unseen.
+  build-monero-c-windows:
+    name: Build monero_c (Windows)
+    runs-on: ubuntu-latest
+    container:
+      image: debian:bookworm@sha256:30482e873082e906a4908c10529180aefb6f77620aea7404b909829fadc5d168
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Build
+        env:
+          TARGET_ARCH: x86_64-w64-mingw32
+        run: scripts/build-moneroc-ci.sh
+
+      - name: Collect
+        run: |
+          mkdir -p artifacts
+          cp monero_c/monero_libwallet2_api_c/build/x86_64-w64-mingw32/libwallet2_api_c.dll artifacts/monero_libwallet2_api_c.dll
+          cp monero_c/release/monero/x86_64-w64-mingw32_libwinpthread-1.dll artifacts/libwinpthread-1.dll
+          cp monero_c/release/monero/x86_64-w64-mingw32_libssp-0.dll artifacts/libssp-0.dll
+
+      - name: OpenSSL reads nothing from the build host
+        run: bash scripts/check-moneroc-openssldir.sh artifacts/monero_libwallet2_api_c.dll
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: monero-c-x86_64-w64-mingw32
+          path: artifacts/
+
+  tls-windows:
+    name: Native TLS (Windows)
+    runs-on: windows-2022
+    needs: build-monero-c-windows
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: monero-c-x86_64-w64-mingw32
+          path: native
+
+      - run: flutter pub get
+
+      # The wallet's own connect path loads the library by its default name in
+      # each isolate it spawns, so the directory goes on PATH as well; the DLL's
+      # MinGW runtime dependencies are found the same way.
+      - name: wallet_monero TLS (monero_c on Windows)
+        working-directory: packages/wallet_monero
+        shell: pwsh
+        env:
+          REQUIRE_MONERO_FFI: '1'
+        run: |
+          $env:MONERO_LIB_PATH = "$env:GITHUB_WORKSPACE\native\monero_libwallet2_api_c.dll"
+          $env:PATH = "$env:GITHUB_WORKSPACE\native;$env:PATH"
+          flutter test --no-pub test/native_tls_ffi_test.dart

@@ -540,19 +540,32 @@ class _QrCard extends StatelessWidget {
                           alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
                         );
                       },
-                      // The QR sits on a fixed white card so it scans, so its
-                      // modules must stay dark in both themes — the themed ink
-                      // goes light in dark mode. No size: it fills the panel.
-                      child: QrImageView(
-                        data: address,
-                        padding: EdgeInsets.zero,
-                        eyeStyle: const QrEyeStyle(
-                          eyeShape: QrEyeShape.square,
-                          color: Color(0xFF2C170C),
-                        ),
-                        dataModuleStyle: const QrDataModuleStyle(
-                          dataModuleShape: QrDataModuleShape.square,
-                          color: Color(0xFF2C170C),
+                      // qr_flutter rounds each module to half a pixel, so a
+                      // code laid out at every in-between size grows in
+                      // visible jumps. Laid out once at the size it is heading
+                      // for and scaled to the panel instead, it grows smoothly
+                      // and lands at scale 1, as crisp as before.
+                      child: FittedBox(
+                        child: SizedBox.square(
+                          dimension: size,
+                          // Painted once per toggle; each frame only rescales it.
+                          child: RepaintBoundary(
+                            // The QR sits on a fixed white card so it scans, so
+                            // its modules must stay dark in both themes — the
+                            // themed ink goes light in dark mode.
+                            child: QrImageView(
+                              data: address,
+                              padding: EdgeInsets.zero,
+                              eyeStyle: const QrEyeStyle(
+                                eyeShape: QrEyeShape.square,
+                                color: Color(0xFF2C170C),
+                              ),
+                              dataModuleStyle: const QrDataModuleStyle(
+                                dataModuleShape: QrDataModuleShape.square,
+                                color: Color(0xFF2C170C),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
