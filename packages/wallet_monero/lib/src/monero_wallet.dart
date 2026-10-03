@@ -65,6 +65,15 @@ class MoneroWallet extends CryptoWallet {
 
   bool _daemonInitialised = false;
 
+  /// LWS only: whether the last login or refresh reached the server.
+  ///
+  /// LWSF's own `connected()` is false after every login until a refresh has
+  /// set up its `/feed` (or given up on it), and false in poll mode whenever
+  /// the keep-alive socket happens to be closed. Read straight after a
+  /// successful login, it made every connect look failed, and the reconnect
+  /// that followed re-ran `init`, which logs out again.
+  bool _lwsSessionUp = false;
+
   int? _daemonTargetHeight;
 
   /// Last `Wallet_synchronized` reading, before [_syncedGivenHeights] narrows
@@ -740,8 +749,20 @@ class MoneroWallet extends CryptoWallet {
   }
 
   @override
-  Future<bool> needsRebuildForCurrentConnection() async =>
-      _wallet != null && _loadedKind != _desiredKind;
+  Future<bool> needsRebuildForCurrentConnection() async => _awaitingRebuild;
+
+  /// The open wallet belongs to the other mode: the user saved an LWS↔node
+  /// change and [applyConnectionChange] has not swapped the wallet yet.
+  bool get _awaitingRebuild => _wallet != null && _loadedKind != _desiredKind;
+
+  /// Not active while [_awaitingRebuild]. In that gap the connection type
+  /// already names the new mode while the open wallet is still the old one, so
+  /// every mode-dependent call goes wrong: the LWS one-shot `Wallet_refresh` on
+  /// a node wallet mid-scan blocks until the scan finishes, and the old
+  /// wallet's connection state is read as the new one's. The timers, [load] and
+  /// the manager's sync all skip an inactive wallet; the rebuild ends the gap.
+  @override
+  bool get isActive => super.isActive && !_awaitingRebuild;
 
   /// Applies a connection change from the settings form. The predicate above
   /// detects that a rebuild is needed; this performs it.
@@ -817,6 +838,7 @@ class MoneroWallet extends CryptoWallet {
     _history = null;
     _loadedKind = null;
     _daemonInitialised = false;
+    _lwsSessionUp = false;
     _reportedSynchronized = false;
     _isBackgroundWallet = false;
     // Keyed on the handle, and a freed handle's address can be reused by the
@@ -902,6 +924,7 @@ class MoneroWallet extends CryptoWallet {
       // nulls the wallet also nulls this, and this one did not.
       _loadedKind = null;
       _daemonInitialised = false;
+      _lwsSessionUp = false;
       // Same reasoning as above, applied to the two fields added since: both are
       // properties of the handle that was just freed.
       _isBackgroundWallet = false;
@@ -937,6 +960,10 @@ class MoneroWallet extends CryptoWallet {
       return;
     }
 
+    // Read once: the type can change while this awaits below, and an init whose
+    // lightWallet flag disagrees with the open wallet's factory aborts.
+    final nodeMode = _isNodeMode;
+
     // There is no user SSL toggle: a routable clearnet host is forced to https; a
     // local or onion host, already confidential without TLS, stays http.
     final useSsl = _addressRequiresSsl(address);
@@ -960,7 +987,7 @@ class MoneroWallet extends CryptoWallet {
 
     // Extra check to require Tor or a SOCKS proxy for LWS connections since they
     // carry the view key
-    if (!_isNodeMode) {
+    if (!nodeMode) {
       requireConfidentialChannel(
         Uri.parse(daemonAddress),
         carrying: 'the private view key',
@@ -968,20 +995,21 @@ class MoneroWallet extends CryptoWallet {
       );
     }
 
-    walletLog(LogLevel.info, 'Connecting: ssl=$useSsl lightWallet=${!_isNodeMode}');
+    walletLog(LogLevel.info, 'Connecting: ssl=$useSsl lightWallet=${!nodeMode}');
 
     await _backend.init(
       wallet,
       daemonAddress: daemonAddress,
       proxyAddress: proxyAddress,
       useSsl: useSsl,
-      lightWallet: !_isNodeMode,
+      lightWallet: !nodeMode,
     );
     final connected = await _backend.connectToDaemon(wallet);
+    _lwsSessionUp = !nodeMode && connected;
 
     // A full node also needs its background refresh thread started; LWS lets
     // the server scan.
-    if (_isNodeMode) {
+    if (nodeMode) {
       await _backend.setAutoRefreshInterval(wallet, 10000);
       await _backend.startRefresh(wallet);
     }
@@ -1131,13 +1159,17 @@ class MoneroWallet extends CryptoWallet {
   Future<bool> getIsConnected() async {
     final wallet = _wallet;
     if (wallet == null || !_daemonInitialised) return false;
-    return await _backend.connected(wallet) != 0;
+    if (await _backend.connected(wallet) != 0) return true;
+    // LWS reached the server on its last login or refresh; see [_lwsSessionUp].
+    return _lwsSessionUp;
   }
 
   @override
   Future<void> refresh() async {
     final wallet = _wallet;
-    if (wallet == null || !_daemonInitialised) return;
+    // Not on a wallet awaiting its rebuild: with the type flipped to LWS, a
+    // node wallet would get the blocking one-shot below; see [isActive].
+    if (wallet == null || !_daemonInitialised || _awaitingRebuild) return;
 
     if (_isNodeMode) {
       // Nudge the background scan thread rather than scanning here. Both apps do
@@ -1151,8 +1183,8 @@ class MoneroWallet extends CryptoWallet {
       return;
     }
 
-    // LWS: the server does the scanning, so this is a cheap local read.
-    await _backend.refresh(wallet);
+    // LWS: the server does the scanning; this fetches what it found.
+    _lwsSessionUp = await _backend.refresh(wallet);
   }
 
   @override

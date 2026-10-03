@@ -268,7 +268,9 @@ abstract class MoneroBackend {
   /// spend key into a process with no user present.
   Future<bool> isBackgroundWallet(NativeHandle wallet);
 
-  Future<void> refresh(NativeHandle wallet);
+  /// A one-shot `Wallet_refresh`; true when it succeeded. For LWS that means
+  /// the server answered, which the wallet uses as its connection state.
+  Future<bool> refresh(NativeHandle wallet);
   Future<void> startRefresh(NativeHandle wallet);
   Future<void> pauseRefresh(NativeHandle wallet);
   Future<void> setAutoRefreshInterval(NativeHandle wallet, int millis);

@@ -84,6 +84,20 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
   WalletManager? _walletManager;
   Set<String> _lastFetchedActiveCoins = {};
 
+  /// How long to wait before each retry of a failed fetch, after which the
+  /// 10-minute poll takes over. Without these a fetch that failed once, at
+  /// launch or right after a restore, left fiat blank for ten minutes.
+  @visibleForTesting
+  static List<Duration> retryBackoff = const [
+    Duration(seconds: 30),
+    Duration(minutes: 1),
+    Duration(minutes: 2),
+    Duration(minutes: 5),
+  ];
+
+  Timer? _retryTimer;
+  int _retryAttempt = 0;
+
   /// Whether a fiat rate is obtainable for [coinSymbol] (its mainnet base is a
   /// supported Kraken coin). Testnet coins inherit their base's support.
   bool isSupported(String coinSymbol) {
@@ -194,7 +208,9 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     final url = 'https://api.kraken.com/0/public/Ticker?pair=$pair';
     log(LogLevel.info, 'Fetching rate from fiat api (clearnet): $url');
 
-    final client = HttpClient();
+    // Bounded like the rest of the request: with no connect timeout a stalled
+    // handshake keeps the model loading for as long as the OS lets it.
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
     try {
       final request = await client.getUrl(Uri.parse(url));
       final response = await request.close().timeout(Duration(seconds: 20));
@@ -295,6 +311,10 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
   }
 
   Future<void> _loadRate() async {
+    // A fetch is starting either way; a pending retry would only repeat it.
+    _retryTimer?.cancel();
+    _retryTimer = null;
+
     _fiatApiMode = await FiatRateModel.loadFiatApiMode();
     if (_fiatApiMode == FiatApiMode.disabled) {
       _rateFetchTimer?.cancel();
@@ -341,7 +361,24 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
 
     _hasFailed = anyFailed && !anySucceeded;
     _isLoading = false;
+    _scheduleRetry(failed: anyFailed);
     notifyListeners();
+  }
+
+  /// Retries a failed fetch on [retryBackoff], then leaves it to the poll. A
+  /// success resets the schedule. Whatever the failure (Kraken down, no
+  /// network, Tor still starting), the next attempt comes in seconds rather
+  /// than ten minutes. Nothing about the wallet's own connection is involved.
+  void _scheduleRetry({required bool failed}) {
+    if (!failed) {
+      _retryAttempt = 0;
+      return;
+    }
+    // Only while the service runs; it arms the poll before any fetch returns.
+    if (_rateFetchTimer == null || _retryAttempt >= retryBackoff.length) return;
+    // Two fetches can overlap (a restart and a wallet change); one retry.
+    _retryTimer?.cancel();
+    _retryTimer = Timer(retryBackoff[_retryAttempt++], _loadRate);
   }
 
   Future<void> startService({WalletManager? walletManager}) async {
@@ -350,6 +387,9 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     }
     _rateFetchTimer?.cancel();
     _rateFetchTimer = null;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _retryAttempt = 0;
     await _loadPersisted();
     _startRateFetchTimer();
   }

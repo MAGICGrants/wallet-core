@@ -342,4 +342,89 @@ void main() {
       await expectLater(() => model.attachWalletManager(manager), returnsNormally);
     });
   });
+
+  group('the rate, apart from the wallet', () {
+    final originalBackoff = FiatRateModel.retryBackoff;
+    tearDown(() => FiatRateModel.retryBackoff = originalBackoff);
+
+    /// Counts fetch attempts: on the Tor path each pair asks for the proxy
+    /// first, and with none available the attempt fails without a request.
+    int attempts = 0;
+    setUp(() {
+      attempts = 0;
+      FiatRates.getTorProxy = () async {
+        attempts++;
+        return null;
+      };
+    });
+
+    test('a failed fetch is retried on the backoff, then left to the poll', () async {
+      FiatRateModel.retryBackoff = const [Duration(milliseconds: 20), Duration(milliseconds: 20)];
+      await FiatRateModel.saveFiatApiMode(FiatApiMode.torOnly);
+      final manager = await configuredManager([FakeFiatWallet('BTC')]);
+      addTearDown(manager.dispose);
+
+      final model = pollingModel();
+      await model.startService(walletManager: manager);
+      await pumpEventQueue();
+      expect(attempts, 1);
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(attempts, 3, reason: 'one fetch and one retry per backoff step, then the poll');
+      expect(model.hasFailed, isTrue);
+    });
+
+    test('a configured coin is fetched whatever state its wallet is in', () async {
+      // The rate and the wallet's own connection are separate: a coin with a
+      // server configured is priced even while its wallet is closed or cannot
+      // reach that server.
+      await FiatRateModel.saveFiatApiMode(FiatApiMode.torOnly);
+      final wallet = FakeFiatWallet('BTC');
+      final manager = await configuredManager([wallet]);
+      addTearDown(manager.dispose);
+      expect(wallet.isLoaded, isFalse);
+      expect(await wallet.getIsConnected(), isFalse);
+
+      final model = pollingModel();
+      await model.startService(walletManager: manager);
+      await pumpEventQueue();
+
+      expect(attempts, 1);
+    });
+
+    test('a connection change keeps the last rate on screen while it refetches', () async {
+      await SharedPreferencesService.set<double>('${SettingsKeys.fiatRate}_btc', 61234.5);
+      await FiatRateModel.saveFiatApiMode(FiatApiMode.torOnly);
+      final wallet = FakeFiatWallet('BTC');
+      final manager = await configuredManager([wallet]);
+      addTearDown(manager.dispose);
+
+      final model = pollingModel();
+      await model.startService(walletManager: manager);
+      await pumpEventQueue();
+      expect(model.rateFor('BTC'), 61234.5);
+
+      // What the settings screen does on saving a new server or mode: the wallet
+      // takes the new connection, then the fiat service restarts.
+      final seen = <double?>[];
+      void record() => seen.add(model.rateFor('BTC'));
+      model.addListener(record);
+      addTearDown(() => model.removeListener(record));
+
+      wallet.setConnection(
+        address: 'other.example.com:1234',
+        proxyPort: '',
+        useTor: false,
+        connectionType: 'node',
+      );
+      await model.startService();
+      await pumpEventQueue();
+
+      expect(attempts, greaterThan(1), reason: 'the change should start a fresh fetch');
+      expect(seen, isNotEmpty);
+      expect(seen, everyElement(61234.5), reason: 'the rate went blank during the switch');
+      expect(model.rateFor('BTC'), 61234.5, reason: 'a failed refetch dropped the last rate');
+      expect(model.quoteFor('BTC'), isNotNull);
+    });
+  });
 }

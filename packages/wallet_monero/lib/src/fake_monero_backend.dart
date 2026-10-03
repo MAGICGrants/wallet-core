@@ -115,6 +115,9 @@ class FakeMoneroBackend extends MoneroBackend {
   bool connectToDaemonResult = true;
   String? connectToDaemonError;
 
+  /// What the one-shot [refresh] answers.
+  bool refreshResult = true;
+
   int _nextId = 1;
   int _newId() => _nextId++;
 
@@ -155,6 +158,7 @@ class FakeMoneroBackend extends MoneroBackend {
     setCaFilePathResult = true;
     connectToDaemonResult = true;
     connectToDaemonError = null;
+    refreshResult = true;
     createTransactionRequests.clear();
     txKeyRequests.clear();
     transactions = [];
@@ -445,7 +449,10 @@ class FakeMoneroBackend extends MoneroBackend {
       _backgroundWallets.contains(wallet.id);
 
   @override
-  Future<void> refresh(NativeHandle wallet) async => _record('refresh');
+  Future<bool> refresh(NativeHandle wallet) async {
+    _record('refresh');
+    return refreshResult;
+  }
 
   @override
   Future<void> startRefresh(NativeHandle wallet) async => _record('startRefresh');

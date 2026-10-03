@@ -337,6 +337,15 @@ abstract class CryptoWallet with ChangeNotifier {
   int _connectFailures = 0;
   DateTime? _lastConnectAttempt;
 
+  /// Bumped by every [setConnection], so a connect knows which settings it
+  /// was started for; see [_doConnect].
+  int _connectGeneration = 0;
+  int _connectInFlightGeneration = 0;
+
+  /// The reconnect the connection tick fires without awaiting; tracked so
+  /// [runWithSyncSuspended] can wait for it like any other tick.
+  Future<void>? _retryInFlight;
+
   Map<String, dynamic> _cache = {};
   String? _cachePassword;
   bool _cacheLoaded = false;
@@ -570,7 +579,11 @@ abstract class CryptoWallet with ChangeNotifier {
     // (it backs off to 20s only while _isSynced) rather than lagging ~20s.
     _isSynced = false;
     _syncedHeight = null;
-    _connectInFlight = null;
+    // A connect already running is left to finish rather than forgotten: it is
+    // still inside the native wallet, and forgetting it let the next connect
+    // run beside it and a rebuild close the wallet under it. The generation
+    // marks it stale, so it reports nothing for the new settings.
+    _connectGeneration++;
     _connectFailures = 0;
     _lastConnectAttempt = null;
     _connectionLoaded = true;
@@ -1197,25 +1210,46 @@ abstract class CryptoWallet with ChangeNotifier {
     await _doConnect();
   }
 
+  /// One connect at a time.
+  ///
+  /// A connect for the current settings is joined. One still running for
+  /// settings [setConnection] has since replaced is waited out rather than
+  /// joined or run beside: two connects at once put two native inits on one
+  /// wallet, and whichever lands last picks the server, which could be the
+  /// one the user just moved away from.
   Future<void> _doConnect() async {
-    final existing = _connectInFlight;
-    if (existing != null) return existing;
+    while (true) {
+      final existing = _connectInFlight;
+      if (existing == null) break;
+      if (_connectInFlightGeneration == _connectGeneration) return existing;
+      try {
+        await existing;
+      } catch (_) {}
+    }
 
-    final future = _connectImpl();
+    final generation = _connectGeneration;
+    final future = _connectImpl(generation);
     _connectInFlight = future;
+    _connectInFlightGeneration = generation;
     try {
       await future;
     } finally {
-      _connectInFlight = null;
+      // Only our own: a connect for newer settings may have replaced it.
+      if (identical(_connectInFlight, future)) _connectInFlight = null;
     }
   }
 
-  Future<void> _connectImpl() async {
+  Future<void> _connectImpl(int generation) async {
     _lastConnectAttempt = DateTime.now();
+
+    // Settings replaced mid-connect: whatever this attempt learns is about the
+    // old server, so it reports nothing. The next connect reports for the new.
+    bool stale() => generation != _connectGeneration;
 
     String? torProxyPort;
     if (_connectionUseTor) {
       final proxyInfo = await TorSettingsService.sharedInstance.getProxy();
+      if (stale()) return;
       if (proxyInfo == null) {
         // Fail closed. A connection configured for Tor must never fall back to
         // clearnet; that would deanonymise the user silently.
@@ -1244,12 +1278,15 @@ abstract class CryptoWallet with ChangeNotifier {
     try {
       await connectToDaemonImpl(address: _connectionAddress, proxyPort: proxyPort);
     } catch (e) {
-      _connectFailures++;
+      if (!stale()) _connectFailures++;
       rethrow;
     }
+    if (stale()) return;
 
     _hasAttemptedConnection = true;
-    _isConnected = await getIsConnected();
+    final connected = await getIsConnected();
+    if (stale()) return;
+    _isConnected = connected;
     _connectFailures = _isConnected ? 0 : _connectFailures + 1;
     notifyListeners();
   }
@@ -1551,8 +1588,14 @@ abstract class CryptoWallet with ChangeNotifier {
       }
 
       // Not awaited: a connect can take seconds over Tor and must not hold up
-      // the sync poll below. Re-entry is guarded by _connectInFlight.
-      unawaited(_retryConnectIfDue());
+      // the sync poll below. Re-entry is guarded by _connectInFlight. Tracked,
+      // though: after connecting it refreshes and reads stats, and a rebuild
+      // must not close the wallet under those.
+      if (_retryInFlight == null) {
+        final retry = _retryConnectIfDue().whenComplete(() => _retryInFlight = null);
+        _retryInFlight = retry;
+        unawaited(retry);
+      }
 
       await pollSyncStatus();
     } finally {
@@ -1664,9 +1707,12 @@ abstract class CryptoWallet with ChangeNotifier {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       }
       // A connect fired unawaited by the connection tick can still hold the
-      // handle; let it finish too.
+      // handle; let it finish too, and the refresh that follows it.
       try {
         await _connectInFlight;
+      } catch (_) {}
+      try {
+        await _retryInFlight;
       } catch (_) {}
       return await action();
     } finally {

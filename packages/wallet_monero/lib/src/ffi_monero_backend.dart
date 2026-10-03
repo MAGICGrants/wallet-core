@@ -263,9 +263,9 @@ class FfiMoneroBackend extends MoneroBackend {
   }
 
   @override
-  Future<void> refresh(NativeHandle wallet) async {
+  Future<bool> refresh(NativeHandle wallet) {
     final w = wallet.id;
-    await Isolate.run(() => monero.Wallet_refresh(Pointer.fromAddress(w)));
+    return Isolate.run(() => monero.Wallet_refresh(Pointer.fromAddress(w)));
   }
 
   @override
