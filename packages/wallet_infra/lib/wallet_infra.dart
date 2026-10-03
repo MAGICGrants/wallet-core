@@ -24,6 +24,7 @@ export 'src/storage/wallet_password.dart';
 export 'src/tor/tor_service.dart';
 export 'src/tor/tor_settings_service.dart';
 export 'src/ui/biometric_auth.dart';
+export 'src/ui/host_platform.dart';
 export 'src/ui/notification_service.dart';
 export 'src/ui/secure_clipboard.dart';
 export 'src/ui/secure_screen.dart';

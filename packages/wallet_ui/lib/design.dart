@@ -18,6 +18,7 @@ export 'src/design/brand_text_field.dart';
 export 'src/design/click_cursor.dart';
 export 'src/design/coin_tile.dart';
 export 'src/design/confirm_sheet.dart';
+export 'src/design/desktop_layout.dart';
 export 'src/design/desktop_modal.dart';
 export 'src/design/fiat_controls.dart';
 export 'src/design/fiat_modes_view.dart';

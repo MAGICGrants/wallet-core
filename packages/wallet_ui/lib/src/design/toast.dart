@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:wallet_infra/wallet_infra.dart' show SecureClipboard;
 
 import 'brand.dart';
+import 'desktop_layout.dart';
 
 const _defaultDuration = Duration(seconds: 3);
 
@@ -122,14 +122,13 @@ class _BrandToastCardState extends State<_BrandToastCard> with SingleTickerProvi
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final isDesktop = Platform.isLinux || Platform.isWindows || Platform.isMacOS;
     return Positioned(
       left: 0,
       right: 0,
       // Desktop: sit a quarter of the way up so it reads in a tall window.
       // Mobile: above the home indicator, and above the keyboard when one is up
       // -- a toast fired from a form should not land behind it.
-      bottom: isDesktop
+      bottom: isDesktopLayout
           ? media.size.height / 4
           : media.padding.bottom + media.viewInsets.bottom + 22,
       child: FadeTransition(

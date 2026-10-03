@@ -20,7 +20,10 @@ class DesktopGenerateSeedView extends StatefulWidget {
   final String birthdayReason;
   final String? birthdayValue;
   final String confirmLabel;
-  final String passwordNote;
+
+  /// Footnote that the password guards the seed from here on; null where the
+  /// wallet has no typed password, as on the iOS build running on a Mac.
+  final String? passwordNote;
   final String revealLabel;
   final String continueText;
   final int step;
@@ -63,6 +66,7 @@ class _DesktopGenerateSeedViewState extends State<DesktopGenerateSeedView> {
 
   @override
   Widget build(BuildContext context) {
+    final passwordNote = widget.passwordNote;
     return DesktopOnboardingScaffold(
       logo: widget.logo,
       title: widget.title,
@@ -75,7 +79,7 @@ class _DesktopGenerateSeedViewState extends State<DesktopGenerateSeedView> {
       loading: widget.loading,
       onBack: widget.onBack,
       onContinue: widget.onContinue,
-      notes: [OnboardingNote(Icons.lock_outline, widget.passwordNote)],
+      notes: [if (passwordNote != null) OnboardingNote(Icons.lock_outline, passwordNote)],
       content: ListView(
         padding: EdgeInsets.zero,
         children: [
