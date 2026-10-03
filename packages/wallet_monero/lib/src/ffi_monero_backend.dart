@@ -178,9 +178,9 @@ class FfiMoneroBackend extends MoneroBackend {
       monero.Wallet_addressValid(address, networkType);
 
   @override
-  Future<void> connectToDaemon(NativeHandle wallet) async {
+  Future<bool> connectToDaemon(NativeHandle wallet) {
     final w = wallet.id;
-    await Isolate.run(() => monero.Wallet_connectToDaemon(Pointer.fromAddress(w)));
+    return Isolate.run(() => monero.Wallet_connectToDaemon(Pointer.fromAddress(w)));
   }
 
   @override
@@ -380,9 +380,9 @@ class FfiMoneroBackend extends MoneroBackend {
   }
 
   @override
-  Future<void> setCaFilePath(NativeHandle wallet, String path) async {
+  Future<bool> setCaFilePath(NativeHandle wallet, String path) {
     final w = wallet.id;
-    await Isolate.run(() => monero.Wallet_setCaFilePath(Pointer.fromAddress(w), path));
+    return Isolate.run(() => monero.Wallet_setCaFilePath(Pointer.fromAddress(w), path));
   }
 
   @override

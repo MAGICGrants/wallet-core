@@ -937,15 +937,24 @@ class MoneroWallet extends CryptoWallet {
       return;
     }
 
-    if (Platform.isAndroid) {
-      // Android's system CA store isn't visible to the bundled OpenSSL.
-      final cacert = await getCacertFile();
-      await _backend.setCaFilePath(wallet, cacert.path);
-    }
-
     // There is no user SSL toggle: a routable clearnet host is forced to https; a
     // local or onion host, already confidential without TLS, stays http.
     final useSsl = _addressRequiresSsl(address);
+
+    // TLS is verified against the bundled CA set, in both modes and on every
+    // platform, so every platform trusts the same roots. Without the file the
+    // library would trust a different store on each (the Windows store, a
+    // distro's /etc/ssl, nothing at all on Android and iOS). A library that
+    // cannot take the file is refused rather than trusted.
+    if (useSsl) {
+      final caFile = await CaBundle.path();
+      if (!await _backend.setCaFilePath(wallet, caFile)) {
+        throw StateError(
+          'The Monero library did not accept the CA bundle at $caFile; '
+          'refusing a TLS connection it cannot verify.',
+        );
+      }
+    }
     final daemonAddress = '${useSsl ? 'https://' : 'http://'}$address';
     final proxyAddress = (proxyPort != null && proxyPort.isNotEmpty) ? '127.0.0.1:$proxyPort' : '';
 
@@ -968,7 +977,7 @@ class MoneroWallet extends CryptoWallet {
       useSsl: useSsl,
       lightWallet: !_isNodeMode,
     );
-    await _backend.connectToDaemon(wallet);
+    final connected = await _backend.connectToDaemon(wallet);
 
     // A full node also needs its background refresh thread started; LWS lets
     // the server scan.
@@ -979,8 +988,18 @@ class MoneroWallet extends CryptoWallet {
 
     _daemonInitialised = true;
 
+    // The library reports why a connect failed (a rejected certificate, a
+    // refused login) only through its error string, so a failed connect is
+    // always logged, with that reason when there is one.
     final error = await _backend.walletErrorString(wallet);
-    if (error.isNotEmpty) walletLog(LogLevel.warn, 'connectToDaemon error: $error');
+    if (!connected) {
+      walletLog(
+        LogLevel.warn,
+        'connectToDaemon failed: ${error.isEmpty ? 'no reason given by the library' : error}',
+      );
+    } else if (error.isNotEmpty) {
+      walletLog(LogLevel.warn, 'connectToDaemon error: $error');
+    }
   }
 
   @override
@@ -1005,31 +1024,48 @@ class MoneroWallet extends CryptoWallet {
 
     walletLog(LogLevel.info, 'Probing ${isNode ? 'node' : 'LWS'} (tor=$useTor)');
 
-    late int statusCode;
-    String body = '';
+    // The probe trusts the same CA set as the wallet's own connection, so it
+    // passes only for a server the wallet can then verify.
+    final securityContext = useSsl ? await CaBundle.securityContext() : null;
 
+    // Tor's proxy and a custom one both go through the SOCKS5 client, which
+    // hands the hostname to the proxy instead of resolving it here. HttpClient
+    // cannot use a SOCKS proxy at all: `findProxy` accepts only `PROXY host:port`
+    // and `DIRECT`, and any other value throws before a connection is made. A
+    // custom proxy is dialled on 127.0.0.1, as the wallet's own connection does,
+    // so the probe checks the proxy the wallet will actually use.
+    ({InternetAddress host, int port})? proxyInfo;
     if (useTor) {
       final torSettings = TorSettingsService.sharedInstance;
       if (torSettings.torMode == TorMode.disabled) {
         throw Exception('Tor is disabled. Please go back and enable it.');
       }
-      final proxyInfo = await torSettings.getProxy();
+      proxyInfo = await torSettings.getProxy();
       if (proxyInfo == null) throw Exception('Could not resolve a Tor proxy.');
+    } else if (proxyPort != null && proxyPort.isNotEmpty) {
+      // Refused rather than ignored: probing directly would show the server the
+      // IP address the user configured a proxy to hide.
+      final port = int.tryParse(proxyPort);
+      if (port == null) throw Exception('The proxy port "$proxyPort" is not a number.');
+      proxyInfo = (host: InternetAddress.loopbackIPv4, port: port);
+    }
 
+    late int statusCode;
+    String body = '';
+
+    if (proxyInfo != null) {
       final response = await makeSocksHttpRequest(
         isNode ? 'GET' : 'POST',
         url,
         proxyInfo,
         maxBytes: maxProbeResponseBytes,
         timeout: const Duration(seconds: 20),
+        securityContext: securityContext,
       );
       statusCode = response.statusCode;
       body = response.body;
     } else {
-      final client = HttpClient();
-      if (proxyPort != null && proxyPort.isNotEmpty) {
-        client.findProxy = (_) => 'SOCKS localhost:$proxyPort';
-      }
+      final client = HttpClient(context: securityContext);
       try {
         final request = isNode
             ? await client.getUrl(Uri.parse(url))
@@ -1909,6 +1945,7 @@ class MoneroWallet extends CryptoWallet {
             body: body,
             maxBytes: maxProbeResponseBytes,
             timeout: const Duration(seconds: 20),
+            securityContext: url.scheme == 'https' ? await CaBundle.securityContext() : null,
           );
           httpStatus = response.statusCode;
         } else {
@@ -1936,7 +1973,11 @@ class MoneroWallet extends CryptoWallet {
   Future<int> Function(Uri url, String body) postJson = _postJson;
 
   static Future<int> _postJson(Uri url, String body) async {
-    final client = HttpClient();
+    // The request carries the view key, so it trusts the same CA set as the
+    // wallet's own connection to this server.
+    final client = HttpClient(
+      context: url.scheme == 'https' ? await CaBundle.securityContext() : null,
+    );
     try {
       final request = await client.postUrl(url);
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');

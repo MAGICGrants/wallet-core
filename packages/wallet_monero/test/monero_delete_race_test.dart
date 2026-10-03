@@ -32,6 +32,8 @@ void main() {
     SharedPreferencesService.store = MemoryPreferenceStore();
     WalletSecrets.store = MemorySecretStore();
     WalletAppConfig.install(WalletAppConfig.skylight, directories: FixedDirectories(tmp));
+    // Stands in for the packaged CA bundle, which needs a Flutter binding to load.
+    useTestCaBundle();
     backend = FakeMoneroBackend();
     wallet = MoneroWallet(backend: backend);
   });
@@ -39,6 +41,7 @@ void main() {
   tearDown(() {
     wallet.dispose();
     WalletAppConfig.resetForTesting();
+    CaBundle.resetForTesting();
     SharedPreferencesService.resetForTesting();
     WalletSecrets.resetForTesting();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);

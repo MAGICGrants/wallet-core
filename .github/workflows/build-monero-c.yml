@@ -326,6 +326,19 @@ jobs:
           name: x86_64-w64-mingw32
           path: artifacts/x86_64-w64-mingw32
 
+      # A library whose OpenSSL defaults to a path under the build tree (in
+      # /tmp) would trust whatever CA another local user puts there.
+      - name: OpenSSL reads nothing from the build host
+        run: |
+          bash core/scripts/check-moneroc-openssldir.sh \
+            artifacts/x86_64-linux-gnu/monero_libwallet2_api_c.so \
+            artifacts/x86_64-linux-android/libmonero_libwallet2_api_c.so \
+            artifacts/aarch64-linux-android/libmonero_libwallet2_api_c.so \
+            artifacts/armv7a-linux-androideabi/libmonero_libwallet2_api_c.so \
+            artifacts/x86_64-w64-mingw32/monero_libwallet2_api_c.dll \
+            artifacts/MoneroWallet.xcframework/ios-arm64/MoneroWallet.framework/MoneroWallet \
+            artifacts/MoneroWallet.xcframework/ios-arm64-simulator/MoneroWallet.framework/MoneroWallet
+
       - name: Place libraries into ${{ matrix.repo }}
         run: |
           cp artifacts/x86_64-linux-gnu/monero_libwallet2_api_c.so app/linux/monero_libwallet2_api_c.so

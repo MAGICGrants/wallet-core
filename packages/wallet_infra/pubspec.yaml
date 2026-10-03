@@ -39,3 +39,9 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+flutter:
+  assets:
+    # Mozilla's CA set (curl.se/docs/caextract.html). The only trust store for
+    # TLS to a Monero server; see lib/src/net/cacert.dart.
+    - assets/cacert.pem
