@@ -833,6 +833,10 @@ class MoneroWallet extends CryptoWallet {
     final wallet = _wallet;
     final manager = _manager;
     if (wallet == null || manager == null) return;
+    // Nothing else waits for the daemon-height fetch, and freeing the handle
+    // while it is inside its native call is a use-after-free.
+    final fetch = _daemonHeightFetch;
+    if (fetch != null) await fetch;
     await _backend.closeWallet(manager, wallet, store: false);
     _wallet = null;
     _history = null;
@@ -915,7 +919,13 @@ class MoneroWallet extends CryptoWallet {
     final wallet = _wallet;
     final manager = _manager;
     if (wallet != null && manager != null) {
-      unawaited(_backend.closeWallet(manager, wallet, store: false));
+      // After the daemon-height fetch, for the reason in [_closeOpenWallet].
+      final fetch = _daemonHeightFetch;
+      unawaited(
+        fetch == null
+            ? _backend.closeWallet(manager, wallet, store: false)
+            : fetch.then((_) => _backend.closeWallet(manager, wallet, store: false)),
+      );
       _wallet = null;
       _history = null;
       // Cleared with the wallet, not left dangling. Skylight's

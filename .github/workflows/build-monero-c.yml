@@ -167,7 +167,8 @@ jobs:
           git clone https://github.com/magicgrants/monero_c.git /tmp/monero_c
           cd /tmp/monero_c
           git checkout "$MONEROC_COMMIT"
-          git submodule update --init --recursive
+          # Only the submodules a Monero build uses; see scripts/build-moneroc.sh.
+          git submodule update --init --recursive -- monero lwsf
           export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
           export GIT_COMMITTER_DATE="@$SOURCE_DATE_EPOCH"
           ./apply_patches.sh monero

@@ -378,20 +378,23 @@ Future<void> _expectWalletConnectVerifies(TlsMode mode, Directory dir) async {
   String warnings() =>
       logs.records.where((r) => r.level == LogLevel.warn).map((r) => r.line).join(' | ');
   final wallet = MoneroWallet();
+  void reachThrough(SocksTestProxy proxy) => wallet.setConnection(
+    address: address,
+    proxyPort: '${proxy.port}',
+    useTor: false,
+    connectionType: mode.name,
+  );
   try {
-    wallet.setConnection(
-      address: address,
-      proxyPort: '${toGood.port}',
-      useTor: false,
-      connectionType: mode.name,
-    );
+    reachThrough(toGood);
     await wallet.restoreFromSeed(
       seed: PolyseedSeed(_freshSeed()),
       from: const RestorePoint.newWallet(),
       password: 'tls-test',
     );
 
-    await wallet.connectToDaemonImpl(address: address, proxyPort: '${toGood.port}');
+    // Connects the way the app does: one connect at a time, alongside the
+    // wallet's own timers, which reconnect on their own.
+    await wallet.connectToDaemon();
     _expect(
       good.handshakes > 0 && good.requests.isNotEmpty,
       'the wallet must verify a server against the CA bundle and connect. '
@@ -399,15 +402,18 @@ Future<void> _expectWalletConnectVerifies(TlsMode mode, Directory dir) async {
       'wallet log: ${warnings()}',
     );
 
-    await wallet.connectToDaemonImpl(address: address, proxyPort: '${toUntrusted.port}');
+    reachThrough(toUntrusted);
+    await wallet.connectToDaemon();
     _expect(
       untrusted.handshakes == 0 && untrusted.requests.isEmpty,
       'the wallet must reject a server outside the CA bundle. '
       'server: ${untrusted.handshakes} handshakes, ${untrusted.requests.length} requests',
     );
   } finally {
-    // Closes the native wallet before its directory goes away.
-    await wallet.deleteFiles();
+    // Deletes the way the app does, which holds the timers off and waits for
+    // any native call still running on the wallet before freeing it, and
+    // before its directory goes away.
+    await wallet.delete();
     wallet.dispose();
     WalletAppConfig.resetForTesting();
     CaBundle.resetForTesting();

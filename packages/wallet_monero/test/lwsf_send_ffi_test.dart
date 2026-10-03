@@ -204,10 +204,7 @@ Future<void> _send(
   expect(await backend.pendingTxStatus(pending), 0);
   final fee = await backend.pendingTxFee(pending);
   final reportedAmount = await backend.pendingTxAmount(pending);
-  final txid = await Isolate.run(() {
-    if (libPath != null && libPath.isNotEmpty) monero.libPath = libPath;
-    return monero.PendingTransaction_txid(ffi.Pointer.fromAddress(pending.id), '');
-  });
+  final txid = await _pendingTxid(libPath, pending.id);
 
   expect(
     await backend.commitPendingTx(pending),
@@ -298,3 +295,12 @@ Future<void> _send(
   expect(entry.fee, fee);
   expect(entry.destinations, [(address: destination, amount: sent)]);
 }
+
+/// The id of the pending transaction at [pendingAddress], read in its own
+/// isolate. Outside [_send] on purpose: a closure created there carries that
+/// function's captured variables to the new isolate, the fake server among
+/// them, and a server cannot be sent.
+Future<String> _pendingTxid(String? libPath, int pendingAddress) => Isolate.run(() {
+  if (libPath != null && libPath.isNotEmpty) monero.libPath = libPath;
+  return monero.PendingTransaction_txid(ffi.Pointer.fromAddress(pendingAddress), '');
+});
