@@ -265,6 +265,12 @@ class EthereumChainWallet extends CryptoWallet {
   @override
   bool get storeTracksChainProgress => false;
 
+  /// The history is a local record map, so an empty read means there genuinely
+  /// are no txs (e.g. reconciliation removed a never-sent one) — clear the cached
+  /// list rather than keep a stale entry.
+  @override
+  bool get emptyTxHistoryIsAuthoritative => true;
+
   @override
   Future<bool> store() async {
     if (_mnemonic == null || _lastPassword == null) return false;
@@ -383,6 +389,44 @@ class EthereumChainWallet extends CryptoWallet {
         }
       } catch (e) {
         walletLog(LogLevel.warn, 'receipt ${Redact.id(r.hash)} failed: ${e.runtimeType}');
+      }
+    }
+
+    await _reconcileUnresolved();
+  }
+
+  /// Removes an unresolved (lost-reply) send once the account's mined nonce has
+  /// passed its nonce without it being mined: a different transaction took the
+  /// slot, so this one never landed. Dropped from history rather than kept, since
+  /// nothing happened on chain. Only acts on an explicit "no receipt" so a
+  /// transient receipt-fetch error can never discard a tx that is actually mined.
+  Future<void> _reconcileUnresolved() async {
+    final candidates = _txRecords.values
+        .where((r) => r.blockNumber == 0 && r.broadcastUnresolved && r.nonce != null)
+        .toList();
+    if (candidates.isEmpty || _address == null) return;
+
+    final int minedNonce;
+    try {
+      minedNonce = await _rpc.getTransactionCount(_address!, pending: false);
+    } catch (e) {
+      walletLog(LogLevel.warn, 'reconcile nonce fetch failed: ${e.runtimeType}');
+      return;
+    }
+
+    for (final r in candidates) {
+      if (minedNonce <= r.nonce!) continue; // slot not mined yet; still genuinely unknown
+      try {
+        final receipt = await _rpc.getTransactionReceipt(r.hash);
+        if (receipt == null) {
+          _txRecords.remove(r.hash);
+          walletLog(
+            LogLevel.info,
+            'removed unresolved tx superseded at its nonce (never sent): ${Redact.id(r.hash)}',
+          );
+        }
+      } catch (e) {
+        walletLog(LogLevel.warn, 'reconcile receipt check failed: ${e.runtimeType}');
       }
     }
   }
@@ -731,6 +775,7 @@ class EthereumChainWallet extends CryptoWallet {
       to: destinationAddress,
       chainId: _chainId,
       tokenContractAddress: ownTokenContract,
+      nonce: inputs.nonce,
     );
   }
 
@@ -760,14 +805,59 @@ class EthereumChainWallet extends CryptoWallet {
     if (tx.to.toLowerCase() != destinationAddress.toLowerCase()) {
       throw ArgumentError('pending tx destination does not match the confirmed address');
     }
-    final hash = await _rpc.sendRawTransaction(tx.rawHex);
-    // `tx.txHash` is keccak256 over the exact bytes being broadcast, so the node
-    // has no say in what this transaction is called. A disagreement means it did
-    // not relay what we handed it; different nonce, different fee, different
-    // payload, and the tx we are about to record is not the tx that is now in
-    // the mempool. Recorded as unresolved rather than trusted or discarded: the
-    // signed bytes are out, and pretending otherwise in either direction is
-    // worse than saying we do not know.
+
+    final String hash;
+    try {
+      hash = await _rpc.sendRawTransaction(tx.rawHex);
+    } on EthereumRpcException catch (e) {
+      if (e.fromNode && _isAlreadyKnown(e.message)) {
+        // Our exact bytes are already in the node's pool (a retry after a lost
+        // first reply lands here). The transaction *is* in the network, so this
+        // is success, not a failure: record it and advance the nonce.
+        walletLog(LogLevel.info, 'broadcast: node already had the transaction');
+        _recordOutgoing(tx, unresolved: false);
+        _feeInputs = null;
+        await _safePostBroadcastRefresh();
+        return;
+      }
+      if (e.fromNode) {
+        // The node refused it: nothing moved, the inputs and nonce are untouched,
+        // so the cached fee inputs (nonce) are deliberately kept. (A retry after
+        // a lost reply can arrive here as "nonce too low", which actually means
+        // the first attempt is in the network; the unresolved record and the
+        // app's "check history" message are what cover that case.)
+        walletLog(LogLevel.warn, 'broadcast rejected by node');
+        throw const BroadcastFailure(
+          BroadcastOutcome.rejected,
+          detail: 'the node refused the transaction',
+        );
+      }
+      // The node gave no usable answer (malformed / non-JSON): treat as unknown.
+      walletLog(LogLevel.warn, 'broadcast: no usable reply from node');
+      await _recordUnknownAndRefresh(tx);
+      throw const BroadcastFailure(BroadcastOutcome.unknown, detail: _lostReplyDetail);
+    } on RequestNotSentException {
+      // Nothing was transmitted (no connection, no Tor circuit): the tx did not go
+      // out, the nonce is untouched, and there is nothing to record. An ordinary
+      // connectivity failure — rethrow so the app shows it and the sheet stays open
+      // for a safe retry.
+      walletLog(LogLevel.warn, 'broadcast not sent: could not reach the node');
+      rethrow;
+    } catch (e) {
+      if (e is BroadcastFailure) rethrow;
+      // A transport failure: a dropped socket, a timeout, a refused channel. The
+      // bytes may or may not have gone out, so this must not be guessed. Record
+      // it unresolved, keep the cached nonce so a retry reuses this slot rather
+      // than queueing a second payment behind it, and report unknown.
+      walletLog(LogLevel.warn, 'broadcast transport failure: ${e.runtimeType}');
+      await _recordUnknownAndRefresh(tx);
+      throw const BroadcastFailure(BroadcastOutcome.unknown, detail: _lostReplyDetail);
+    }
+
+    // A hash came back. `tx.txHash` is keccak256 over the exact bytes broadcast,
+    // so the node has no say in what this transaction is called. A disagreement
+    // means it did not relay what we handed it; the tx in the mempool is not the
+    // one we recorded, so it is unresolved rather than trusted.
     final agreed = hash.toLowerCase() == tx.txHash.toLowerCase();
     if (!agreed) {
       walletLog(
@@ -780,6 +870,21 @@ class EthereumChainWallet extends CryptoWallet {
     }
     _feeInputs = null; // nonce advanced; force a fresh fetch next time
 
+    _recordOutgoing(tx, unresolved: !agreed);
+    await _safePostBroadcastRefresh();
+
+    if (!agreed) {
+      throw const BroadcastFailure(
+        BroadcastOutcome.unknown,
+        detail: 'the node reported a different transaction hash than the one signed',
+      );
+    }
+  }
+
+  /// Records an outgoing send keyed on our own hash. [unresolved] marks a
+  /// broadcast we never saw accepted (lost reply or hash mismatch), which
+  /// [readTxHistory] surfaces as [TxStatus.unknown].
+  void _recordOutgoing(EthereumPendingTx tx, {required bool unresolved}) {
     _txRecords[tx.txHash] = _EthTxRecord(
       hash: tx.txHash,
       direction: txDirectionOutgoing,
@@ -789,25 +894,47 @@ class EthereumChainWallet extends CryptoWallet {
       blockNumber: 0,
       status: -1,
       timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      broadcastUnresolved: !agreed,
+      broadcastUnresolved: unresolved,
+      nonce: tx.nonce,
     );
+  }
 
+  /// Records a lost-reply broadcast *without* clearing [_feeInputs] — the nonce is
+  /// kept so a retry reuses this transaction's slot instead of queueing a second,
+  /// separate payment after it — then refreshes the history so the unresolved tx
+  /// is visible.
+  Future<void> _recordUnknownAndRefresh(EthereumPendingTx tx) async {
+    _recordOutgoing(tx, unresolved: true);
+    await _safePostBroadcastRefresh();
+  }
+
+  /// Post-broadcast sync, isolated so it can never turn a committed send into a
+  /// thrown failure: the bytes are out and the record is written whatever a later
+  /// refresh does. refresh and the history load are guarded separately so a dead
+  /// connection (the common case on an unresolved broadcast) still surfaces the
+  /// recorded transaction.
+  Future<void> _safePostBroadcastRefresh() async {
     try {
       await refresh();
-      await loadTxHistory();
     } catch (e) {
       walletLog(LogLevel.warn, 'post-broadcast refresh failed: ${e.runtimeType}');
     }
-
-    // Last, so the record above and the refresh have both happened: the caller
-    // needs to know the outcome is unresolved, and the wallet still needs the
-    // transaction in its history while that is true.
-    if (!agreed) {
-      throw const BroadcastFailure(
-        BroadcastOutcome.unknown,
-        detail: 'the node reported a different transaction hash than the one signed',
-      );
+    try {
+      await loadTxHistory();
+    } catch (e) {
+      walletLog(LogLevel.warn, 'post-broadcast history load failed: ${e.runtimeType}');
     }
+  }
+
+  static const String _lostReplyDetail =
+      'the broadcast reply was lost; the transaction may or may not be in the network';
+
+  static bool _isAlreadyKnown(String message) {
+    final m = message.toLowerCase();
+    return m.contains('already known') ||
+        m.contains('already exists') ||
+        m.contains('alreadyknown') ||
+        m.contains('known transaction');
   }
 
   // ----- Snapshot persistence -----
@@ -840,7 +967,11 @@ class EthereumChainWallet extends CryptoWallet {
       for (final t in txs) {
         if (t is! Map<dynamic, dynamic>) continue;
         final r = _EthTxRecord.fromJson(t.cast<String, dynamic>());
-        if (r != null) _txRecords[r.hash] = r;
+        if (r == null) continue;
+        // A failed tx is a receipt verdict, so it always has a block. A "failed"
+        // record with no block is impossible state — drop it on load.
+        if (r.status == 0 && r.blockNumber == 0) continue;
+        _txRecords[r.hash] = r;
       }
     } catch (e) {
       // A FormatException from jsonDecode carries a snippet of its source.
@@ -863,11 +994,17 @@ class _EthTxRecord {
     required this.status,
     required this.timestamp,
     this.broadcastUnresolved = false,
+    this.nonce,
   });
 
   final String hash;
   final int direction;
   final String to;
+
+  /// Account nonce this tx was signed at (outgoing only); null for incoming or
+  /// records written before this field existed. Used to reconcile a lost-reply
+  /// send once its nonce is mined by a different tx.
+  final int? nonce;
 
   /// Base units: wei for a native transfer, raw token units for an ERC-20 one.
   final BigInt valueWei;
@@ -900,6 +1037,7 @@ class _EthTxRecord {
     'ts': timestamp,
     // Omitted in the common case, so an older reader sees the same bytes.
     if (broadcastUnresolved) 'unresolved': true,
+    if (nonce != null) 'nonce': nonce,
   };
 
   static _EthTxRecord? fromJson(Map<String, dynamic> j) {
@@ -915,6 +1053,7 @@ class _EthTxRecord {
       status: (j['status'] as num?)?.toInt() ?? -1,
       timestamp: (j['ts'] as num?)?.toInt() ?? 0,
       broadcastUnresolved: j['unresolved'] == true,
+      nonce: (j['nonce'] as num?)?.toInt(),
     );
   }
 }

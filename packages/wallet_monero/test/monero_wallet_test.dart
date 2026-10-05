@@ -734,19 +734,81 @@ void main() {
           as MoneroPendingTransaction;
     }
 
-    test('a failed broadcast with an empty errorString still throws', () async {
-      // The bug this closes: a broadcast can fail without setting errorString,
-      // and reporting it as sent is the worst possible outcome.
+    test('a failed broadcast with no error reason is unknown, not a flat failure', () async {
+      // A broadcast can fail without setting errorString; with no reason the tx
+      // may or may not be out, so it is unknown — never silently "sent", never a
+      // flat failure that invites a retry.
       final tx = await pending();
       backend.commitResult = false;
-      expect(wallet.commitTx(tx, '4${'A' * 94}'), throwsA(isA<FormatException>()));
+      await expectLater(
+        wallet.commitTx(tx, '4${'A' * 94}'),
+        throwsA(
+          isA<BroadcastFailure>().having((e) => e.outcome, 'outcome', BroadcastOutcome.unknown),
+        ),
+      );
     });
 
-    test('a non-zero status throws even when commit returned true', () async {
+    test('a non-zero status with no reason is unknown', () async {
       final tx = await pending();
       backend.commitResult = true;
       backend.pendingStatus = 2;
-      expect(wallet.commitTx(tx, '4${'A' * 94}'), throwsA(isA<FormatException>()));
+      await expectLater(
+        wallet.commitTx(tx, '4${'A' * 94}'),
+        throwsA(
+          isA<BroadcastFailure>().having((e) => e.outcome, 'outcome', BroadcastOutcome.unknown),
+        ),
+      );
+    });
+
+    test('a lost-connection error is unknown', () async {
+      final tx = await pending();
+      backend.commitResult = false;
+      backend.pendingError = 'no connection to daemon';
+      await expectLater(
+        wallet.commitTx(tx, '4${'A' * 94}'),
+        throwsA(
+          isA<BroadcastFailure>().having((e) => e.outcome, 'outcome', BroadcastOutcome.unknown),
+        ),
+      );
+    });
+
+    test('a connection that never opened (DNS failure) is not-sent, not unknown', () async {
+      // The socket never opened, so nothing was transmitted: a plain network error
+      // the user can safely retry, not an ambiguous unknown.
+      final tx = await pending();
+      backend.commitResult = false;
+      backend.pendingError = 'host not found (authoritative)';
+      await expectLater(
+        wallet.commitTx(tx, '4${'A' * 94}'),
+        throwsA(isA<RequestNotSentException>()),
+      );
+    });
+
+    test('a timeout stays unknown (could be mid-send), not not-sent', () async {
+      // A timeout may have reached the daemon, so it must not read as "not sent".
+      final tx = await pending();
+      backend.commitResult = false;
+      backend.pendingError = 'operation timed out';
+      await expectLater(
+        wallet.commitTx(tx, '4${'A' * 94}'),
+        throwsA(
+          isA<BroadcastFailure>().having((e) => e.outcome, 'outcome', BroadcastOutcome.unknown),
+        ),
+      );
+    });
+
+    test('a daemon rejection keeps its message so the user can act on it', () async {
+      // Nothing moved; the daemon gave a reason. Surface it (not an opaque
+      // unknown) and let the user fix and retry.
+      final tx = await pending();
+      backend.commitResult = false;
+      backend.pendingError = 'double spend detected';
+      await expectLater(
+        wallet.commitTx(tx, '4${'A' * 94}'),
+        throwsA(
+          isA<FormatException>().having((e) => e.message, 'message', contains('double spend')),
+        ),
+      );
     });
 
     test('a clean commit succeeds and persists', () async {
@@ -754,6 +816,14 @@ void main() {
       await wallet.commitTx(tx, '4${'A' * 94}');
       expect(backend.called('commitPendingTx'), isTrue);
       expect(backend.called('store'), isTrue, reason: 'unconfirmed tx must survive a restart');
+    });
+
+    test('a post-broadcast bookkeeping failure does not fail the send', () async {
+      // The tx is already in the network; a store/sync error afterwards must not
+      // read as "not sent" and invite a double-send.
+      final tx = await pending();
+      backend.storeThrows = true;
+      await expectLater(wallet.commitTx(tx, '4${'A' * 94}'), completes);
     });
   });
 

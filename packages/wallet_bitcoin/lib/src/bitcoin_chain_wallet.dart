@@ -1711,11 +1711,11 @@ class BitcoinChainWallet extends CryptoWallet {
       await refresh();
       await loadTxHistory();
     } catch (e) {
-      if (isElectrumDisconnectError(e)) {
-        walletLog(LogLevel.warn, 'post-broadcast sync skipped: connection lost');
-      } else {
-        rethrow;
-      }
+      // The transaction is already recorded and classified; a post-broadcast sync
+      // failure (a disconnect, a timeout, anything) must not turn an accepted
+      // broadcast into a thrown failure that reads as "not sent" and invites a
+      // double-send. Swallow it and let the next sync settle the record.
+      walletLog(LogLevel.warn, 'post-broadcast sync failed: ${e.runtimeType}');
     }
 
     // Reported last, deliberately, so the record and the UTXO invalidation above

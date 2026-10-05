@@ -16,9 +16,15 @@ class EthReceipt {
 }
 
 class EthereumRpcException implements Exception {
-  EthereumRpcException(this.message);
+  EthereumRpcException(this.message, {this.fromNode = false});
 
   final String message;
+
+  /// True when this carries a JSON-RPC `error` the node returned — the node saw
+  /// the request and refused it. False for transport or parse failures, where no
+  /// usable answer came back and a broadcast's fate is therefore unknown. See
+  /// `EthereumChainWallet.commitTx`.
+  final bool fromNode;
 
   @override
   String toString() => 'EthereumRpcException: $message';
@@ -49,7 +55,9 @@ abstract class EthereumRpcApi {
   Future<BigInt> getBalance(String address);
 
   /// Nonce including pending transactions, so two sends in a row don't collide.
-  Future<int> getTransactionCount(String address);
+  /// Account nonce. [pending] true counts the mempool (the next nonce to sign at);
+  /// false counts only mined txs (used to reconcile a lost-reply send).
+  Future<int> getTransactionCount(String address, {bool pending = true});
 
   /// Base fee of the latest block (EIP-1559). Zero on a pre-1559 chain.
   Future<BigInt> baseFeePerGas();

@@ -184,6 +184,7 @@ class Erc20ChainWallet extends EthereumChainWallet {
       to: destinationAddress,
       chainId: chainId,
       tokenContractAddress: ownTokenContract,
+      nonce: inputs.nonce,
     );
   }
 

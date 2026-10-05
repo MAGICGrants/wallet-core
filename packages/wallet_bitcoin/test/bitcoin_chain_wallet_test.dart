@@ -840,6 +840,22 @@ void main() {
       await expectLater(wallet.createTx(_theirs, BigInt.from(50000), false), completes);
     });
 
+    test('an accepted broadcast survives a post-broadcast sync failure', () async {
+      // The broadcast was accepted; a later refresh error (a timeout, not a
+      // disconnect) must not turn the send into a thrown failure that reads as
+      // "not sent" and invites a double-send.
+      await fundedWallet();
+      final tx = await wallet.createTx(_theirs, BigInt.from(50000), false);
+      final txid = computeTxid((tx as BitcoinPendingTx).rawHex);
+      fake.failing['blockchain.scripthash.get_history'] = StateError('read timed out');
+      fake.failing['blockchain.scripthash.listunspent'] = StateError('read timed out');
+
+      await expectLater(wallet.commitTx(tx, _theirs), completes);
+
+      final entry = wallet.readTxHistory().firstWhere((t) => t.hash == txid);
+      expect(entry.status, TxStatus.ok, reason: 'accepted, not retro-failed by a sync hiccup');
+    });
+
     test('an unresolved broadcast is recorded, flagged, and reported', () async {
       // The case that had no representation at all: the bytes went out and no
       // answer came back. Guessing either way is wrong; "rejected" invites a

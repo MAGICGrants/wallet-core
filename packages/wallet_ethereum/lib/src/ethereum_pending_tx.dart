@@ -11,12 +11,18 @@ class EthereumPendingTx implements PendingTransaction {
     required this.to,
     required this.chainId,
     required this.tokenContractAddress,
+    required this.nonce,
   });
 
   /// Origin identity, re-checked in `commitTx` so only the asset that signed
   /// these bytes can broadcast them.
   final int chainId;
   final String? tokenContractAddress;
+
+  /// Account nonce this transaction was signed at. Lets the wallet reconcile a
+  /// lost-reply send later: once the account's mined nonce passes this without
+  /// this tx being mined, a different tx took the slot and this one never landed.
+  final int nonce;
 
   /// Send value in base units; wei for a native transfer, raw token units for
   /// an ERC-20 one.

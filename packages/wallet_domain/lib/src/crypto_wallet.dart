@@ -1019,6 +1019,13 @@ abstract class CryptoWallet with ChangeNotifier {
     return out;
   }
 
+  /// Whether an empty [readTxHistory] should replace the cached list rather than
+  /// be ignored. False for network-derived histories (an empty sync is usually a
+  /// disconnect, not an emptied wallet); a coin whose history is a local record
+  /// set overrides this so a removed transaction actually disappears.
+  @protected
+  bool get emptyTxHistoryIsAuthoritative => false;
+
   Future<void> loadTxHistory({bool persistCount = true}) async {
     final previousLength = _txHistory.length;
     final newHistory = _withCarriedFields(readTxHistory());
@@ -1028,8 +1035,10 @@ abstract class CryptoWallet with ChangeNotifier {
 
     final hadGrowth = newHistory.length > previousLength;
 
-    // Keep the cached list when a sync returns nothing, e.g. not connected yet.
-    if (newHistory.isNotEmpty || previousLength == 0) {
+    // Keep the cached list when a sync returns nothing, e.g. not connected yet —
+    // unless this coin's history is a local record set, where an empty read is
+    // authoritative (a tx was removed) rather than a failed fetch.
+    if (newHistory.isNotEmpty || previousLength == 0 || emptyTxHistoryIsAuthoritative) {
       _txHistory = newHistory;
     }
 

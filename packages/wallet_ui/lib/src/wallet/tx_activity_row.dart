@@ -55,6 +55,15 @@ class TxActivityRow extends StatelessWidget {
     final date = DateTime.fromMillisecondsSinceEpoch(tx.timestamp * 1000);
     final amountColor = incoming ? BrandColors.success : BrandColors.ink;
 
+    // Leading status cue: a failed or unresolved send must not read as an
+    // ordinary pending. Null = nothing to flag (confirmed, or a healthy mempool
+    // tx shows the hourglass). The tx details sheet carries the full wording.
+    final (IconData, Color)? statusCue = switch (tx.status) {
+      TxStatus.failed => (Icons.error_outline_rounded, BrandColors.error),
+      TxStatus.unknown => (Icons.warning_rounded, BrandColors.warning),
+      TxStatus.ok => confirmed ? null : (Icons.hourglass_top_rounded, BrandColors.warning),
+    };
+
     return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -85,8 +94,8 @@ class TxActivityRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      if (!confirmed) ...[
-                        Icon(Icons.hourglass_top_rounded, size: 12, color: BrandColors.warning),
+                      if (statusCue != null) ...[
+                        Icon(statusCue.$1, size: 12, color: statusCue.$2),
                         const SizedBox(width: 4),
                       ],
                       Text(

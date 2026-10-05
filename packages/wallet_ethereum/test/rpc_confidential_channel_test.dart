@@ -51,4 +51,21 @@ void main() {
       expect(c.chainId(), throwsA(isNot(isA<InsecureChannelException>())));
     });
   });
+
+  group('a schemeless host picks a scheme by locality', () {
+    test('a routable host defaults to https', () {
+      expect((client()..configure(url: 'rpc.example.com')).url, 'https://rpc.example.com');
+    });
+
+    test('a local IP defaults to http so a local node is reachable', () {
+      expect((client()..configure(url: '10.0.2.2:8545')).url, 'http://10.0.2.2:8545');
+      expect((client()..configure(url: '127.0.0.1:8545')).url, 'http://127.0.0.1:8545');
+      expect((client()..configure(url: '192.168.1.5:8545')).url, 'http://192.168.1.5:8545');
+    });
+
+    test('an explicit scheme is always honoured', () {
+      expect((client()..configure(url: 'https://10.0.2.2:8545')).url, 'https://10.0.2.2:8545');
+      expect((client()..configure(url: 'http://rpc.example.com')).url, 'http://rpc.example.com');
+    });
+  });
 }

@@ -479,9 +479,13 @@ class FakeMoneroBackend extends MoneroBackend {
   Future<void> setAutoRefreshInterval(NativeHandle wallet, int millis) async =>
       _record('setAutoRefreshInterval');
 
+  /// When true, [store] throws — to exercise post-broadcast bookkeeping failures.
+  bool storeThrows = false;
+
   @override
   Future<bool> store(NativeHandle wallet) async {
     _record('store');
+    if (storeThrows) throw Exception('fake store failure');
     return true;
   }
 

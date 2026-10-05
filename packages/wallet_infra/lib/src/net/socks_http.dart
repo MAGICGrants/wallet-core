@@ -5,6 +5,19 @@ import '../logging.dart';
 import 'bounded_reader.dart';
 import 'socks_socket.dart';
 
+/// Thrown when a request could not be transmitted at all — the connection or Tor
+/// circuit failed before any bytes were sent. Distinct from a lost reply: the
+/// server never saw the request, so a broadcast built on it definitely did not go
+/// out and is safe to retry. See `EthereumChainWallet.commitTx`.
+class RequestNotSentException implements Exception {
+  const RequestNotSentException([this.cause]);
+
+  final Object? cause;
+
+  @override
+  String toString() => 'RequestNotSentException${cause == null ? '' : ': $cause'}';
+}
+
 class ParsedHttpResponse {
   final String httpVersion;
   final int statusCode;
@@ -158,8 +171,16 @@ Future<ParsedHttpResponse> makeSocksHttpRequest(
   );
 
   try {
-    await socket.connect();
-    await socket.connectTo(uri.host, uri.port);
+    // Connect phase: a failure here (no proxy, no Tor circuit, no route) means
+    // nothing was ever sent. Flagged distinctly so a caller can tell "never left"
+    // from "sent, no reply" — the difference between a safe retry and a possible
+    // double-send.
+    try {
+      await socket.connect();
+      await socket.connectTo(uri.host, uri.port);
+    } catch (e) {
+      throw RequestNotSentException(e);
+    }
 
     final rawRequest = getRawHttpRequestString(method, url, jsonBody: body);
     // Full-body framing (Content-Length/chunked/EOF). `send` alone stops at the

@@ -1725,43 +1725,79 @@ class MoneroWallet extends CryptoWallet {
     final committed = await _backend.commitPendingTx(pending.handle);
     final status = await _backend.pendingTxStatus(pending.handle);
     final error = await _backend.pendingTxErrorString(pending.handle);
+    final cleanError = error == 'Schema expected string' ? '' : error;
 
-    if (error.isNotEmpty && error != 'Schema expected string') {
-      walletLog(LogLevel.error, 'commit error: $error');
-      throw FormatException(error);
-    }
-
-    // A broadcast can fail without setting errorString, so success is gated on
-    // the commit result and status too; otherwise a send that never happened
-    // is reported as done. Both apps have this fix; it is not optional.
-    if (!committed || status != 0) {
+    // Gated on commit result and status too: a broadcast can fail with an empty
+    // errorString, and reporting that as sent is the worst outcome.
+    final failed = !committed || status != 0 || cleanError.isNotEmpty;
+    if (failed) {
       walletLog(LogLevel.error, 'commit failed: result=$committed status=$status');
-      throw const FormatException('Failed to broadcast transaction.');
+      if (_isDefiniteDaemonRejection(cleanError)) {
+        throw FormatException(cleanError); // nothing moved; keep the reason
+      }
+      if (_isConnectionNeverEstablished(cleanError)) {
+        throw const RequestNotSentException(); // nothing sent; safe to retry
+      }
+      throw const BroadcastFailure(
+        BroadcastOutcome.unknown,
+        detail: 'the broadcast was not confirmed; the transaction may or may not be in the network',
+      );
     }
 
-    // The wallet just gained a transaction key that did not exist a moment ago,
-    // and any negative entry for this hash; recorded before the send, or by a
-    // read that raced it; would now be wrong and permanent. The key is what
-    // proves this payment to its recipient, so the cache is dropped rather than
-    // patched.
+    // The new transaction key must survive, and any stale negative cache entry
+    // for this hash would now be wrong, so drop the cache.
     _txKeyCache.clear();
 
-    await refresh();
-    // Persist so the just-sent unconfirmed tx; held in the wallet's cache, not
-    // on chain yet; survives a restart before it is mined.
-    await store();
-    await Future.wait([loadTotalBalance(), loadUnlockedBalance()]);
-    await loadTxHistory();
+    // Best-effort: the tx is already out, so a sync/store failure here must not
+    // turn a successful send into a thrown failure.
+    try {
+      await refresh();
+      await store();
+      await Future.wait([loadTotalBalance(), loadUnlockedBalance()]);
+      await loadTxHistory();
+      await persistWalletSnapshot();
+      await persistCache();
+    } catch (e) {
+      walletLog(LogLevel.warn, 'post-broadcast bookkeeping failed: ${e.runtimeType}');
+    }
     notifyListeners();
-    // Refresh the encrypted display snapshot too, so the pending transaction and
-    // the reduced balance are on screen the moment the app reopens rather than
-    // after the next sync.
-    //
-    // `persistWalletSnapshot()` only marks the cache dirty, so it would depend
-    // on surviving until the next `loadAllStats`, which an app killed right
-    // after a send does not. Flushed here, next to the `store()` above.
-    await persistWalletSnapshot();
-    await persistCache();
+  }
+
+  /// A *definite* daemon rejection (nothing moved). An allowlist, not a denylist:
+  /// anything unrecognised falls through to unknown, the safe default.
+  static bool _isDefiniteDaemonRejection(String error) {
+    if (error.isEmpty) return false;
+    final e = error.toLowerCase();
+    return e.contains('double spend') ||
+        e.contains('double-spend') ||
+        e.contains('not possible') ||
+        e.contains('too big') ||
+        e.contains('too large') ||
+        e.contains('ring size') ||
+        e.contains('mixin') ||
+        e.contains('overspend') ||
+        e.contains('fee too low') ||
+        e.contains('rejected');
+  }
+
+  /// The connection never opened, so nothing was transmitted (safe to retry).
+  /// Narrow on purpose: a timeout or dropped connection could be mid-send, so
+  /// those stay unknown rather than risk a double-send.
+  static bool _isConnectionNeverEstablished(String error) {
+    if (error.isEmpty) return false;
+    final e = error.toLowerCase();
+    return e.contains('host not found') ||
+        e.contains('could not resolve') ||
+        e.contains('name not resolved') ||
+        e.contains('name or service not known') ||
+        e.contains('nodename nor servname') ||
+        e.contains('no address associated') ||
+        e.contains('connection refused') ||
+        e.contains('could not connect') ||
+        e.contains("couldn't connect") ||
+        e.contains('failed to connect') ||
+        e.contains('no route to host') ||
+        e.contains('network is unreachable');
   }
 
   // ----- Subaddresses -----
