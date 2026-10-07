@@ -412,6 +412,10 @@ class FakeMoneroBackend extends MoneroBackend {
   /// Written by [setupBackgroundSync] and readable by a test directly.
   final Set<String> backgroundWalletPaths = {};
 
+  /// When set, `off` is treated as `CustomPassword` — models an unfixed wrapper
+  /// that leaves the cache configured while returning success.
+  bool ignoreOffType = false;
+
   @override
   Future<bool> setupBackgroundSync(
     NativeHandle wallet, {
@@ -426,9 +430,15 @@ class FakeMoneroBackend extends MoneroBackend {
       cachePassword: backgroundCachePassword,
     ));
 
+    // What the backend actually applies — the caller's type, unless modelling
+    // the wrapper that discards `off`.
+    final effectiveType = (ignoreOffType && type == MoneroBackgroundSyncType.off)
+        ? MoneroBackgroundSyncType.customPassword
+        : type;
+
     // wallet2 throws on this rather than returning false, so the fake refuses
     // it too; a caller that reuses the wallet password has built nothing.
-    if (type == MoneroBackgroundSyncType.customPassword &&
+    if (effectiveType == MoneroBackgroundSyncType.customPassword &&
         walletPassword == backgroundCachePassword) {
       errorStrings[wallet.id] = 'background sync password is the wallet password';
       return false;
@@ -438,9 +448,9 @@ class FakeMoneroBackend extends MoneroBackend {
     // background wallet finds a file where wallet2 would have put one.
     final path = _pathForWallet[wallet.id];
     if (path != null) {
-      backgroundSyncTypes[path] = type;
+      backgroundSyncTypes[path] = effectiveType;
       final backgroundPath = '$path.background';
-      if (type == MoneroBackgroundSyncType.customPassword) {
+      if (effectiveType == MoneroBackgroundSyncType.customPassword) {
         existingWalletPaths.add(backgroundPath);
         backgroundWalletPaths.add(backgroundPath);
       } else {

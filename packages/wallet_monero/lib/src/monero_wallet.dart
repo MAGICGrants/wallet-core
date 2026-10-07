@@ -502,23 +502,27 @@ class MoneroWallet extends CryptoWallet {
   }
 
   Future<void> _tearDownBackgroundSync(NativeHandle wallet, String walletPassword) async {
-    // `Off` makes wallet2 delete the background wallet, keys and address files
-    // and rewrite the main keys file without the derived background key, which
-    // is also what stops every later `store()` writing a second cache.
+    // `Off` deletes the background files and rewrites the main keys without the
+    // background key.
     final ok = await _backend.setupBackgroundSync(
       wallet,
       type: MoneroBackgroundSyncType.off,
       walletPassword: walletPassword,
-      // Ignored for `Off`, and it must not be the wallet password: the equality
-      // check in `setup_background_sync` runs before the type is looked at.
-      backgroundCachePassword: '',
+      // Unused by `Off`, but never empty: a build that still wrote a cache must
+      // key it off a random secret we don't store, not nothing.
+      backgroundCachePassword: genWalletPassword(),
     );
     if (!ok) {
       walletLog(LogLevel.warn, 'disabling background sync failed: ${await _walletError()}');
       return;
     }
-    // Two secrets, two lifetimes. A password left behind for a cache that no
-    // longer exists is a live key with nothing to protect.
+
+    // Only drop the secret and claim success once the wallet actually reports off.
+    if (await _backend.getBackgroundSyncType(wallet) != MoneroBackgroundSyncType.off) {
+      walletLog(LogLevel.error, 'background sync still configured after teardown; keeping the cache secret');
+      return;
+    }
+
     await WalletSecrets.store.delete(backgroundCachePasswordKey);
     walletLog(LogLevel.info, 'View-only background cache removed.');
   }
