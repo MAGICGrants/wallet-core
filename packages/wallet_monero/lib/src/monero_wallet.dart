@@ -98,6 +98,10 @@ class MoneroWallet extends CryptoWallet {
   @override
   String get blockchainName => 'Monero';
   @override
+  String? get uriScheme => 'monero';
+  @override
+  String get uriAmountParam => 'tx_amount';
+  @override
   String get iconAsset => 'assets/icons/monero.svg';
   @override
   int get decimals => MoneroConsts.decimals;

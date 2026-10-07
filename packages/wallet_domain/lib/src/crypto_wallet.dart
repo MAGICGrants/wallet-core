@@ -9,6 +9,7 @@ import 'alias.dart';
 import 'amounts.dart';
 import 'app_config.dart';
 import 'background_sync_mode.dart';
+import 'payment_uri.dart';
 import 'seed/seed.dart';
 import 'stores/tx_notification_store.dart';
 import 'stores/wallet_cache_store.dart';
@@ -512,6 +513,32 @@ abstract class CryptoWallet with ChangeNotifier {
   String? getReceiveAddress() => getPrimaryAddress();
 
   bool isAddressValid(String address);
+
+  /// URI scheme this coin answers to (`monero`, `bitcoin`, `ethereum`). Null ⇒
+  /// the coin takes no payment links.
+  String? get uriScheme => null;
+
+  /// Query parameter carrying the amount in a BIP-21-style link. Monero uses
+  /// `tx_amount`; Bitcoin uses `amount`.
+  String get uriAmountParam => 'amount';
+
+  /// Parses [uri] into a payment request if this coin claims it, else null.
+  ///
+  /// The default handles BIP-21-style links — address in the path, amount in
+  /// [uriAmountParam], both in the coin's own units. Chains with their own URI
+  /// grammar (EIP-681) override this.
+  PaymentRequest? parsePaymentUri(Uri uri) {
+    final scheme = uriScheme;
+    if (scheme == null || uri.scheme.toLowerCase() != scheme) return null;
+    final address = uri.path;
+    if (!isAddressValid(address)) return null;
+    final amount = uri.queryParameters[uriAmountParam];
+    return PaymentRequest(
+      coinSymbol: coinSymbol,
+      address: address,
+      amount: (amount != null && amount.isNotEmpty) ? amount : null,
+    );
+  }
 
   /// Builds and signs a transaction, without broadcasting it.
   ///

@@ -21,6 +21,15 @@ const _defaultDuration = Duration(seconds: 3);
 void showBrandToast(BuildContext context, String message, {Duration duration = _defaultDuration}) =>
     BrandToast.of(context).show(message, duration: duration);
 
+/// Shows a brand toast on [overlay] directly, for callers that hold a navigator
+/// overlay but no route context below it — e.g. app-level deep-link handling,
+/// where the only context available sits above the MaterialApp's overlay.
+void showBrandToastOnOverlay(
+  OverlayState overlay,
+  String message, {
+  Duration duration = _defaultDuration,
+}) => BrandToast._(overlay).show(message, duration: duration);
+
 /// Confirms a clipboard copy with [message] -- unless the platform already
 /// confirmed it.
 ///

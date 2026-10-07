@@ -182,6 +182,11 @@ class BitcoinChainWallet extends CryptoWallet {
   @override
   String get blockchainName => _blockchainName;
 
+  // BIP-21; the amount param is the default `amount`. Testnet shares the scheme
+  // and self-selects by address validity.
+  @override
+  String? get uriScheme => 'bitcoin';
+
   @override
   String get iconAsset => _iconAsset;
 

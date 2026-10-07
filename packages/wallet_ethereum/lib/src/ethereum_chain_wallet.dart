@@ -583,6 +583,64 @@ class EthereumChainWallet extends CryptoWallet {
     }
   }
 
+  @override
+  String? get uriScheme => 'ethereum';
+
+  /// EIP-681 payment links. A native send is `ethereum:<addr>[@<chainId>]?value=`;
+  /// an ERC-20 send is `ethereum:<token>[@<chainId>]/transfer?address=<to>&uint256=`.
+  /// A `/transfer` link claims only the matching token wallet; a bare link claims
+  /// only the native one. The optional `@<chainId>` must match this wallet.
+  /// Amounts are integer base units (wei / token units), optionally in
+  /// scientific notation, converted to exact decimal in the coin's own units.
+  @override
+  PaymentRequest? parsePaymentUri(Uri uri) {
+    if (uri.scheme.toLowerCase() != 'ethereum') return null;
+
+    var path = uri.path;
+    final isTransfer = path.endsWith('/transfer');
+    if (isTransfer) path = path.substring(0, path.length - '/transfer'.length);
+
+    final at = path.indexOf('@');
+    if (at >= 0) {
+      final uriChainId = int.tryParse(path.substring(at + 1));
+      if (uriChainId == null || uriChainId != _chainId) return null;
+      path = path.substring(0, at);
+    }
+
+    final contract = ownTokenContract;
+    // Token link ↔ token wallet; native link ↔ native wallet.
+    if (isTransfer != (contract != null)) return null;
+
+    if (contract != null) {
+      if (path.toLowerCase() != contract.toLowerCase()) return null;
+      final to = uri.queryParameters['address'];
+      if (to == null || !isAddressValid(to)) return null;
+      return PaymentRequest(
+        coinSymbol: coinSymbol,
+        address: to,
+        amount: _eip681Amount(uri.queryParameters['uint256']),
+      );
+    }
+
+    if (!isAddressValid(path)) return null;
+    return PaymentRequest(
+      coinSymbol: coinSymbol,
+      address: path,
+      amount: _eip681Amount(uri.queryParameters['value']),
+    );
+  }
+
+  /// An EIP-681 integer base-unit amount as exact decimal in the coin's units,
+  /// or null when absent or unparseable.
+  String? _eip681Amount(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return baseUnitsToDecimalString(decimalToBaseUnits(raw, 0), baseUnitDecimals);
+    } on FormatException {
+      return null;
+    }
+  }
+
   /// Gas for the send. A native transfer is 21000; estimate (to also cover
   /// contract recipients) with a 1-wei probe so it never reverts on
   /// insufficient funds, falling back to [fallbackGasLimit] if the node refuses.
