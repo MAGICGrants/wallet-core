@@ -12,6 +12,7 @@ workspace:
   - packages/wallet_infra
   - packages/wallet_domain
   - packages/wallet_openalias
+  - packages/wallet_fhse
   - packages/wallet_monero
   - packages/wallet_bitcoin
   - packages/wallet_ethereum

@@ -463,6 +463,23 @@ abstract class CryptoWallet with ChangeNotifier {
 
   Future<void> openExisting({required String password});
 
+  /// Opens whatever this coin can open without the wallet password, for an
+  /// unattended run behind an engaged `WalletPasswordGuard`; false when there
+  /// is nothing. The default has nothing: the whole wallet is behind the
+  /// password.
+  ///
+  /// Only for an unattended run ([markUnattended] first), never in place of
+  /// [openExisting] in the foreground. What it opens holds no spend key.
+  Future<bool> openViewOnly() async => false;
+
+  /// Persists, while the wallet is open, what [openViewOnly] needs later: the
+  /// moment a `WalletPasswordGuard` engages and the keystore stops holding the
+  /// password. The default keeps nothing.
+  Future<void> prepareViewOnly() async {}
+
+  /// Removes what [prepareViewOnly] kept, when the guard is released.
+  Future<void> forgetViewOnly() async {}
+
   /// Restores from [seed], starting the scan at [from].
   ///
   /// Takes a [SeedSource] rather than a bare mnemonic, so the encoding travels
@@ -1361,6 +1378,35 @@ abstract class CryptoWallet with ChangeNotifier {
     });
     setIsLoaded(false);
   }
+
+  /// Checkpoints and closes the open wallet, then forgets the cache password
+  /// and everything decrypted with it. Files and settings stay; the next
+  /// [openExisting] needs the password again. [WalletManager.fullyLock] calls
+  /// this on every wallet.
+  ///
+  /// Under [runWithSyncSuspended] for the reason [delete] is: the close frees
+  /// the native handle, and a timer tick inside a native call at that moment
+  /// is a use-after-free.
+  Future<void> close() async {
+    await runWithSyncSuspended(() async {
+      if (_isLoaded) {
+        await pauseSyncAndStore();
+        await persistCache();
+      }
+      await closeFiles();
+    });
+    _cachePassword = null;
+    _cache = {};
+    _cacheLoaded = false;
+    _cacheDirty = false;
+    _cacheRevisions.clear();
+    setIsLoaded(false);
+  }
+
+  /// Closes the native wallet, deleting nothing. A coin with no native wallet
+  /// has nothing to close.
+  @protected
+  Future<void> closeFiles() async {}
 
   Future<void> clearPersistedState() async {
     for (final k in ['walletRestoreHeight', 'txHistoryCount']) {

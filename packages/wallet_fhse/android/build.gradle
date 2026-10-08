@@ -1,0 +1,51 @@
+// The Android Gradle Plugin builds the native code with the Android NDK, from
+// the CMake build shared with host builds (../src/CMakeLists.txt).
+
+group = "org.magicgrants.wallet_fhse"
+version = "1.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.1.0")
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+
+android {
+    if (project.android.hasProperty("namespace")) {
+        namespace = "org.magicgrants.wallet_fhse"
+    }
+
+    compileSdk = 34
+
+    // The NDK the app's android/app/build.gradle declares.
+    ndkVersion = android.ndkVersion
+
+    externalNativeBuild {
+        cmake {
+            path = "../src/CMakeLists.txt"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk = 21
+    }
+}

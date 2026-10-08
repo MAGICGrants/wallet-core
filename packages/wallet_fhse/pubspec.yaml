@@ -1,0 +1,39 @@
+name: wallet_fhse
+description: "vtnerd's FHSE (FIDO2 hmac-secret encryption) guarding the wallet password: a C library (FHSE, libcbor, libsodium) behind wallet_domain's WalletPasswordGuard."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # For `WalletPasswordGuard`, `SeedSource` and the stores. The dependency runs
+  # this way, as wallet_openalias's does: an app can take the wallet layer
+  # without this package's native build.
+  wallet_domain:
+    path: ../wallet_domain
+  wallet_infra:
+    path: ../wallet_infra
+
+  bip39:
+    git:
+      url: https://github.com/cypherstack/stack-bip39
+      ref: 0cd6d54e2860bea68fc50c801cb9db2a760192fb
+  ffi: 2.1.4
+  polyseed: 0.0.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true

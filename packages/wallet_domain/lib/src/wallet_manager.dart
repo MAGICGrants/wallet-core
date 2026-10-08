@@ -10,6 +10,7 @@ import 'crypto_wallet.dart';
 import 'seed/seed.dart';
 import 'seed/seed_policy.dart';
 import 'stores/seed_store.dart';
+import 'wallet_password_guard.dart';
 
 /// Supplies the coins this app supports. Called once, at construction.
 ///
@@ -48,6 +49,11 @@ class WalletManager with ChangeNotifier {
   }
 
   final Map<String, CryptoWallet> _wallets;
+
+  /// Installed by an app that keeps the generated (mobile) password somewhere
+  /// safer than the keystore; see [WalletPasswordGuard]. Null keeps the
+  /// keystore behaviour.
+  static WalletPasswordGuard? passwordGuard;
 
   String? _password;
 
@@ -121,6 +127,11 @@ class WalletManager with ChangeNotifier {
 
   bool get hasPassword => _password != null;
 
+  /// The in-memory password, for a [passwordGuard]'s own set-up and release
+  /// (moving it between the keystore and the guard). Null while locked. Not
+  /// for anything else.
+  String? get passwordForGuard => _password;
+
   void setWalletPassword(String password) {
     _password = password;
     _passwordIsGenerated = false;
@@ -171,6 +182,67 @@ class WalletManager with ChangeNotifier {
   /// Clears the in-memory password, e.g. on background with app lock enabled.
   void clearPassword() => _password = null;
 
+  /// Whether an engaged [passwordGuard] holds the password, so the keystore
+  /// has none and an open needs [unlockWithGuardedPassword] first.
+  Future<bool> isPasswordGuarded() async => await passwordGuard?.isEngaged() ?? false;
+
+  /// Takes the password a [passwordGuard] released once the user unlocked it,
+  /// for this session. Held in memory only, across App Lock relocks, until
+  /// [fullyLock].
+  Future<void> unlockWithGuardedPassword(String password) async {
+    _password = password;
+    _passwordIsGenerated = true;
+    // Engaging a guard writes the guard first and deletes the keystore copy
+    // last, so a crash in between leaves both. The guard has just proven it
+    // works; finish the delete.
+    if (WalletSecrets.holdsWalletPassword) {
+      try {
+        await deleteMobileWalletPassword();
+      } catch (e) {
+        log(LogLevel.error, '[WalletManager] Failed to delete stored password: $e');
+      }
+    }
+  }
+
+  /// Has every open wallet keep what an unattended run needs to check in
+  /// without the password (see [CryptoWallet.prepareViewOnly]). Call when a
+  /// [passwordGuard] engages, before the keystore copy goes.
+  Future<void> prepareViewOnlyAll() async {
+    await Future.wait([
+      for (final w in loadedWallets)
+        w.prepareViewOnly().catchError((Object e) {
+          log(LogLevel.warn, 'prepareViewOnly failed: $e', coin: w.coinSymbol);
+        }),
+    ]);
+  }
+
+  /// Undoes [prepareViewOnlyAll], when the guard is released.
+  Future<void> forgetViewOnlyAll() async {
+    await Future.wait([
+      for (final w in _wallets.values)
+        w.forgetViewOnly().catchError((Object e) {
+          log(LogLevel.warn, 'forgetViewOnly failed: $e', coin: w.coinSymbol);
+        }),
+    ]);
+  }
+
+  /// Closes every wallet and forgets the password and everything decrypted
+  /// with it, keeping the files. The next open needs the password again: from
+  /// the keystore, or for a guarded password, from unlocking the guard.
+  ///
+  /// App Lock alone only covers the screen; this is the lock that takes the
+  /// key out of memory.
+  Future<void> fullyLock() async {
+    await Future.wait([
+      for (final w in _wallets.values)
+        w.close().catchError((Object e) {
+          log(LogLevel.warn, 'close failed: $e', coin: w.coinSymbol);
+        }),
+    ]);
+    _password = null;
+    notifyListeners();
+  }
+
   /// Arms the App Lock re-lock as the app goes to the background.
   ///
   /// Returns whether the next resume should show the lock screen, and drops the
@@ -181,7 +253,10 @@ class WalletManager with ChangeNotifier {
         await SharedPreferencesService.get<bool>(DomainPreferenceKeys.appLockEnabled) ?? false;
     if (!enabled) return false;
     if (!await hasAnyExistingWallet()) return false;
-    clearPassword();
+    // A guarded password cannot be read back from the keystore after a relock,
+    // so it stays in memory until [fullyLock]; App Lock is the screen in front
+    // of it.
+    if (!await isPasswordGuarded()) clearPassword();
     return true;
   }
 
@@ -199,6 +274,9 @@ class WalletManager with ChangeNotifier {
   /// if an earlier build left a copy behind.
   Future<bool> loadMobileWalletPassword() async {
     if (!WalletSecrets.holdsWalletPassword) return false;
+    // Behind an engaged guard the keystore holds no copy, and one left over
+    // from before engaging is not read back.
+    if (await isPasswordGuarded()) return false;
     final stored = await getMobileWalletPassword();
     if (stored == null) return false;
     _password = stored;
@@ -221,11 +299,37 @@ class WalletManager with ChangeNotifier {
     if (displayOnly) return;
 
     if (_password == null && !await loadMobileWalletPassword()) {
+      // An unattended run behind an engaged guard has no password, by design.
+      // Coins that can still check in without one open view-only; see
+      // [CryptoWallet.openViewOnly].
+      if (_visibleWallets.isNotEmpty && _visibleWallets.every((w) => w.unattended)) {
+        await _openViewOnly();
+        return;
+      }
       log(LogLevel.warn, '[WalletManager] openAll called without a password');
       return;
     }
 
     await _openWalletFiles();
+  }
+
+  Future<void> _openViewOnly() async {
+    await Future.wait([
+      for (final w in _visibleWallets)
+        () async {
+          try {
+            if (!await w.openViewOnly()) {
+              log(
+                LogLevel.info,
+                'No password and no view-only path; skipping.',
+                coin: w.coinSymbol,
+              );
+            }
+          } catch (e) {
+            log(LogLevel.warn, 'View-only open failed: $e', coin: w.coinSymbol);
+          }
+        }(),
+    ]);
   }
 
   /// Restores persisted connection settings and cached balances. Fast; meant
@@ -562,6 +666,12 @@ class WalletManager with ChangeNotifier {
       );
     }
 
+    // A guard supplies the password in place of the random one minted at
+    // onboarding. Only for a generated password: one the user typed is theirs.
+    final guard = passwordGuard;
+    final guarded = guard != null && _passwordIsGenerated;
+    if (guarded) _password = await guard.passwordForNewWallet(seed);
+
     for (final w in _visibleWallets) {
       w.setCachePassword(_password);
       await _restoreOne(w, seed, from);
@@ -574,6 +684,7 @@ class WalletManager with ChangeNotifier {
     await SeedStore.save(seed: seed, from: from, password: _password!);
 
     await persistMobileWalletPassword();
+    if (guarded) await guard.walletCreated(_password!);
 
     for (final w in _visibleWallets) {
       await w.loadPersistedConnection();
@@ -604,6 +715,11 @@ class WalletManager with ChangeNotifier {
       await deleteMobileWalletPassword();
     } catch (e) {
       log(LogLevel.error, '[WalletManager] Failed to delete stored password: $e');
+    }
+    try {
+      await passwordGuard?.walletDeleted();
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Failed to clear the password guard: $e');
     }
 
     await SharedPreferencesService.remove(DomainPreferenceKeys.appLockEnabled);

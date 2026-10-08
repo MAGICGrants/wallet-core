@@ -344,6 +344,211 @@ class MoneroWallet extends CryptoWallet {
 
   bool get isBackgroundWallet => _isBackgroundWallet;
 
+  // ----- View-only check behind a password guard -----
+  //
+  // With the wallet password behind security keys (`wallet_fhse`), an
+  // unattended run has nothing to open the wallet file with. It can still do
+  // what a background run is for, noticing incoming payments:
+  //
+  //  - **Node mode** opens the view-only background cache, which has its own
+  //    password in the keystore; the same file as without a guard.
+  //  - **LWS mode** opens nothing. The light-wallet server already holds the
+  //    view key and did the scanning, so the run asks it, with the address and
+  //    view key [prepareViewOnly] kept in the keystore for exactly this, and
+  //    reports what arrived. No spend key, no wallet file, nothing written; the
+  //    next foreground open syncs the real wallet.
+
+  /// Keystore entry for the LWS check: `{"address", "viewKey"}`. The view key
+  /// is what this wallet already hands its LWS server; storing it lets a run
+  /// read incoming payments without the password, and nothing else.
+  String get _viewOnlyCredentialKey => prefKey('viewOnlyLwsCredential');
+
+  ({String address, String viewKey})? _viewOnlyLws;
+  bool _viewOnlyConnected = false;
+
+  /// True while an unattended run is checking the LWS with the view key only.
+  bool get isViewOnlyCheck => _viewOnlyLws != null;
+
+  @override
+  Future<void> prepareViewOnly() async {
+    final wallet = _wallet;
+    if (wallet == null || _isBackgroundWallet) return;
+    final address = await _backend.address(wallet);
+    final viewKey = await _backend.secretViewKey(wallet);
+    if (address.isEmpty || viewKey.isEmpty) return;
+    await WalletSecrets.store.write(
+      _viewOnlyCredentialKey,
+      jsonEncode({'address': address, 'viewKey': viewKey}),
+    );
+    walletLog(LogLevel.info, 'Kept the view-only credential for unattended checks.');
+  }
+
+  @override
+  Future<void> forgetViewOnly() => WalletSecrets.store.delete(_viewOnlyCredentialKey);
+
+  @override
+  Future<bool> openViewOnly() async {
+    if (!unattended) return false;
+    await ensureConnectionLoaded();
+
+    if (_isNodeMode) {
+      // The background cache opens with its own password, never this one.
+      if (await _backgroundOpenTarget() == null) return false;
+      await openExisting(password: '');
+      return true;
+    }
+
+    final stored = await WalletSecrets.store.read(_viewOnlyCredentialKey);
+    if (stored == null || stored.isEmpty) return false;
+    final decoded = jsonDecode(stored) as Map<String, dynamic>;
+    final address = decoded['address'] as String?;
+    final viewKey = decoded['viewKey'] as String?;
+    if (address == null || address.isEmpty || viewKey == null || viewKey.isEmpty) return false;
+
+    _viewOnlyLws = (address: address, viewKey: viewKey);
+    _primaryAddress = address;
+    setIsLoaded(true);
+    walletLog(LogLevel.info, 'Unattended run: checking the LWS server with the view key only.');
+    return true;
+  }
+
+  /// Asks the LWS server for this wallet's transactions with the view key, and
+  /// turns them into history the incoming-payment notifier can read.
+  ///
+  /// The same rules as every other request that carries the view key: https
+  /// for a routable host, Tor or the configured proxy when the connection says
+  /// so, and refused outright over an unconfidential channel.
+  Future<void> _checkLwsViewOnly({required String address, String? proxyPort}) async {
+    final credential = _viewOnlyLws!;
+    final useSsl = _addressRequiresSsl(address);
+    final url = Uri.parse('${useSsl ? 'https' : 'http'}://$address/get_address_txs');
+    final viaProxy = proxyPort != null && proxyPort.isNotEmpty;
+    requireConfidentialChannel(url, carrying: 'the private view key', viaTor: viaProxy);
+
+    final body = jsonEncode({'address': credential.address, 'view_key': credential.viewKey});
+    walletLog(
+      LogLevel.info,
+      'View-only check: get_address_txs (address ${Redact.id(credential.address)}, '
+      'view key ${Redact.secret})',
+    );
+
+    final ({int status, String body}) response;
+    if (viaProxy) {
+      final parsed = await makeSocksHttpRequest(
+        'POST',
+        url.toString(),
+        (host: InternetAddress.loopbackIPv4, port: int.parse(proxyPort)),
+        body: body,
+        timeout: const Duration(seconds: 30),
+        securityContext: useSsl ? await CaBundle.securityContext() : null,
+      );
+      response = (status: parsed.statusCode, body: parsed.body);
+    } else {
+      response = await postJsonForBody(url, body).timeout(const Duration(seconds: 20));
+    }
+
+    if (response.status != HttpStatus.ok) {
+      _viewOnlyConnected = false;
+      walletLog(LogLevel.warn, 'View-only check: status ${response.status}');
+      return;
+    }
+
+    final parsed = parseLwsAddressTxs(response.body);
+    _cachedHistory = parsed.history;
+    setSyncedHeight(parsed.scannedHeight);
+    setIsSynced(true);
+    _viewOnlyConnected = true;
+    notifyListeners();
+  }
+
+  /// `get_address_txs` as transaction history.
+  ///
+  /// Without the spend key a key image cannot be checked, so a transaction
+  /// listing `spent_outputs` may be this wallet's own send (its change comes
+  /// back as `total_received`) or someone else's ring that used one of our
+  /// outputs as a decoy. Both are reported as outgoing, which never notifies;
+  /// the cost is a missed alert for the rare incoming payment whose ring also
+  /// picked one of our outputs. A transaction with nothing spent and something
+  /// received is incoming.
+  @visibleForTesting
+  static ({List<TxDetails> history, int? scannedHeight}) parseLwsAddressTxs(String body) {
+    final json = jsonDecode(body) as Map<String, dynamic>;
+    int? asInt(Object? v) => v is int ? v : (v is String ? int.tryParse(v) : null);
+    BigInt asBig(Object? v) => v is int ? BigInt.from(v) : BigInt.tryParse('$v') ?? BigInt.zero;
+
+    final chainHeight = asInt(json['blockchain_height']) ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final history = <TxDetails>[];
+    for (final raw in (json['transactions'] as List<dynamic>? ?? const [])) {
+      final tx = raw as Map<String, dynamic>;
+      final hash = tx['hash'] as String?;
+      if (hash == null || hash.isEmpty) continue;
+
+      final received = asBig(tx['total_received']);
+      final sent = asBig(tx['total_sent']);
+      final spends = (tx['spent_outputs'] as List<dynamic>? ?? const []).isNotEmpty;
+      final mempool = tx['mempool'] == true;
+      final height = mempool ? -1 : (asInt(tx['height']) ?? -1);
+      final timestamp = switch (tx['timestamp']) {
+        final String iso => (DateTime.tryParse(iso)?.millisecondsSinceEpoch ?? now * 1000) ~/ 1000,
+        final int seconds => seconds,
+        _ => now,
+      };
+      final incoming = !spends && received > BigInt.zero;
+
+      history.add(
+        TxDetails(
+          index: null,
+          direction: incoming ? txDirectionIncoming : txDirectionOutgoing,
+          hash: hash,
+          amountBaseUnits: incoming ? received : (sent - received).abs(),
+          feeBaseUnits: BigInt.zero,
+          recipients: const [],
+          accountIndex: null,
+          subaddrIndexList: const [],
+          timestamp: timestamp,
+          height: height,
+          confirmations: height > 0 && chainHeight >= height ? chainHeight - height + 1 : 0,
+          key: '',
+        ),
+      );
+    }
+    history.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return (
+      history: history,
+      scannedHeight: asInt(json['scanned_block_height'] ?? json['scanned_height']),
+    );
+  }
+
+  /// Unproxied POST that returns the body, injected so the view-only check is
+  /// testable.
+  @visibleForTesting
+  Future<({int status, String body})> Function(Uri url, String body) postJsonForBody =
+      _postJsonForBody;
+
+  static Future<({int status, String body})> _postJsonForBody(Uri url, String body) async {
+    final client = HttpClient(
+      context: url.scheme == 'https' ? await CaBundle.securityContext() : null,
+    );
+    try {
+      final request = await client.postUrl(url);
+      request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      // Explicit length: monero-lws rejects a chunked body (see [_postJson]).
+      final bytes = utf8.encode(body);
+      request.contentLength = bytes.length;
+      request.add(bytes);
+      final response = await request.close();
+      final text = await readBoundedBody(
+        response,
+        maxBytes: kDefaultMaxResponseBytes,
+        timeout: const Duration(seconds: 20),
+      );
+      return (status: response.statusCode, body: text);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   // ----- Native view-key background sync (node mode only) -----
   //
   // `setupBackgroundSync` writes a second wallet beside the main one:
@@ -829,6 +1034,14 @@ class MoneroWallet extends CryptoWallet {
     );
   }
 
+  @override
+  Future<void> closeFiles() async {
+    await _closeOpenWallet();
+    _viewOnlyLws = null;
+    _viewOnlyConnected = false;
+    _cachedHistory = const [];
+  }
+
   Future<void> _closeOpenWallet() async {
     final wallet = _wallet;
     final manager = _manager;
@@ -901,6 +1114,7 @@ class MoneroWallet extends CryptoWallet {
     // password, so a stranger's cache password would end up encrypting a cache
     // holding this wallet's view key.
     await WalletSecrets.store.delete(backgroundCachePasswordKey);
+    await WalletSecrets.store.delete(_viewOnlyCredentialKey);
     // The connection settings (address + type + tor/ssl/port) are intentionally
     // kept: deleting the wallet should not wipe them, so the connection-setup
     // screen recalls the previous mode and server. Wiping only `connectionType`
@@ -956,6 +1170,8 @@ class MoneroWallet extends CryptoWallet {
 
   @override
   Future<void> connectToDaemonImpl({required String address, String? proxyPort}) async {
+    if (_viewOnlyLws != null) return _checkLwsViewOnly(address: address, proxyPort: proxyPort);
+
     final wallet = _wallet;
     if (wallet == null) throw Exception('No open Monero wallet.');
 
@@ -1167,6 +1383,7 @@ class MoneroWallet extends CryptoWallet {
 
   @override
   Future<bool> getIsConnected() async {
+    if (_viewOnlyLws != null) return _viewOnlyConnected;
     final wallet = _wallet;
     if (wallet == null || !_daemonInitialised) return false;
     if (await _backend.connected(wallet) != 0) return true;
@@ -2039,6 +2256,8 @@ class MoneroWallet extends CryptoWallet {
 
   @override
   Future<void> load() async {
+    // A view-only check has no wallet for the subaddress probes to read.
+    if (_viewOnlyLws != null) return super.load();
     await loadPersistedSubaddressState();
     await loadPrimaryAddress();
     await super.load();

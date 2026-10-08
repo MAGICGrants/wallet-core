@@ -17,6 +17,7 @@ packages/
   wallet_bitcoin/    Bitcoin and testnet: BIP84 over Electrum
   wallet_ethereum/   Ethereum, Sepolia and ERC-20: JSON-RPC plus Blockscout history
   wallet_openalias/  OpenAlias resolution over Tor, DNSSEC-validated (Rust FFI)
+  wallet_fhse/       FHSE: security keys (FIDO2 hmac-secret) guarding the wallet password (C FFI; proof of concept)
   wallet_background/ background sync and incoming-transaction notifications
   wallet_fiat/       fiat exchange rates from Kraken
   wallet_ui/         shared Flutter widgets

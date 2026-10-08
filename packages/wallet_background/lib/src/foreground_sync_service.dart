@@ -33,7 +33,15 @@ class BackgroundSyncTaskHandler extends TaskHandler {
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    final manager = WalletManager(coins: BackgroundSync.coins);
+    // Behind an engaged password guard (security keys) this isolate has no way
+    // to the password, so it takes the view-only path after all, accepting the
+    // slower merge described above, rather than opening nothing.
+    final guarded = await WalletManager.passwordGuard?.isEngaged() ?? false;
+    final manager = WalletManager(
+      coins: guarded
+          ? () => [for (final w in BackgroundSync.coins()) w..markUnattended()]
+          : BackgroundSync.coins,
+    );
     _manager = manager;
     try {
       if (!await manager.hasAnyExistingWallet()) return;
