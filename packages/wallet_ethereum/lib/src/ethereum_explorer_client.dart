@@ -137,14 +137,17 @@ class EthereumExplorerClient implements EthereumExplorerApi {
       final hash = (t['transaction_hash'] ?? t['tx_hash']) as String?;
       if (hash == null) continue;
       final total = t['total'];
+      final valueWei = total is Map<dynamic, dynamic>
+          ? (BigInt.tryParse('${total['value']}') ?? BigInt.zero)
+          : BigInt.zero;
+      // Zero-value transfers are address-poisoning spam; the wallet never sends 0.
+      if (valueWei == BigInt.zero) continue;
       out.add(
         ExplorerTx(
           hash: hash,
           from: _nestedHash(t['from']),
           to: _nestedHash(t['to']),
-          valueWei: total is Map<dynamic, dynamic>
-              ? (BigInt.tryParse('${total['value']}') ?? BigInt.zero)
-              : BigInt.zero,
+          valueWei: valueWei,
           // Gas belongs to the parent transaction, which is known locally only
           // for our own outgoing transfers.
           feeWei: BigInt.zero,
