@@ -52,6 +52,7 @@ class BitcoinChainWallet extends CryptoWallet {
        _client = client ?? ElectrumClient(coinSymbol: coinSymbol) {
     _client.onConnectionChanged = (connected) {
       if (!connected) {
+        _liveConnection = null;
         // Server-side subscriptions die with the socket; force re-subscribe
         // on reconnect. _statusByScripthash kept so unchanged scripthashes
         // skip the refetch when subscribe returns the same status.
@@ -101,6 +102,10 @@ class BitcoinChainWallet extends CryptoWallet {
   /// testing here misbehave against a real server, and a
   /// socket cannot be made to misbehave on demand.
   final ElectrumApi _client;
+
+  // The endpoint the live socket uses, so a changed connection reconnects
+  // instead of being skipped as "already connected".
+  ({String host, int port, bool useSsl, int? socksPort})? _liveConnection;
 
   // ----- In-memory wallet state (set once on open/restore) -----
 
@@ -659,6 +664,18 @@ class BitcoinChainWallet extends CryptoWallet {
     super.dispose();
   }
 
+  @override
+  void onGlobalTorDisabled() {
+    final wasTor = connectionUseTor && !torRequirementBroken;
+    super.onGlobalTorDisabled();
+    // The base only flips the flag; the socket's ping would keep it on the now
+    // stale Tor proxy. Drop it so nothing lingers on the old route.
+    if (wasTor) {
+      unawaited(_client.close().catchError((Object _) {}));
+      _liveConnection = null;
+    }
+  }
+
   // ----- HD derivation -----
 
   Bip32Slip10Secp256k1 _deriveAccountHd(String mnemonic) {
@@ -739,12 +756,6 @@ class BitcoinChainWallet extends CryptoWallet {
 
   @override
   Future<void> connectToDaemonImpl({required String address, String? proxyPort}) async {
-    // Idempotent: pre-open connect + post-open connect share the same socket.
-    if (_client.isConnected) {
-      walletLog(LogLevel.info, 'connectToDaemonImpl skipped (already connected)');
-      return;
-    }
-
     final (host, port) = _splitHostPort(address);
     // Electrum is raw TCP with no scheme, so TLS is derived from the host:
     // required for a routable server, skipped for an onion (confidential over
@@ -752,6 +763,19 @@ class BitcoinChainWallet extends CryptoWallet {
     // connects; the user points at the TLS port, an onion, or a local node.
     final useSsl = requiresSecureTransport(host);
     final socksPort = (proxyPort != null && proxyPort.isNotEmpty) ? int.tryParse(proxyPort) : null;
+    final requested = (host: host, port: port, useSsl: useSsl, socksPort: socksPort);
+
+    // Skip only when the live socket is the same endpoint; a changed one
+    // (server switch, Tor toggled) must drop the old socket, not keep using it.
+    if (_client.isConnected && _liveConnection == requested) {
+      walletLog(LogLevel.info, 'connectToDaemonImpl skipped (same endpoint)');
+      return;
+    }
+    if (_client.isConnected) {
+      walletLog(LogLevel.info, 'connection changed; closing the old socket');
+      await _client.close();
+      _liveConnection = null;
+    }
 
     // The server address is the user's own configuration, not a secret, and is
     // usually the whole point of a connection bug.
@@ -760,6 +784,7 @@ class BitcoinChainWallet extends CryptoWallet {
 
     final socketTimer = Stopwatch()..start();
     await _client.connect(host: host, port: port, useSsl: useSsl, socksPort: socksPort);
+    _liveConnection = requested;
     socketTimer.stop();
 
     // Push routes get registered before any subscribe RPC so notifications

@@ -297,6 +297,45 @@ void main() {
       expect(fake.countOf('connect'), 1);
     });
 
+    test('a changed server drops the old socket and reconnects', () async {
+      await restore();
+      await wallet.connectToDaemonImpl(address: 'electrum.example.com:50002');
+      await wallet.connectToDaemonImpl(address: 'other.example.com:50002');
+
+      expect(fake.countOf('connect'), 2, reason: 'the new server must not be ignored');
+      expect(fake.countOf('close'), 1, reason: 'the old socket is closed first');
+      expect(fake.connections.last.host, 'other.example.com');
+    });
+
+    test('turning a proxy on reconnects instead of reusing the direct socket', () async {
+      await restore();
+      await wallet.connectToDaemonImpl(address: 'electrum.example.com:50002');
+      await wallet.connectToDaemonImpl(address: 'electrum.example.com:50002', proxyPort: '9050');
+
+      expect(fake.countOf('connect'), 2);
+      expect(fake.connections.last.socksPort, 9050);
+    });
+
+    test('disabling global Tor drops a Tor-routed socket', () async {
+      await restore();
+      wallet.setConnection(address: 'electrum.example.com:50002', proxyPort: '9050', useTor: true);
+      await wallet.connectToDaemonImpl(address: 'electrum.example.com:50002', proxyPort: '9050');
+
+      wallet.onGlobalTorDisabled();
+
+      expect(fake.countOf('close'), 1);
+    });
+
+    test('disabling global Tor leaves a clearnet socket alone', () async {
+      await restore();
+      setConnection();
+      await wallet.connectToDaemon();
+
+      wallet.onGlobalTorDisabled();
+
+      expect(fake.countOf('close'), 0);
+    });
+
     group('TLS is derived from the host, not a toggle', () {
       // Electrum is raw TCP with no scheme, so there is no `useSsl` to set. A
       // routable server is connected with TLS; an onion or local one is left
