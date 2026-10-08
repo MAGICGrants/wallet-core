@@ -227,6 +227,58 @@ void main() {
     });
   });
 
+  group('a local address is refused over Tor', () {
+    // Tor is made available so the refusal is the local rule, not "no Tor proxy".
+    Future<FakeWallet> localWallet(String address, {bool useTor = false, String proxyPort = ''}) async {
+      final wallet = FakeWallet('XMR');
+      addTearDown(wallet.dispose);
+      await wallet.openExisting(password: 'pw');
+      wallet.setConnection(address: address, proxyPort: proxyPort, useTor: useTor);
+      return wallet;
+    }
+
+    test('a .local host over Tor never reaches the network', () async {
+      await torOnPort('9150');
+      final wallet = await localWallet('umbrel.local:18089', useTor: true);
+
+      await wallet.connectToDaemon();
+
+      expect(wallet.connectCalls, isEmpty, reason: 'Tor would hand .local to an exit');
+      expect(wallet.torRequirementBroken, isTrue);
+      expect(wallet.isConnected, isFalse);
+    });
+
+    test('an IPv6 ULA literal over Tor is refused too', () async {
+      await torOnPort('9150');
+      final wallet = await localWallet('[fc00::1]:18089', useTor: true);
+
+      await wallet.connectToDaemon();
+
+      expect(wallet.connectCalls, isEmpty);
+      expect(wallet.torRequirementBroken, isTrue);
+    });
+
+    test('a direct LAN connection (Tor off) is fine', () async {
+      final wallet = await localWallet('umbrel.local:18089');
+
+      await wallet.connectToDaemon();
+
+      expect(wallet.connectCalls, hasLength(1), reason: 'the bytes never leave the LAN');
+    });
+
+    test("a user's own proxy to the LAN (not Tor) is allowed", () async {
+      final wallet = await localWallet('umbrel.local:18089', proxyPort: '1080');
+
+      await wallet.connectToDaemon();
+
+      expect(
+        wallet.connectCalls, hasLength(1),
+        reason: 'a user proxy can reach their LAN; only Tor is refused',
+      );
+      expect(wallet.torRequirementBroken, isFalse);
+    });
+  });
+
   group('the proxy the connect actually uses', () {
     test('Tor supplies the port, overriding whatever was configured', () async {
       await torOnPort('9150');

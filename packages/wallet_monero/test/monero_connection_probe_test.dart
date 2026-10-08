@@ -100,6 +100,18 @@ void main() {
     });
   });
 
+  test('a .local address over Tor is refused before any network', () async {
+    await expectLater(
+      wallet.testConnection(
+        address: 'umbrel.local:18089',
+        proxyPort: '',
+        useTor: true,
+        connectionType: 'lws',
+      ),
+      throwsA(predicate((e) => e.toString().contains('through Tor'))),
+    );
+  });
+
   test('a certificate outside the CA bundle fails the probe', () async {
     await throughProxy(
       answer('POST', '/get_address_info', 500),
@@ -113,7 +125,14 @@ void main() {
             useTor: false,
             connectionType: 'lws',
           ),
-          throwsA(isA<HandshakeException>()),
+          // The SOCKS path wraps a failed handshake as "never sent".
+          throwsA(
+            isA<RequestNotSentException>().having(
+              (e) => e.cause,
+              'cause',
+              isA<HandshakeException>(),
+            ),
+          ),
         );
 
         expect(proxy.requested, [TestPki.routableHost]);

@@ -127,6 +127,17 @@ void requireConfidentialChannel(Uri uri, {required String carrying, required boo
 /// false (plaintext is fine); everything else returns true.
 bool requiresSecureTransport(String host) => !(isOnionHost(host) || isLocalHost(host));
 
+/// Whether reaching [host] over Tor would send a LAN name to an exit. Tor can't
+/// reach a LAN; a user's own proxy can, so this is Tor-specific. Connect paths
+/// and probes refuse it rather than treat it as "local, so plaintext is fine".
+bool isLocalHostRoutedThroughTor(String host, {required bool viaTor}) =>
+    viaTor && isLocalHost(host);
+
+/// Shown by the probes so a refused Tor+local connection is actionable.
+const localHostOverTorMessage =
+    "A local address can't be reached through Tor. Turn Tor off for this "
+    "connection, or use the server's onion address.";
+
 /// Whether a bare `host:port` [address] names an onion service that nothing will
 /// carry to it.
 ///

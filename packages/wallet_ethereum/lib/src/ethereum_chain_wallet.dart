@@ -323,6 +323,9 @@ class EthereumChainWallet extends CryptoWallet {
     required bool useTor,
     String connectionType = '',
   }) async {
+    if (isLocalHostRoutedThroughTor(Uri.parse('http://$address').host, viaTor: useTor)) {
+      throw Exception(localHostOverTorMessage);
+    }
     // A separate client, because a probe must not mutate live connection state;
     // configuring `_rpc` here would repoint the open wallet at whatever the user
     // happened to be typing.

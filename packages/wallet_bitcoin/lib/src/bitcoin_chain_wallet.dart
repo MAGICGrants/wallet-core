@@ -815,6 +815,9 @@ class BitcoinChainWallet extends CryptoWallet {
     String connectionType = '',
   }) async {
     final (host, port) = _splitHostPort(address);
+    if (isLocalHostRoutedThroughTor(host, viaTor: useTor)) {
+      throw Exception(localHostOverTorMessage);
+    }
     // Same derivation as the live connect.
     final useSsl = requiresSecureTransport(host);
     final socksPort = (proxyPort != null && proxyPort.isNotEmpty) ? int.tryParse(proxyPort) : null;

@@ -1056,6 +1056,9 @@ class MoneroWallet extends CryptoWallet {
     String connectionType = '',
   }) async {
     final isNode = connectionType == 'node';
+    if (isLocalHostRoutedThroughTor(Uri.parse('http://$address').host, viaTor: useTor)) {
+      throw Exception(localHostOverTorMessage);
+    }
     final path = isNode ? '/get_height' : '/get_address_info';
     // Same derivation as the live connect: https for a routable host, plaintext
     // only for an onion or local one.

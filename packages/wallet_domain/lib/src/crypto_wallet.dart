@@ -1293,6 +1293,20 @@ abstract class CryptoWallet with ChangeNotifier {
     // old server, so it reports nothing. The next connect reports for the new.
     bool stale() => generation != _connectGeneration;
 
+    // Tor can't reach a LAN; it would hand the name to an exit. Refuse before any
+    // proxy work. Keyed on Tor, not on having a proxy — a user's own proxy is fine.
+    if (isLocalHostRoutedThroughTor(
+      Uri.parse('http://$_connectionAddress').host,
+      viaTor: _connectionUseTor,
+    )) {
+      walletLog(LogLevel.warn, 'refusing to reach a local address over Tor');
+      _torRequirementBroken = true;
+      _isConnected = false;
+      _connectFailures++;
+      notifyListeners();
+      return;
+    }
+
     String? torProxyPort;
     if (_connectionUseTor) {
       final proxyInfo = await TorSettingsService.sharedInstance.getProxy();
