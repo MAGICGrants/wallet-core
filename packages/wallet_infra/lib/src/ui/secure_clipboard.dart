@@ -78,12 +78,13 @@ class SecureClipboard {
       await Clipboard.setData(ClipboardData(text: text));
     }
 
-    // iOS clears via the native expiration date; elsewhere run an in-app timer.
-    if (!Platform.isIOS) {
+    // iOS clears via native expiration, Android via the native delayed clear
+    // (the read below is blocked for a backgrounded app there). Only desktop,
+    // which has no such restriction, runs the in-app timer.
+    if (!Platform.isIOS && !Platform.isAndroid) {
       Future.delayed(clearAfter, () async {
         final current = await Clipboard.getData(Clipboard.kTextPlain);
-        // Only clear if it is still ours; the user may have copied something
-        // else in the meantime, and wiping that would be user-hostile.
+        // Only if it's still ours — don't wipe a later copy.
         if (current?.text == text) {
           await Clipboard.setData(const ClipboardData(text: ''));
         }
