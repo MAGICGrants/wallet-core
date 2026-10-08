@@ -443,6 +443,7 @@ void main() {
       await expectLater(startForegroundSync(), completes);
       await expectLater(stopForegroundSync(), completes);
       await expectLater(startForegroundSyncIfEnabled(), completes);
+      await expectLater(restartForegroundSyncIfRunning(), completes);
     });
 
     test('even with every toggle on', () async {
