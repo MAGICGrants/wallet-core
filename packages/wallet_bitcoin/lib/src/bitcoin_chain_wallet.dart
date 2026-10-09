@@ -1473,7 +1473,7 @@ class BitcoinChainWallet extends CryptoWallet {
       if (result is Map<dynamic, dynamic>) {
         verboseInto[txid] = Map<String, dynamic>.from(result);
       } else if (result is String) {
-        rawInto[txid] = result;
+        _storeRawIfTxidMatches(txid, result, rawInto);
       }
     }
     // Demote to raw-only mode if no verbose result came back and at least
@@ -1507,8 +1507,26 @@ class BitcoinChainWallet extends CryptoWallet {
         );
         continue;
       }
-      if (r.result is String) rawInto[txid] = r.result as String;
+      if (r.result is String) _storeRawIfTxidMatches(txid, r.result as String, rawInto);
     }
+  }
+
+  /// Stores [raw] under [txid] only when it actually hashes to it. A server
+  /// returning some other transaction's bytes (or garbage) would otherwise feed
+  /// wrong prevouts and amounts into the history display; drop and log instead.
+  void _storeRawIfTxidMatches(String txid, String raw, Map<String, String> rawInto) {
+    String computed;
+    try {
+      computed = computeTxid(raw);
+    } catch (e) {
+      walletLog(LogLevel.warn, 'raw for ${Redact.id(txid)} did not parse: ${e.runtimeType}');
+      return;
+    }
+    if (computed != txid) {
+      walletLog(LogLevel.warn, 'raw for ${Redact.id(txid)} hashes to a different txid; dropped');
+      return;
+    }
+    rawInto[txid] = raw;
   }
 
   static bool _isVerboseUnsupportedError(Object error) {
@@ -2094,6 +2112,16 @@ class BitcoinChainWallet extends CryptoWallet {
     return maxH;
   }
 
+  /// Decodes a scriptPubKey to an address, or '' when it has none (OP_RETURN,
+  /// anchors, non-standard scripts) or `bitcoin_base` cannot classify it.
+  String _addressFromScript(String scriptHex) {
+    try {
+      return Script.fromRaw(hexData: scriptHex).toAddress(network: _network);
+    } catch (_) {
+      return '';
+    }
+  }
+
   static bool _isNullPreviousOutpoint(String txIdHex) {
     if (txIdHex.length != 64) return false;
     for (var k = 0; k < txIdHex.length; k++) {
@@ -2103,11 +2131,11 @@ class BitcoinChainWallet extends CryptoWallet {
   }
 
   /// Pulls every missing parent referenced by [tx]'s inputs in one frame.
-  Future<void> _ensureParentRaws(BtcTransaction tx, Map<String, String> rawHexByTxid) async {
+  Future<void> _ensureParentRaws(ParsedBtcTx tx, Map<String, String> rawHexByTxid) async {
     final missing = <String>{};
     for (final i in tx.inputs) {
-      if (_isNullPreviousOutpoint(i.txId)) continue;
-      if (!rawHexByTxid.containsKey(i.txId)) missing.add(i.txId);
+      if (_isNullPreviousOutpoint(i.prevTxid)) continue;
+      if (!rawHexByTxid.containsKey(i.prevTxid)) missing.add(i.prevTxid);
     }
     await _fetchParentRawsByTxid(missing, rawHexByTxid);
   }
@@ -2117,11 +2145,19 @@ class BitcoinChainWallet extends CryptoWallet {
   Future<void> _prefetchAllParents(Map<String, String> rawHexByTxid) async {
     final missing = <String>{};
     final knownTxids = rawHexByTxid.keys.toSet();
-    for (final hex in rawHexByTxid.values.toList(growable: false)) {
-      final tx = BtcTransaction.fromRaw(hex);
+    for (final entry in rawHexByTxid.entries.toList(growable: false)) {
+      final ParsedBtcTx tx;
+      try {
+        tx = parseBtcTx(entry.value);
+      } catch (e) {
+        // A genuinely malformed raw must not abandon the whole pass (and with it
+        // all history); skip it and let the per-tx hydrate step drop it too.
+        walletLog(LogLevel.warn, 'parent prefetch parse failed ${Redact.id(entry.key)}: ${e.runtimeType}');
+        continue;
+      }
       for (final i in tx.inputs) {
-        if (_isNullPreviousOutpoint(i.txId)) continue;
-        if (!knownTxids.contains(i.txId)) missing.add(i.txId);
+        if (_isNullPreviousOutpoint(i.prevTxid)) continue;
+        if (!knownTxids.contains(i.prevTxid)) missing.add(i.prevTxid);
       }
     }
     await _fetchParentRawsByTxid(missing, rawHexByTxid);
@@ -2145,7 +2181,7 @@ class BitcoinChainWallet extends CryptoWallet {
         );
         continue;
       }
-      if (r.result is String) rawHexByTxid[txid] = r.result as String;
+      if (r.result is String) _storeRawIfTxidMatches(txid, r.result as String, rawHexByTxid);
     }
   }
 
@@ -2158,49 +2194,41 @@ class BitcoinChainWallet extends CryptoWallet {
     Map<String, String> rawHexByTxid, {
     int blockHeight = 0,
   }) async {
-    final tx = BtcTransaction.fromRaw(rawHex);
+    final tx = parseBtcTx(rawHex);
     await _ensureParentRaws(tx, rawHexByTxid);
 
     final vout = <Map<String, dynamic>>[];
     for (final o in tx.outputs) {
-      var addr = '';
-      try {
-        addr = o.scriptPubKey.toAddress(network: _network);
-      } catch (_) {}
       vout.add({
         // BTC, matching what a verbose server sends; see [_btcToSats] for why
         // the round-trip through a double is exact at Bitcoin's scale.
-        'value': o.amount.toInt() / _satsPerBtc,
-        'scriptPubKey': {'address': addr},
+        'value': o.valueSats / _satsPerBtc,
+        'scriptPubKey': {'address': _addressFromScript(o.scriptHex)},
       });
     }
 
     final vin = <Map<String, dynamic>>[];
     for (final i in tx.inputs) {
-      if (_isNullPreviousOutpoint(i.txId)) {
+      if (_isNullPreviousOutpoint(i.prevTxid)) {
         vin.add({});
         continue;
       }
-      final parentHex = rawHexByTxid[i.txId];
+      final parentHex = rawHexByTxid[i.prevTxid];
       if (parentHex == null) {
         vin.add({});
         continue;
       }
       try {
-        final parent = BtcTransaction.fromRaw(parentHex);
-        if (i.txIndex < 0 || i.txIndex >= parent.outputs.length) {
+        final parent = parseBtcTx(parentHex);
+        if (i.prevIndex < 0 || i.prevIndex >= parent.outputs.length) {
           vin.add({});
           continue;
         }
-        final po = parent.outputs[i.txIndex];
-        var paddr = '';
-        try {
-          paddr = po.scriptPubKey.toAddress(network: _network);
-        } catch (_) {}
+        final po = parent.outputs[i.prevIndex];
         vin.add({
           'prevout': {
-            'value': po.amount.toInt() / _satsPerBtc,
-            'scriptPubKey': {'address': paddr},
+            'value': po.valueSats / _satsPerBtc,
+            'scriptPubKey': {'address': _addressFromScript(po.scriptHex)},
           },
         });
       } catch (_) {
