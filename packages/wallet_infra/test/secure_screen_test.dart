@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_infra/wallet_infra.dart';
 
@@ -58,5 +59,42 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     expect(SecureScreenMixin.mountedProtectedScreens, 0);
+  });
+
+  group('plugin engagement by platform', () {
+    const channel = MethodChannel('screen_protector');
+    late List<String> calls;
+
+    setUp(() {
+      calls = <String>[];
+      SecureScreenMixin.debugForceProtectablePlatform = true;
+      TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        return null;
+      });
+    });
+
+    tearDown(() {
+      SecureScreenMixin.debugForceProtectablePlatform = null;
+      HostPlatform.iosAppOnMacForTesting = false;
+      TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    testWidgets('arms the plugin on a supported mobile platform', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: _Protected()));
+      await tester.pump();
+      expect(SecureScreenMixin.mountedProtectedScreens, 1);
+      expect(calls, containsAll(<String>['preventScreenshotOn', 'protectDataLeakageWithBlur']));
+    });
+
+    testWidgets('does not arm the plugin when the iOS build runs on a Mac', (tester) async {
+      HostPlatform.iosAppOnMacForTesting = true;
+      await tester.pumpWidget(const MaterialApp(home: _Protected()));
+      await tester.pump();
+      expect(SecureScreenMixin.mountedProtectedScreens, 1);
+      expect(calls, isEmpty);
+    });
   });
 }
