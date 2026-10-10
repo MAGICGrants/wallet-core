@@ -66,6 +66,14 @@ endif()
 target_compile_options(wfhse_sodium PRIVATE
   -fno-strict-aliasing -fno-strict-overflow -fwrapv -w)
 
+# clang runs out of memory compiling this file (6-7 GB, then killed)
+# for 32-bit ABIs at -O2 with debug info.
+if(ANDROID AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+  set_source_files_properties(
+    "${VENDOR}/libsodium/src/libsodium/crypto_core/keccak1600/ref/keccak1600_ref.c"
+    PROPERTIES COMPILE_OPTIONS "-g0")
+endif()
+
 # ----- libcbor 0.13.0 -----
 
 file(GLOB CBOR_SOURCES CONFIGURE_DEPENDS
