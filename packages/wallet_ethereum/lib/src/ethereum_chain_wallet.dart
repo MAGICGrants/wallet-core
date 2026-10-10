@@ -277,10 +277,42 @@ class EthereumChainWallet extends CryptoWallet {
     }
   }
 
+  // ----- View-only (unattended runs behind a password guard) -----
+
+  /// Where [prepareViewOnly] keeps the address: secure storage, per coin. The
+  /// address is public; an unattended run needs nothing else to check balance
+  /// and history.
+  String get _viewOnlyAddressKey => prefKey('viewOnlyAddress');
+
+  @override
+  Future<void> prepareViewOnly() async {
+    final address = _address;
+    if (address == null || address.isEmpty) return;
+    await WalletSecrets.store.write(_viewOnlyAddressKey, address);
+    walletLog(LogLevel.info, 'Kept the address for unattended checks.');
+  }
+
+  @override
+  Future<void> forgetViewOnly() => WalletSecrets.store.delete(_viewOnlyAddressKey);
+
+  /// Loads the address only: refresh and history work, and with no mnemonic
+  /// [store] writes nothing and any send fails as "not loaded".
+  @override
+  Future<bool> openViewOnly() async {
+    if (!unattended) return false;
+    final address = await WalletSecrets.store.read(_viewOnlyAddressKey);
+    if (address == null || address.isEmpty) return false;
+    _address = address;
+    setIsLoaded(true);
+    walletLog(LogLevel.info, 'Unattended run: checking with the address only.');
+    return true;
+  }
+
   @override
   Future<void> deleteFiles() async {
     final file = await _walletFile();
     if (await file.exists()) await file.delete();
+    await WalletSecrets.store.delete(_viewOnlyAddressKey);
     _mnemonic = null;
     _address = null;
     _privateKeyHex = null;

@@ -44,9 +44,9 @@ How each part fits:
   getAssertion carries a PIN/UV token, so the key returns its with-UV
   hmac-secret. The token comes from the key's PIN, or from a YubiKey Bio's
   fingerprint reader (`KeyVerification`); both set CTAP's UV flag, so a key
-  enrolled with one opens with the other. See the platform channels in
-  Skylight: `ios/Runner/SecurityKeyOperations.swift` and
-  `android/.../SecurityKeyOperations.kt`.
+  enrolled with one opens with the other. See the platform halves:
+  this plugin's `android/src/main/kotlin/.../SecurityKeyOperations.kt`, and
+  each app's `ios/Runner/SecurityKeyOperations.swift`.
 - **Names come after the touches.** The app asks for a key's name once it has
   been enrolled (`FhseSetup.rename`, `FhseVault.renameKey`). Names live in the
   keystore; FHSE's file holds only credential ids.
@@ -64,10 +64,23 @@ How each part fits:
 - **Lost every key?** For polyseed and BIP39 wallets, the recovery phrase
   rebuilds `k_p` and opens the existing files, keeping local history.
   25-word wallets are restored from the phrase as before.
-- **Background sync** cannot reach `k_p`, so it uses the view key:
-  - In LWS mode it queries the light-wallet server with the address and view
-    key, which are kept in the keystore when keys are switched on.
-  - In node mode it opens wallet2's view-only background cache.
+- **One FHSE file covers every coin.** `k_p` is the app's one wallet
+  password: every coin's wallet file and cache, and `master_seed`, are
+  encrypted with it. So a multi-coin app (Spice) has one `wallet.fhse` and one
+  key touch per unlock, and a coin added later bootstraps from `master_seed`
+  under the same `k_p`.
+- **Background sync** cannot reach `k_p`, so each coin opens view-only
+  (`CryptoWallet.prepareViewOnly` / `openViewOnly`), from what it kept in the
+  keystore when keys were switched on:
+  - Monero, in LWS mode: the address and view key, to query the light-wallet
+    server. In node mode it opens wallet2's view-only background cache.
+  - Bitcoin: the account xpub, from which the addresses are derived again. It
+    spends nothing but reveals the account's whole history.
+  - Ethereum and its ERC-20 tokens: the address, which is public anyway.
+- **The same phrase in two apps** gives the same `k_p` in both (the derivation
+  has no per-app part, as carrot#9 proposes none), and either app's `k_p`
+  opens its `master_seed` and so the phrase. A phrase used in two apps is only
+  as protected as the less protected one; Advanced security says so.
 
 ## Layout
 
@@ -85,12 +98,30 @@ How each part fits:
 - `ios/`: the CocoaPods build of the same sources, through forwarding files
   that `tool/generate_ios_classes.sh` generates. Re-run that script after
   changing anything under `src/`.
-- `lib/`: `FhseSecret`, `WalletKeyTree`, `FhseVault`, and `FhseWalletGuard`
-  (wallet_domain's `WalletPasswordGuard`).
+- `lib/wallet_fhse.dart`: `FhseSecret`, `WalletKeyTree`, `FhseVault`,
+  `FhseWalletGuard` (wallet_domain's `WalletPasswordGuard`), and
+  `SecurityKeyService`, the Dart end of the security key channel.
+- `lib/security_keys_ui.dart`: the shared screens (Advanced security, setting
+  keys up, unlocking with a key or the recovery phrase), their strings
+  (`lib/src/l10n`, `FhseLocalizations`; regenerate with `flutter gen-l10n`
+  here) and the "Fully lock after" timer (`SecurityKeyFullLock`). An app
+  installs `SecurityKeysUi` with its name, logo, home route and
+  `WalletManager`, adds `FhseLocalizations.delegate`, and routes to
+  `AdvancedSecurityScreen` and `SecurityKeyUnlockScreen`.
+- `android/src/main/kotlin/`: the security key channel on Android
+  (`WalletFhsePlugin`, YubiKit from Maven Central), registered like any
+  plugin. Its manifest adds the NFC permission and the optional NFC and USB
+  host features.
+- iOS: the channel's Swift half (`SecurityKeyChannel.swift`,
+  `SecurityKeyOperations.swift`) is still each app's, in `ios/Runner`, with
+  YubiKit Swift added to the Runner project as a Swift package. A CocoaPods
+  plugin cannot depend on a Swift package; the files can move here once the
+  apps build their plugins with Swift Package Manager. Keep the two apps'
+  copies identical.
 
 ## Why not a Rust crate like wallet_openalias
 
-Skylight's iOS app already force-loads one Rust static library. Force-loading
+Each app's iOS build already force-loads one Rust static library. Force-loading
 a second one fails to link: both carry the Rust standard library, so the
 symbols are duplicated. A plain C plugin avoids that.
 

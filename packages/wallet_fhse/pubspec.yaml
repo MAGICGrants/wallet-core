@@ -11,6 +11,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # The shared security-key screens (lib/security_keys_ui.dart) and their
+  # strings (lib/src/l10n).
+  flutter_localizations:
+    sdk: flutter
+  intl: any
   # For `WalletPasswordGuard`, `SeedSource` and the stores. The dependency runs
   # this way, as wallet_openalias's does: an app can take the wallet layer
   # without this package's native build.
@@ -18,6 +23,8 @@ dependencies:
     path: ../wallet_domain
   wallet_infra:
     path: ../wallet_infra
+  wallet_ui:
+    path: ../wallet_ui
 
   bip39:
     git:
@@ -31,9 +38,17 @@ dev_dependencies:
     sdk: flutter
 
 flutter:
+  # gen-l10n for lib/src/l10n (l10n.yaml); the output is committed.
+  generate: true
   plugin:
     platforms:
+      # FFI for the FHSE C library; on Android also the security key channel
+      # (WalletFhsePlugin, Kotlin + YubiKit). On iOS that channel is still the
+      # app's own Swift: YubiKit Swift is a Swift package, which a CocoaPods
+      # plugin cannot depend on. See README.md.
       android:
         ffiPlugin: true
+        package: org.magicgrants.wallet_fhse
+        pluginClass: WalletFhsePlugin
       ios:
         ffiPlugin: true

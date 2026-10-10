@@ -1,5 +1,6 @@
 // The Android Gradle Plugin builds the native code with the Android NDK, from
-// the CMake build shared with host builds (../src/CMakeLists.txt).
+// the CMake build shared with host builds (../src/CMakeLists.txt). The Kotlin
+// half is the security key channel (YubiKit, src/main/kotlin).
 
 group = "org.magicgrants.wallet_fhse"
 version = "1.0"
@@ -23,13 +24,19 @@ rootProject.allprojects {
 }
 
 apply plugin: "com.android.library"
+// The Kotlin Gradle plugin comes from the app's settings.gradle(.kts), as for
+// every Flutter plugin written in Kotlin; AGP 9+ has Kotlin built in.
+def agpMajor = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')[0] as int
+if (agpMajor < 9) {
+    apply plugin: "kotlin-android"
+}
 
 android {
     if (project.android.hasProperty("namespace")) {
         namespace = "org.magicgrants.wallet_fhse"
     }
 
-    compileSdk = 34
+    compileSdk = 36
 
     // The NDK the app's android/app/build.gradle declares.
     ndkVersion = android.ndkVersion
@@ -40,12 +47,37 @@ android {
         }
     }
 
+    sourceSets {
+        main.java.srcDirs += "src/main/kotlin"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    if (agpMajor < 9) {
+        kotlinOptions {
+            jvmTarget = "17"
+        }
+    }
+
     defaultConfig {
         minSdk = 21
+        // R8 rules the app picks up: see consumer-rules.pro.
+        consumerProguardFiles("consumer-rules.pro")
     }
+}
+
+dependencies {
+    // FIDO2 security keys (SecurityKeyOperations.kt): Yubico's yubikit-android,
+    // Apache-2.0, from Maven Central. No Google Play Services or other
+    // proprietary code, so F-Droid builds stay clean. `android` is USB/NFC
+    // discovery and transports; `fido` is the CTAP2 layer; `management` reads
+    // the key's serial number (to tell registered keys apart).
+    // Held at 3.1.0: 3.2.x's AAR requires compileSdk 37, above what Flutter and
+    // AGP 8.12 use (36).
+    implementation("com.yubico.yubikit:android:3.1.0")
+    implementation("com.yubico.yubikit:fido:3.1.0")
+    implementation("com.yubico.yubikit:management:3.1.0")
 }

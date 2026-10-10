@@ -1,3 +1,9 @@
 <!-- No `package` attribute: AGP 8 takes the namespace from build.gradle. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- FIDO2 security keys: NFC keys and USB-C/OTG keys, both optional so
+         devices without NFC or USB host can still install the app. Merged
+         into the app's manifest. -->
+    <uses-permission android:name="android.permission.NFC"/>
+    <uses-feature android:name="android.hardware.nfc" android:required="false"/>
+    <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
 </manifest>

@@ -1,0 +1,10 @@
+# The shared security-key screens' strings (lib/src/l10n). Generated into the
+# same directory and committed; regenerate with `flutter gen-l10n` here after
+# editing fhse_en.arb. Apps add FhseLocalizations.delegate to their
+# localizationsDelegates.
+arb-dir: lib/src/l10n
+template-arb-file: fhse_en.arb
+output-localization-file: fhse_localizations.dart
+output-class: FhseLocalizations
+nullable-getter: false
+preferred-supported-locales: [en, pt]

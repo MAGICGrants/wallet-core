@@ -10,4 +10,5 @@ library;
 export 'src/fhse_native.dart' show FhseException, FhseNative;
 export 'src/fhse_secret.dart' show FhseSecret, fhseSecretLength;
 export 'src/fhse_vault.dart';
+export 'src/security_key_service.dart';
 export 'src/wallet_key_tree.dart';
