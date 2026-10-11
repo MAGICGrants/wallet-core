@@ -1,0 +1,46 @@
+name: wallet_backup_platform
+description: "The metadata backup's platform side: the iCloud location (Swift), Android Auto Backup's folder, export and import of a backup file, and the shared Backup screens."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # The shared Backup screens' strings (lib/src/l10n).
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  wallet_backup:
+    path: ../wallet_backup
+  wallet_domain:
+    path: ../wallet_domain
+  wallet_infra:
+    path: ../wallet_infra
+  wallet_ui:
+    path: ../wallet_ui
+
+  # Importing a backup file on every platform, and choosing where to save one
+  # on a desktop OS. Mobile saves through the share sheet (share_plus, already
+  # in wallet_infra), which reaches Files, Proton Drive and the like.
+  file_selector: 1.1.0
+  share_plus: 11.1.0
+  path_provider: 2.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  # gen-l10n for lib/src/l10n (l10n.yaml); the output is committed.
+  generate: true
+  plugin:
+    platforms:
+      # iOS only: the iCloud Drive container. Android's Auto Backup is the
+      # manifest's rules over a plain folder, which needs no plugin code.
+      ios:
+        pluginClass: WalletBackupPlatformPlugin

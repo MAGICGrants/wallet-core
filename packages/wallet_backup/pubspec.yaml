@@ -1,0 +1,25 @@
+name: wallet_backup
+description: "Seed-keyed metadata backup: payment destinations, transaction keys and the address book, as many small sealed files. The format, merging and the backup service. Pure Dart: no platform channels."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.11.5
+  flutter: 3.41.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  wallet_domain:
+    path: ../wallet_domain
+  wallet_infra:
+    path: ../wallet_infra
+
+  # Carrot's keyed BLAKE2b (through wallet_domain), ChaCha20-Poly1305 for the
+  # XChaCha construction, and Keccak for Monero address checksums.
+  pointycastle: 3.9.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

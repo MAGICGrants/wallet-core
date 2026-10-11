@@ -32,6 +32,8 @@ dependencies:
       ref: 0cd6d54e2860bea68fc50c801cb9db2a760192fb # master @ 2023-06-07, includes the entropy fix
   bip32: 2.0.0
   polyseed: 0.0.7
+  # SLIP-21 (HMAC-SHA512) and Carrot's keyed BLAKE2b, for MetadataSecret.
+  pointycastle: 3.9.1
 
   http: 1.6.0
 

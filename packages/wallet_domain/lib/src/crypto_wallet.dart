@@ -9,6 +9,7 @@ import 'alias.dart';
 import 'amounts.dart';
 import 'app_config.dart';
 import 'background_sync_mode.dart';
+import 'metadata_backup.dart';
 import 'seed/seed.dart';
 import 'stores/tx_notification_store.dart';
 import 'stores/wallet_cache_store.dart';
@@ -1004,11 +1005,13 @@ abstract class CryptoWallet with ChangeNotifier {
   /// not values that can legitimately become empty. A wallet that has the
   /// fields always wins; nothing here can overwrite a fresh reading.
   ///
-  /// This recovers only what this install saw while in the other mode. A wallet
-  /// restored straight onto a node has nothing to carry, and still shows no
-  /// destinations for transactions it did not send.
+  /// What this install saw while in the other mode is the first source. The
+  /// second is the metadata backup ([MetadataBackup]), which is what gives a
+  /// wallet restored from its seed the destinations and keys of payments it
+  /// sent before.
   List<TxDetails> _withCarriedFields(List<TxDetails> fresh) {
-    if (_txHistory.isEmpty || fresh.isEmpty) return fresh;
+    final backup = MetadataBackup.instance;
+    if (fresh.isEmpty || (_txHistory.isEmpty && backup == null)) return fresh;
 
     Map<String, TxDetails>? previous;
     var out = fresh;
@@ -1021,10 +1024,22 @@ abstract class CryptoWallet with ChangeNotifier {
 
       previous ??= {for (final old in _txHistory) old.hash: old};
       final old = previous[tx.hash];
-      if (old == null) continue;
 
-      final recipients = wantsRecipients && old.recipients.isNotEmpty ? old.recipients : null;
-      final key = wantsKey && old.key.isNotEmpty ? old.key : null;
+      var recipients = wantsRecipients && old != null && old.recipients.isNotEmpty
+          ? old.recipients
+          : null;
+      var key = wantsKey && old != null && old.key.isNotEmpty ? old.key : null;
+
+      if (tx.direction == txDirectionOutgoing &&
+          ((wantsRecipients && recipients == null) || (wantsKey && key == null))) {
+        final saved = backup?.outgoingPayment(this, tx.hash);
+        if (saved != null) {
+          if (wantsRecipients && recipients == null && saved.recipients.isNotEmpty) {
+            recipients = saved.recipients;
+          }
+          if (wantsKey && key == null && saved.txKey.isNotEmpty) key = saved.txKey;
+        }
+      }
       if (recipients == null && key == null) continue;
 
       // Copied only once something is actually carried, so the common refresh
@@ -1048,6 +1063,7 @@ abstract class CryptoWallet with ChangeNotifier {
     // Keep the cached list when a sync returns nothing, e.g. not connected yet.
     if (newHistory.isNotEmpty || previousLength == 0) {
       _txHistory = newHistory;
+      if (newHistory.isNotEmpty) MetadataBackup.instance?.historyChanged(this);
     }
 
     if ((hadGrowth || hasPendingTx) && persistCount) {

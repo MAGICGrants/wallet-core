@@ -1,11 +1,7 @@
 import 'dart:convert';
-import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:bip39/bip39.dart' as bip39;
-import 'package:polyseed/polyseed.dart';
-import 'package:wallet_domain/wallet_domain.dart'
-    show SeedSource, PolyseedSeed, Bip39Seed, MoneroLegacySeed;
+import 'package:wallet_domain/wallet_domain.dart' show SeedSource, MetadataSecret;
 
 import 'fhse_native.dart';
 import 'fhse_secret.dart';
@@ -14,35 +10,33 @@ import 'fhse_secret.dart';
 /// vtnerd proposes in jeffro256/carrot#9.
 ///
 /// ```
-/// s_m (master secret)
-///  └ s_me (metadata secret)
-///     └ s_u (user secret)
-///        └ s_f (FHSE seed)
-///           └ k_p (FHSE root, z85: the wallet password)
+/// M (metadata root, wallet_domain's MetadataSecret)
+///  └ s_u (user secret)
+///     └ s_f (FHSE seed)
+///        └ k_p (FHSE root, z85: the wallet password)
 /// ```
 ///
 /// **Not a standard.** Carrot's master secret `s_m` exists only for the new key
 /// hierarchy, and these wallets are legacy-hierarchy (lwsf and wallet2 have no
-/// new-hierarchy wallets yet). So `s_me` here is a hash of the most-root
-/// secret each seed format has, behind a one-way function, with domain strings
-/// this proof of concept made up:
+/// new-hierarchy wallets yet). `M` stands in for Carrot's `s_me`: it is the
+/// metadata root the metadata backup uses too (PM-a for polyseed, BM-a for
+/// BIP39; see [MetadataSecret]), reached from the seed by hashes only.
 ///
-/// - **polyseed**: its 32-byte storage form, which carries the 150-bit secret
-///   the spend key is derived from (vtnerd's polyseed#25 idea);
-/// - **BIP39**: the 64-byte BIP39 seed (PBKDF2 of the mnemonic and passphrase),
-///   which sits above the BIP32 path to the Monero keys;
+/// - **polyseed**: the second PBKDF2 block of `polyseed_keygen`, which no wallet
+///   uses for keys;
+/// - **BIP39**: SLIP-21 `Key(m/"Monero")` of the BIP39 seed (passphrase
+///   included);
 /// - **25-word legacy**: nothing. That seed *is* the spend key, whose public
 ///   key is in the address, so anything derived from it falls to a
 ///   discrete-log solver, which is why carrot#9 excludes legacy keys. Such a
 ///   wallet gets a random FHSE seed instead.
 ///
-/// A wallet restored elsewhere does not derive these keys, and the strings
-/// would change once Carrot specifies `s_me`.
+/// The FHSE branch below `M` (`s_u`, `s_f`) and the metadata backup's
+/// (`H_32[M]("Monero metadata backup v1")`) are separated by their own domain
+/// strings. The strings here would change once Carrot specifies `s_me`.
 class WalletKeyTree {
   WalletKeyTree._();
 
-  static const _personalPolyseed = 'SKYPOC-SME-PSEED';
-  static const _personalBip39 = 'SKYPOC-SME-BIP39';
   static const _contextUser = 'SKY_SU01';
   static const _contextFhse = 'SKY_SF01';
 
@@ -65,36 +59,11 @@ class WalletKeyTree {
 
   /// Whether [seed] determines the FHSE seed; false means it is random and
   /// exists only in this wallet's files.
-  static bool isSeedDerived(SeedSource seed) => seed is! MoneroLegacySeed;
+  static bool isSeedDerived(SeedSource seed) => MetadataSecret.isAvailableFor(seed);
 
   static Future<Uint8List?> _metadataSecret(SeedSource seed) async {
-    switch (seed) {
-      case PolyseedSeed():
-        final storage = Polyseed.decode(
-          seed.mnemonic,
-          PolyseedLang.getByPhrase(seed.mnemonic),
-          PolyseedCoin.POLYSEED_MONERO,
-        ).save();
-        try {
-          return hashPersonal(storage, _personalPolyseed);
-        } finally {
-          storage.fillRange(0, storage.length, 0);
-        }
-      case Bip39Seed():
-        final mnemonic = seed.mnemonic;
-        final passphrase = seed.passphrase;
-        // PBKDF2 with 2048 rounds: off the UI isolate.
-        final bip39Seed = await Isolate.run(
-          () => bip39.mnemonicToSeed(mnemonic, passphrase: passphrase),
-        );
-        try {
-          return hashPersonal(bip39Seed, _personalBip39);
-        } finally {
-          bip39Seed.fillRange(0, bip39Seed.length, 0);
-        }
-      case MoneroLegacySeed():
-        return null;
-    }
+    if (!isSeedDerived(seed)) return null;
+    return MetadataSecret.derive(seed);
   }
 
   /// libsodium `crypto_kdf_blake2b_derive_from_key`, subkey id 0.

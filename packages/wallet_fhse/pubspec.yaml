@@ -26,16 +26,12 @@ dependencies:
   wallet_ui:
     path: ../wallet_ui
 
-  bip39:
-    git:
-      url: https://github.com/cypherstack/stack-bip39
-      ref: 0cd6d54e2860bea68fc50c801cb9db2a760192fb
   ffi: 2.1.4
-  polyseed: 0.0.7
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  polyseed: 0.0.7
 
 flutter:
   # gen-l10n for lib/src/l10n (l10n.yaml); the output is committed.

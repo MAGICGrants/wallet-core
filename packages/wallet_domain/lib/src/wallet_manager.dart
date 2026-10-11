@@ -7,6 +7,7 @@ import 'package:wallet_infra/wallet_infra.dart';
 
 import 'app_config.dart';
 import 'crypto_wallet.dart';
+import 'metadata_backup.dart';
 import 'seed/seed.dart';
 import 'seed/seed_policy.dart';
 import 'stores/seed_store.dart';
@@ -233,6 +234,7 @@ class WalletManager with ChangeNotifier {
   /// App Lock alone only covers the screen; this is the lock that takes the
   /// key out of memory.
   Future<void> fullyLock() async {
+    await _closeBackup();
     await Future.wait([
       for (final w in _wallets.values)
         w.close().catchError((Object e) {
@@ -381,6 +383,8 @@ class WalletManager with ChangeNotifier {
       // Fan out so per-wallet opens (each in its own isolate or FFI thread)
       // overlap. A failure in one wallet must not cancel the others.
       await Future.wait([for (final w in _visibleWallets) _openOneWallet(w, storedSeed)]);
+
+      if (storedSeed != null) _openBackup(storedSeed.seed);
     } finally {
       _openWalletFilesInFlight = null;
     }
@@ -689,6 +693,33 @@ class WalletManager with ChangeNotifier {
     for (final w in _visibleWallets) {
       await w.loadPersistedConnection();
     }
+
+    _openBackup(seed, restored: true);
+  }
+
+  // ----- Metadata backup -----
+
+  /// Opens the metadata backup, if the app installed one. Not awaited by the
+  /// callers: it derives keys (PBKDF2) and reads storage, and neither may hold
+  /// up an unlock or a restore.
+  void _openBackup(SeedSource seed, {bool restored = false}) {
+    final backup = MetadataBackup.instance;
+    if (backup == null) return;
+    unawaited(
+      backup.open(seed, wallets: _visibleWallets.toList(), restored: restored).catchError((
+        Object e,
+      ) {
+        log(LogLevel.warn, '[WalletManager] Metadata backup did not open: $e');
+      }),
+    );
+  }
+
+  Future<void> _closeBackup() async {
+    try {
+      await MetadataBackup.instance?.close();
+    } catch (e) {
+      log(LogLevel.warn, '[WalletManager] Metadata backup did not close: $e');
+    }
   }
 
   /// Deletes every wallet file and clears the keys this layer owns.
@@ -696,6 +727,12 @@ class WalletManager with ChangeNotifier {
   /// [extraPrefKeys] lets the app clear its own (contacts, pending txs,
   /// notification state) in the same pass; the manager does not know them.
   Future<void> deleteAll({List<String> extraPrefKeys = const []}) async {
+    try {
+      await MetadataBackup.instance?.deleteLocal();
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Failed to delete the local metadata backup: $e');
+    }
+
     for (final w in _wallets.values) {
       try {
         await w.delete();

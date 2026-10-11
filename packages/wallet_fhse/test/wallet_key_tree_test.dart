@@ -33,6 +33,17 @@ void main() {
     );
   }, skip: skip);
 
+  // The FHSE seed hangs off the metadata root M, the same root the metadata
+  // backup uses (MetadataSecret, whose own vectors are in wallet_domain).
+  test('the FHSE seed is kdf(kdf(M, SKY_SU01), SKY_SF01)', () async {
+    const raven =
+        'raven tail swear infant grief assist regular lamp duck valid someone little harsh '
+        'puppy airport language';
+    final m = MetadataSecret.deriveSync(SeedFormat.polyseed, raven, '');
+    final expected = WalletKeyTree.kdf(WalletKeyTree.kdf(m, 'SKY_SU01'), 'SKY_SF01');
+    expect(await WalletKeyTree.fhseSeedFor(const PolyseedSeed(raven)), expected);
+  }, skip: skip);
+
   test('polyseed: the FHSE seed is a function of the seed alone', () async {
     final mnemonic = newPolyseed();
     final a = await WalletKeyTree.fhseSeedFor(PolyseedSeed(mnemonic));

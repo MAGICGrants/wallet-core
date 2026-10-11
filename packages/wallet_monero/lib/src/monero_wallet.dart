@@ -1939,6 +1939,10 @@ class MoneroWallet extends CryptoWallet {
   Future<void> commitTx(PendingTransaction tx, String destinationAddress) async {
     final pending = tx as MoneroPendingTransaction;
 
+    // Read before the broadcast: the handle's ids are what the backup record
+    // is keyed on.
+    final txids = await _txIdsForBackup(pending);
+
     final committed = await _backend.commitPendingTx(pending.handle);
     final status = await _backend.pendingTxStatus(pending.handle);
     final error = await _backend.pendingTxErrorString(pending.handle);
@@ -1963,6 +1967,8 @@ class MoneroWallet extends CryptoWallet {
     // patched.
     _txKeyCache.clear();
 
+    await _recordSentPayment(pending, txids, destinationAddress);
+
     await refresh();
     // Persist so the just-sent unconfirmed tx; held in the wallet's cache, not
     // on chain yet; survives a restart before it is mined.
@@ -1979,6 +1985,46 @@ class MoneroWallet extends CryptoWallet {
     // after a send does not. Flushed here, next to the `store()` above.
     await persistWalletSnapshot();
     await persistCache();
+  }
+
+  Future<List<String>> _txIdsForBackup(MoneroPendingTransaction pending) async {
+    if (MetadataBackup.instance == null) return const [];
+    try {
+      return await _backend.pendingTxIds(pending.handle);
+    } catch (e) {
+      walletLog(LogLevel.warn, 'Could not read the pending transaction id: $e');
+      return const [];
+    }
+  }
+
+  /// Hands a payment just broadcast to the metadata backup, with its
+  /// destination and transaction key.
+  ///
+  /// The plan writes this record before the broadcast; monero_c has no way to
+  /// read a pending transaction's keys yet, so it is written straight after,
+  /// before the refresh and store below. A payment wallet2 split into several
+  /// transactions is left to the history scan, which knows each one's amounts.
+  Future<void> _recordSentPayment(
+    MoneroPendingTransaction pending,
+    List<String> txids,
+    String destinationAddress,
+  ) async {
+    final backup = MetadataBackup.instance;
+    final wallet = _wallet;
+    if (backup == null || wallet == null || txids.length != 1) return;
+    try {
+      final txid = txids.single;
+      backup.outgoingPaymentSent(
+        this,
+        txid: txid,
+        accountIndex: 0,
+        fee: pending.feeBaseUnits,
+        recipients: [TxRecipient(destinationAddress, pending.amountBaseUnits)],
+        txKey: await _backend.txKey(wallet, txid),
+      );
+    } catch (e) {
+      walletLog(LogLevel.warn, 'Could not hand the payment to the backup: $e');
+    }
   }
 
   // ----- Subaddresses -----

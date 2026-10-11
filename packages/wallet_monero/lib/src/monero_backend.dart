@@ -357,5 +357,15 @@ abstract class MoneroBackend {
   Future<BigInt> pendingTxFee(NativeHandle tx);
   Future<int> pendingTxStatus(NativeHandle tx);
   Future<String> pendingTxErrorString(NativeHandle tx);
+
+  /// The pending transaction's ids, available before it is committed. More
+  /// than one when wallet2 split the payment.
+  Future<List<String>> pendingTxIds(NativeHandle tx);
+
   Future<bool> commitPendingTx(NativeHandle tx);
+
+  /// The secret key of a transaction this wallet built (`r` then any additional
+  /// keys, hex), or empty. Ask only about a committed outgoing transaction:
+  /// `WalletImpl::getTxKey` writes a miss onto the wallet's global error status.
+  Future<String> txKey(NativeHandle wallet, String txid);
 }

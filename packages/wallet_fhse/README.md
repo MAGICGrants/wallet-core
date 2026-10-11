@@ -11,16 +11,21 @@ derivation mirrors the key tree vtnerd proposes in
 [jeffro256/carrot#9](https://github.com/jeffro256/carrot/issues/9):
 
 ```
-seed root material      polyseed storage (150-bit secret) / BIP39 seed
- └ s_me                 BLAKE2b-256, personal "SKYPOC-SME-PSEED" / "SKYPOC-SME-BIP39"
+seed                    polyseed / BIP39
+ └ M                    the metadata root (wallet_domain's MetadataSecret):
+                          polyseed  H_32[keygen(64)[32:64]]("Carrot polyseed legacy metadata secret")   (PM-a)
+                          BIP39     H_32[SLIP21(S)/"Monero"]("Carrot BIP39 legacy metadata secret" ‖ 0) (BM-a)
     └ s_u               crypto_kdf_blake2b, context "SKY_SU01"
        └ s_f            crypto_kdf_blake2b, context "SKY_SF01"   (the FHSE seed)
           └ k_p         FHSE root: crypto_kdf_blake2b(s_f, "FHSEROOT"), z85 (the wallet password)
 ```
 
-**`s_me` is a stand-in.** Carrot's master secret `s_m` exists only in the new
-key hierarchy, which lwsf and wallet2 do not have yet. The strings above are
-this proof of concept's, not a standard.
+**`M` stands in for Carrot's `s_me`.** Carrot's master secret `s_m` exists only
+in the new key hierarchy, which lwsf and wallet2 do not have yet. `M` is the
+same root the metadata backup (`wallet_backup`) derives its keys from, behind
+its own domain string, and is reached from the seed by hashes only. The domain
+strings are placeholders until a Monero addendum fixes them; `s_u` and `s_f`
+use this proof of concept's own contexts.
 
 A 25-word legacy seed *is* the spend key, whose public key is in the address,
 which is why carrot#9 excludes legacy keys. Such a wallet gets a random `s_f`.

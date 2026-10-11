@@ -1,0 +1,137 @@
+{
+  "@@locale": "en",
+  "backupTitle": "Backup",
+  "backupIntro": "Who you paid, each payment's transaction key, and your address book, encrypted with your recovery phrase. Restore the phrase anywhere and they come back.",
+  "backupLegacySeed": "Backup isn't available for 25-word seeds. To use it, create a new wallet with a 16-word seed and send your funds to it.",
+  "backupUnsupportedPassphrase": "Backup isn't available for seeds with an offset passphrase yet.",
+  "backupLocked": "Unlock your wallet to see its backup.",
+  "backupOpening": "Opening your backup…",
+  "backupSummary": "{payments, plural, =1{1 payment} other{{payments} payments}} and {contacts, plural, =1{1 contact} other{{contacts} contacts}} backed up",
+  "@backupSummary": {
+    "placeholders": {
+      "payments": {
+        "type": "int"
+      },
+      "contacts": {
+        "type": "int"
+      }
+    }
+  },
+  "backupLastChecked": "Last checked {time}",
+  "@backupLastChecked": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "backupWhereSaved": "Where it's saved",
+  "backupICloud": "iCloud",
+  "backupICloudDescription": "Syncs to your other Apple devices. Hidden from the Files app.",
+  "backupAndroid": "Android backup",
+  "backupAndroidDescription": "Android copies it about once a day with your Google account or your phone's backup service, and puts it back when you reinstall {appName}.",
+  "@backupAndroidDescription": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "backupLws": "Light wallet server",
+  "backupComingSoon": "Coming soon",
+  "backupStatusUpToDate": "Up to date",
+  "backupStatusPending": "{count, plural, =1{1 change waiting to upload} other{{count} changes waiting to upload}}",
+  "@backupStatusPending": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupStatusAwaiting": "Handed to iCloud; waiting for it to upload",
+  "backupStatusUnavailable": "iCloud Drive is off",
+  "backupStatusError": "Couldn't save there; will retry",
+  "backupStatusOff": "Off",
+  "backupAndroidLarge": "Android's copy is getting close to its 25 MB limit.",
+  "backupFileSection": "Backup file",
+  "backupExport": "Save a backup file",
+  "backupExportSubtitle": "One file for anywhere else, like Proton Drive or a USB stick. It doesn't update itself: save a new one after you send.",
+  "backupExported": "Backup file saved",
+  "backupImport": "Import a backup file",
+  "backupImportSubtitle": "Adds what a backup file holds to this wallet.",
+  "backupImported": "{count, plural, =1{Imported 1 new change} other{Imported {count} new changes}}",
+  "@backupImported": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupImportNothingNew": "Nothing new in that file",
+  "backupImportWrongWallet": "That file isn't a backup of this wallet",
+  "backupFailed": "Something went wrong: {error}",
+  "@backupFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "backupTorNote": "iCloud and Android backup are run by the operating system and don't go through Tor.",
+  "backupUnrecorded": "{count, plural, =1{1 sent payment has no backup record: it was sent from another wallet, or before backup was available.} other{{count} sent payments have no backup record: they were sent from another wallet, or before backup was available.}}",
+  "@backupUnrecorded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreTitle": "Last restore",
+  "backupRestoreSummary": "{payments, plural, =1{Found 1 payment} other{Found {payments} payments}}; {contacts, plural, =1{restored 1 contact} other{restored {contacts} contacts}}.",
+  "@backupRestoreSummary": {
+    "placeholders": {
+      "payments": {
+        "type": "int"
+      },
+      "contacts": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreUnreadable": "{count, plural, =1{1 file couldn't be read.} other{{count} files couldn't be read.}}",
+  "@backupRestoreUnreadable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreGaps": "Some changes made on another device are missing. Open the wallet on that device so it can upload them.",
+  "backupRestoreConflicts": "{count, plural, =1{1 payment has two different records; both are kept.} other{{count} payments have two different records; both are kept.}}",
+  "@backupRestoreConflicts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupDeleteICloud": "Delete the iCloud copy",
+  "backupDeleteICloudBody": "Removes this wallet's backup from iCloud. The copy on this device stays, and iCloud gets it again if iCloud backup is on.",
+  "backupDeleteConfirm": "Delete",
+  "backupCancel": "Cancel",
+  "backupDeleted": "iCloud copy deleted",
+  "backupRestoreFound": "Restored {payments, plural, =1{1 payment} other{{payments} payments}} and {contacts, plural, =1{1 contact} other{{contacts} contacts}} from your backup",
+  "@backupRestoreFound": {
+    "placeholders": {
+      "payments": {
+        "type": "int"
+      },
+      "contacts": {
+        "type": "int"
+      }
+    }
+  },
+  "backupNoneFoundTitle": "No backup found",
+  "backupNoneFoundBody": "If you saved a backup file, import it now to get back who you paid and your address book.",
+  "backupSkip": "Skip"
+}

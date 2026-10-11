@@ -18,6 +18,8 @@ packages/
   wallet_ethereum/   Ethereum, Sepolia and ERC-20: JSON-RPC plus Blockscout history
   wallet_openalias/  OpenAlias resolution over Tor, DNSSEC-validated (Rust FFI)
   wallet_fhse/       FHSE: security keys (FIDO2 hmac-secret) guarding the wallet password (C FFI; proof of concept)
+  wallet_backup/     metadata backup: payment destinations, tx keys and contacts as sealed files (pure Dart)
+  wallet_backup_platform/  the backup's iCloud location (Swift), Auto Backup folder, backup file, screens
   wallet_background/ background sync and incoming-transaction notifications
   wallet_fiat/       fiat exchange rates from Kraken
   wallet_ui/         shared Flutter widgets
@@ -104,7 +106,7 @@ you need depends on the packages you take:
 
 | Override | Needed when you depend on |
 | --- | --- |
-| `hashlib: 1.19.2` | `wallet_domain` or `wallet_monero` (both pull `polyseed`) |
+| `hashlib: 1.19.2` | `wallet_domain` or `wallet_monero` (both pull `polyseed`), so also `wallet_backup` |
 | `bip39` at the `cypherstack/stack-bip39` SHA | any coin package or `wallet_domain` |
 | `blockchain_utils` at the `cake-tech` SHA | `wallet_bitcoin`, `wallet_ethereum` or `wallet_monero` |
 | `web3dart` at the `cake-tech` SHA | `wallet_ethereum` |

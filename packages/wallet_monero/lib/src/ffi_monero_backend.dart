@@ -537,6 +537,24 @@ class FfiMoneroBackend extends MoneroBackend {
   }
 
   @override
+  Future<List<String>> pendingTxIds(NativeHandle tx) async {
+    final t = tx.id;
+    final joined = await Isolate.run(
+      () => monero.PendingTransaction_txid(Pointer.fromAddress(t), ','),
+    );
+    return [
+      for (final id in joined.split(','))
+        if (id.trim().isNotEmpty) id.trim(),
+    ];
+  }
+
+  @override
+  Future<String> txKey(NativeHandle wallet, String txid) {
+    final w = wallet.id;
+    return Isolate.run(() => monero.Wallet_getTxKey(Pointer.fromAddress(w), txid: txid));
+  }
+
+  @override
   Future<bool> commitPendingTx(NativeHandle tx) {
     final t = tx.id;
     return Isolate.run(

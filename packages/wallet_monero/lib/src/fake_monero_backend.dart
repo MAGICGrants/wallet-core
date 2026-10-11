@@ -697,10 +697,25 @@ class FakeMoneroBackend extends MoneroBackend {
   @override
   Future<String> pendingTxErrorString(NativeHandle tx) async => pendingError;
 
+  /// What `pendingTxIds` answers.
+  List<String> pendingIds = const [];
+
+  /// What `txKey` answers, by txid.
+  final Map<String, String> committedTxKeys = {};
+
+  @override
+  Future<List<String>> pendingTxIds(NativeHandle tx) async => pendingIds;
+
   @override
   Future<bool> commitPendingTx(NativeHandle tx) async {
     _record('commitPendingTx');
     return commitResult;
+  }
+
+  @override
+  Future<String> txKey(NativeHandle wallet, String txid) async {
+    _record('txKey');
+    return committedTxKeys[txid] ?? '';
   }
 }
 
