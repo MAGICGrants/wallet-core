@@ -96,7 +96,7 @@ How each part fits:
     open, PIN and credProtect in `device.c`).
   - libcbor 0.13.0, with its two CMake-generated headers written by hand.
   - libsodium 1.0.22 stable.
-- `src/wfhse.{h,c}`: the C interface Dart binds to. Only these 18 functions
+- `src/wfhse.{h,c}`: the C interface Dart binds to. Only these 19 functions
   are exported.
 - `src/CMakeLists.txt`: the Android build and host builds. The defines follow
   libsodium's own `build.zig`.
@@ -109,7 +109,7 @@ How each part fits:
 - `lib/security_keys_ui.dart`: the shared screens (Advanced security, setting
   keys up, unlocking with a key or the recovery phrase), their strings
   (`lib/src/l10n`, `FhseLocalizations`; regenerate with `flutter gen-l10n`
-  here) and the "Fully lock after" timer (`SecurityKeyFullLock`). An app
+  here) and "Fully lock after" (`SecurityKeyFullLock`). An app
   installs `SecurityKeysUi` with its name, logo, home route and
   `WalletManager`, adds `FhseLocalizations.delegate`, and routes to
   `AdvancedSecurityScreen` and `SecurityKeyUnlockScreen`.
@@ -152,3 +152,22 @@ key: set up, unlock, add, set up again, recovery phrase, turn off, delete.
   Native buffers are wiped.
 - **YubiKey Bio** speaks FIDO over USB HID only (no NFC, no CCID), so it works
   on Android over USB-C but cannot reach an iPhone.
+- **"Fully lock after" is measured on two clocks.** The wall clock and a boot
+  clock (`wfhse_boot_ns`: `CLOCK_BOOTTIME` on Android, `CLOCK_MONOTONIC` on
+  Apple) that keeps counting while the phone sleeps and cannot be set. Either
+  one passing the limit, a wall clock that went backwards, or a boot clock that
+  cannot be read locks the wallet on resume, so setting the date back does not
+  skip it. The decision is taken before anything else on resume; the app puts
+  its lock screens up first and only then closes the wallets, once, with the
+  password and FHSE's session dropped before the slow part. The timer itself
+  still only runs while the process gets CPU.
+- **Nothing here reaches a device backup.** On iOS the app directory (wallet
+  files, `master_seed`, `fhse_seed`, `wallet.fhse`) lives in
+  `Library/Application Support/wallet`, excluded from iCloud and computer
+  backups (`wallet_infra`'s `getAppDir`, `excludeFromDeviceBackup`); builds
+  that kept it in Documents move it there once. Android's backup rules include
+  only the metadata backup's folder. Keystore items are this-device-only, but an
+  encrypted iOS backup restored to the same phone does bring them back; without
+  the files they open nothing. Backups made before this change are not touched:
+  iCloud replaces its one backup per device on the next run, and older computer
+  backups stay until deleted.

@@ -1,7 +1,19 @@
+// clock_gettime and CLOCK_BOOTTIME (wfhse_boot_ns) under the C11 the build asks
+// for; Apple's headers expose both regardless.
+#if !defined(__APPLE__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
+
 #include "wfhse.h"
 
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+// A stable Linux ABI value (Android included), should a libc header not name it.
+#if defined(__linux__) && !defined(CLOCK_BOOTTIME)
+#define CLOCK_BOOTTIME 7
+#endif
 
 #include <sodium/core.h>
 #include <sodium/crypto_generichash_blake2b.h>
@@ -185,4 +197,22 @@ void wfhse_memzero(void* ptr, size_t len)
 {
   if (ptr)
     sodium_memzero(ptr, len);
+}
+
+int64_t wfhse_boot_ns(void)
+{
+#if defined(__APPLE__)
+  // Apple's CLOCK_MONOTONIC keeps counting while the device sleeps
+  // (CLOCK_UPTIME_RAW is the one that stops) and is not settable.
+  const uint64_t ns = clock_gettime_nsec_np(CLOCK_MONOTONIC);
+  return ns == 0 ? -1 : (int64_t)ns;
+#elif defined(CLOCK_BOOTTIME)
+  // Linux's CLOCK_MONOTONIC stops during suspend; CLOCK_BOOTTIME does not.
+  struct timespec ts;
+  if (clock_gettime(CLOCK_BOOTTIME, &ts) != 0)
+    return -1;
+  return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
+#else
+  return -1;
+#endif
 }

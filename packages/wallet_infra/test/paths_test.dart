@@ -91,6 +91,95 @@ void main() {
     // Only iOS restores documents from backup, so only iOS needs the cleanup.
     expect(torCache.existsSync(), !Platform.isIOS);
   });
+
+  test('excludeFromDeviceBackup is a no-op off iOS', () {
+    expect(excludeFromDeviceBackup(tmp.path), Platform.isIOS);
+  });
+
+  // The one-time move of the iOS app directory out of Documents (which iOS
+  // backs up). Runs before any wallet is opened, from whichever isolate starts
+  // first; it must never lose or overwrite a file, whatever interrupts it.
+  group('moveIntoAppDir', () {
+    late Directory docs;
+    late Directory target;
+
+    setUp(() {
+      docs = Directory('${tmp.path}/Documents')..createSync();
+      target = Directory('${tmp.path}/Library/Application Support/$iosAppDirName');
+    });
+
+    test('moves every entry, keeps Inbox, and flags the staging directory', () async {
+      File('${docs.path}/master_seed').writeAsStringSync('seed');
+      File('${docs.path}/wallet.fhse').writeAsStringSync('fhse');
+      Directory('${docs.path}/metadata_backup_state').createSync();
+      File('${docs.path}/metadata_backup_state/id').writeAsStringSync('device');
+      Directory('${docs.path}/Inbox').createSync();
+      final flagged = <String>[];
+
+      await moveIntoAppDir(
+        from: docs,
+        to: target,
+        excludeFromBackup: (path) {
+          flagged.add(path);
+          return true;
+        },
+      );
+
+      expect(File('${target.path}/master_seed').readAsStringSync(), 'seed');
+      expect(File('${target.path}/wallet.fhse').readAsStringSync(), 'fhse');
+      expect(File('${target.path}/metadata_backup_state/id').readAsStringSync(), 'device');
+      expect(File('${docs.path}/master_seed').existsSync(), isFalse);
+      expect(Directory('${docs.path}/Inbox').existsSync(), isTrue);
+      expect(Directory('${target.path}.migrating').existsSync(), isFalse);
+      expect(flagged, ['${target.path}.migrating']);
+    });
+
+    test('picks up where a crash midway left off', () async {
+      final staging = Directory('${target.path}.migrating')..createSync(recursive: true);
+      File('${staging.path}/wallet').writeAsStringSync('moved before the crash');
+      File('${docs.path}/wallet.keys').writeAsStringSync('not yet moved');
+
+      await moveIntoAppDir(from: docs, to: target);
+
+      expect(File('${target.path}/wallet').readAsStringSync(), 'moved before the crash');
+      expect(File('${target.path}/wallet.keys').readAsStringSync(), 'not yet moved');
+      expect(docs.listSync(), isEmpty);
+    });
+
+    test('never overwrites an entry that was already moved', () async {
+      final staging = Directory('${target.path}.migrating')..createSync(recursive: true);
+      File('${staging.path}/wallet').writeAsStringSync('moved');
+      File('${docs.path}/wallet').writeAsStringSync('stray');
+
+      await moveIntoAppDir(from: docs, to: target);
+
+      expect(File('${target.path}/wallet').readAsStringSync(), 'moved');
+      expect(File('${docs.path}/wallet').readAsStringSync(), 'stray');
+    });
+
+    test('a fresh install gets an empty directory', () async {
+      await moveIntoAppDir(from: Directory('${tmp.path}/no_documents'), to: target);
+      expect(target.existsSync(), isTrue);
+      expect(target.listSync(), isEmpty);
+    });
+
+    test('two runs at once both end with every file in place exactly once', () async {
+      for (var i = 0; i < 50; i++) {
+        File('${docs.path}/f$i').writeAsStringSync('$i');
+      }
+
+      await Future.wait([
+        moveIntoAppDir(from: docs, to: target),
+        moveIntoAppDir(from: docs, to: target),
+      ]);
+
+      for (var i = 0; i < 50; i++) {
+        expect(File('${target.path}/f$i').readAsStringSync(), '$i');
+      }
+      expect(docs.listSync(), isEmpty);
+      expect(Directory('${target.path}.migrating').existsSync(), isFalse);
+    });
+  });
 }
 
 /// Fails if consulted. Used to prove the desktop path never touches the
@@ -105,4 +194,8 @@ class _ExplodingDirectories extends DirectoryProvider {
   @override
   Future<Directory?> externalStorage() async =>
       throw StateError('externalStorage() must not be called on desktop');
+
+  @override
+  Future<Directory> applicationSupport() async =>
+      throw StateError('applicationSupport() must not be called on desktop');
 }

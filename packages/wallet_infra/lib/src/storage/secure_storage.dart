@@ -7,8 +7,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 ///  - **Android**: `EncryptedSharedPreferences`, master key in the Android
 ///    Keystore, hardware-backed on most devices and non-exportable.
 ///  - **iOS / macOS**: Keychain at `AfterFirstUnlockThisDeviceOnly`, so the
-///    value is excluded from iCloud Keychain and device backups. A restored
-///    backup has the wallet file but not its key; recovery is seed-only.
+///    value never syncs to iCloud Keychain and never moves to another device.
+///    Encrypted device backups do carry it, wrapped with this device's
+///    hardware key, so a backup restored to the *same* phone brings it back.
+///    That is why the files it opens are kept out of device backups on iOS
+///    (`getAppDir`, `excludeFromDeviceBackup`): a restored phone has neither,
+///    and recovery is seed-only.
 ///  - **Windows**: values are AES-GCM files on disk; only a 16-byte key lives
 ///    in Credential Manager. Readable by any process running as that user.
 ///  - **Linux**: libsecret's default login keyring, which is normally unlocked

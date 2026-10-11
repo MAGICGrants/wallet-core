@@ -30,6 +30,8 @@ dependencies:
   # ui/notification_service.dart — local incoming-tx notifications.
   flutter_local_notifications: 19.5.0
   path: 1.9.1
+  # storage/backup_exclusion.dart — CoreFoundation through dart:ffi (iOS).
+  ffi: 2.1.4
 
   # WalletFileCrypto: AES-256-GCM (pointycastle) keyed by PBKDF2-HMAC-SHA256
   # (webcrypto -> BoringSSL via FFI, ~10-50x faster than pure Dart).

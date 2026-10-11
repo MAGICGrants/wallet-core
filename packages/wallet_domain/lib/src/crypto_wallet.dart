@@ -1402,8 +1402,14 @@ abstract class CryptoWallet with ChangeNotifier {
   ///
   /// Under [runWithSyncSuspended] for the reason [delete] is: the close frees
   /// the native handle, and a timer tick inside a native call at that moment
-  /// is a use-after-free.
-  Future<void> close() async {
+  /// is a use-after-free. For the same reason two callers at once share one
+  /// close: a second concurrent store and close of the same handle would be one
+  /// too.
+  Future<void> close() => _closing ??= _close().whenComplete(() => _closing = null);
+
+  Future<void>? _closing;
+
+  Future<void> _close() async {
     await runWithSyncSuspended(() async {
       if (_isLoaded) {
         await pauseSyncAndStore();

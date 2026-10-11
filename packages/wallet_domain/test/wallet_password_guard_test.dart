@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -52,6 +53,19 @@ class _ViewOnlyWallet extends FakeWallet {
 
   @override
   Future<void> closeFiles() async => closedFiles++;
+}
+
+/// Holds its close until [release] completes, to look inside a full lock.
+class _SlowCloseWallet extends _ViewOnlyWallet {
+  _SlowCloseWallet(super.symbol);
+
+  final release = Completer<void>();
+
+  @override
+  Future<void> closeFiles() async {
+    closedFiles++;
+    await release.future;
+  }
 }
 
 void main() {
@@ -149,6 +163,42 @@ void main() {
     expect(w.isLoaded, isFalse);
     expect(w.closedFiles, 1);
     expect(m.hasPassword, isFalse);
+    m.dispose();
+  });
+
+  test('a full lock forgets the password before it closes anything', () async {
+    final w = _SlowCloseWallet('XMR');
+    final m = WalletManager(coins: () => [w])..setWalletPassword('pw');
+    await m.openAll();
+
+    final lock = m.fullyLock();
+    // Closing stores each wallet and takes a while; the password must already
+    // be gone, so nothing still on screen can use it meanwhile.
+    expect(m.hasPassword, isFalse);
+    expect(m.passwordForGuard, isNull);
+
+    w.release.complete();
+    await lock;
+    expect(w.isLoaded, isFalse);
+    m.dispose();
+  });
+
+  test('two closes at once share one, so a wallet is never closed twice', () async {
+    final w = _SlowCloseWallet('XMR');
+    final m = WalletManager(coins: () => [w])..setWalletPassword('pw');
+    await m.openAll();
+
+    final first = w.close();
+    final second = w.close();
+    expect(identical(first, second), isTrue);
+
+    w.release.complete();
+    await Future.wait([first, second]);
+    expect(w.closedFiles, 1);
+
+    // Once finished, a later close is a new one.
+    await w.close();
+    expect(w.closedFiles, 2);
     m.dispose();
   });
 

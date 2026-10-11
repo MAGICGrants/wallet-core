@@ -234,6 +234,10 @@ class WalletManager with ChangeNotifier {
   /// App Lock alone only covers the screen; this is the lock that takes the
   /// key out of memory.
   Future<void> fullyLock() async {
+    // The password goes first, before the slow part (each close stores its
+    // wallet). Nothing below needs it: every wallet closes with its own cache
+    // password and native state. And nothing else can use it meanwhile.
+    _password = null;
     await _closeBackup();
     await Future.wait([
       for (final w in _wallets.values)
@@ -241,7 +245,6 @@ class WalletManager with ChangeNotifier {
           log(LogLevel.warn, 'close failed: $e', coin: w.coinSymbol);
         }),
     ]);
-    _password = null;
     notifyListeners();
   }
 

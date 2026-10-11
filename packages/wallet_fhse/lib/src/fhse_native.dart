@@ -88,6 +88,8 @@ typedef WfhseFreeN = Void Function(Pointer<Uint8>, Size);
 typedef WfhseFreeD = void Function(Pointer<Uint8>, int);
 typedef WfhseZeroN = Void Function(Pointer<Void>, Size);
 typedef WfhseZeroD = void Function(Pointer<Void>, int);
+typedef WfhseBootNsN = Int64 Function();
+typedef WfhseBootNsD = int Function();
 
 /// The functions of `src/wfhse.h`, bound by hand: there are few, and a
 /// generator config nobody runs would read as reviewed bindings when they are
@@ -110,7 +112,8 @@ class FhseNative {
       hashPersonal = lib.lookupFunction<WfhseHashN, WfhseHashD>('wfhse_hash_personal'),
       random = lib.lookupFunction<WfhseRandomN, WfhseRandomD>('wfhse_random'),
       free = lib.lookupFunction<WfhseFreeN, WfhseFreeD>('wfhse_free'),
-      memzero = lib.lookupFunction<WfhseZeroN, WfhseZeroD>('wfhse_memzero');
+      memzero = lib.lookupFunction<WfhseZeroN, WfhseZeroD>('wfhse_memzero'),
+      bootNs = lib.lookupFunction<WfhseBootNsN, WfhseBootNsD>('wfhse_boot_ns');
 
   /// Set by host tests to a CMake build of `src/`. Unused in the apps.
   static String? libraryPathOverride;
@@ -135,6 +138,10 @@ class FhseNative {
   final WfhseRandomD random;
   final WfhseFreeD free;
   final WfhseZeroD memzero;
+
+  /// `wfhse_boot_ns`: a clock that counts sleep and cannot be set; -1 when
+  /// unreadable. See [bootClockNanos].
+  final WfhseBootNsD bootNs;
 
   /// Copies [bytes] into native memory for the length of [body], then wipes and
   /// frees it. Secrets cross the boundary only this way, so none is left behind
@@ -162,6 +169,14 @@ class FhseNative {
       memzero(ptr.cast(), length);
       calloc.free(ptr);
     }
+  }
+
+  /// Nanoseconds on a clock that keeps counting while the phone sleeps and that
+  /// the user cannot set, or null when it cannot be read. Only differences
+  /// between two readings in one process mean anything.
+  int? bootClockNanos() {
+    final ns = bootNs();
+    return ns < 0 ? null : ns;
   }
 
   static void check(int rc, String operation) {

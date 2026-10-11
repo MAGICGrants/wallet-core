@@ -71,6 +71,13 @@ WFHSE_EXPORT void wfhse_free(uint8_t* ptr, size_t len);
 //! Wipes memory Dart allocated (calloc) before it frees it.
 WFHSE_EXPORT void wfhse_memzero(void* ptr, size_t len);
 
+//! Nanoseconds on a clock that keeps counting while the device sleeps and that
+//! the user cannot set: CLOCK_BOOTTIME on Linux and Android, CLOCK_MONOTONIC on
+//! Apple platforms (which, unlike Linux's, includes sleep). -1 when unreadable.
+//! For "Fully lock after", whose deadline must survive both a sleeping phone and
+//! a clock set back.
+WFHSE_EXPORT int64_t wfhse_boot_ns(void);
+
 #ifdef __cplusplus
 }
 #endif

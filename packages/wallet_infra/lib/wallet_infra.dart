@@ -18,6 +18,7 @@ export 'src/net/socks_socket.dart';
 export 'src/paths.dart';
 export 'src/settings/language_model.dart';
 export 'src/settings/theme_model.dart';
+export 'src/storage/backup_exclusion.dart';
 export 'src/storage/preferences.dart';
 export 'src/storage/secure_storage.dart';
 export 'src/storage/wallet_password.dart';
