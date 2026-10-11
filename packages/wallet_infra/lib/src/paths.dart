@@ -102,8 +102,9 @@ class WalletPaths {
 /// Desktop platforms get an app-specific directory because the documents
 /// directory is shared with the user's own files. Android uses the sandboxed
 /// documents directory directly; its backup rules include only the metadata
-/// backup's folder. iOS uses a directory kept out of the phone's backups
-/// ([iosAppDirName]); see [excludeFromDeviceBackup] for why.
+/// backup's folder. iOS and macOS use a directory kept out of the device's
+/// backups (iCloud, computer backups, Time Machine) ([iosAppDirName]); see
+/// [excludeFromDeviceBackup] for why.
 Future<Directory> getAppDir() async {
   // An explicit root wins on every platform. This is the only thing a test can
   // say that the desktop branches below will hear.
@@ -126,13 +127,16 @@ Future<Directory> getAppDir() async {
   }
 
   if (Platform.isIOS) return _iosAppDir();
+  if (Platform.isMacOS) return _macAppDir();
 
   return WalletPaths.directories.applicationDocuments();
 }
 
-/// The iOS app directory's name under `Library/Application Support`.
+/// The app directory's name under `Library/Application Support` on iOS and
+/// macOS.
 ///
-/// Everything in it is left out of iCloud and computer backups, matching
+/// Everything in it is left out of iCloud, computer and Time Machine backups,
+/// matching
 /// Android, whose rules back up only the metadata backup. A phone restored or
 /// migrated from a backup therefore starts without a wallet and is restored
 /// from the recovery phrase, which the this-device-only keystore already made
@@ -157,6 +161,29 @@ Future<Directory> _iosAppDir() async {
   } catch (_) {
     // Not cached: the next caller tries again.
     _iosAppDirOnce = null;
+    rethrow;
+  }
+}
+
+Future<Directory>? _macAppDirOnce;
+
+/// macOS: the same excluded directory under Application Support as iOS, but
+/// nothing is moved into it. Earlier macOS builds kept a typed-password wallet
+/// in Documents, which this build does not migrate; and an app run without the
+/// sandbox would see the user's own Documents there, which must never be moved.
+Future<Directory> _macAppDir() async {
+  try {
+    return await (_macAppDirOnce ??= () async {
+      final support = await WalletPaths.directories.applicationSupport();
+      final appDir = Directory(p.join(support.path, iosAppDirName));
+      await appDir.create(recursive: true);
+      if (!excludeFromDeviceBackup(appDir.path)) {
+        log(LogLevel.error, '[Paths] The wallet directory is not excluded from device backups');
+      }
+      return appDir;
+    }());
+  } catch (_) {
+    _macAppDirOnce = null;
     rethrow;
   }
 }

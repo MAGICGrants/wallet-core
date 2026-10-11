@@ -443,4 +443,32 @@ class FhseLocalizationsPt extends FhseLocalizations {
   @override
   String get securityKeysSharedPhraseWarning =>
       'Using this recovery phrase in another wallet app too? Protect that app as well. Once unlocked, either app can show the phrase, so it is only as safe as the less protected one.';
+
+  @override
+  String get securityKeysIntroBodyMac =>
+      'Require a YubiKey and its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this Mac cannot be decrypted, even by someone who can log in to it.';
+
+  @override
+  String get securityKeysRequirementsMac =>
+      'Works with YubiKey 5 series keys and YubiKey Bio plugged into this Mac. Each key needs a FIDO2 PIN.';
+
+  @override
+  String get securityKeysTurnOffBodyMac =>
+      'The wallet password goes back into this Mac\'s keychain, and the wallet opens without a key.';
+
+  @override
+  String get securityKeyConnectBodyMac =>
+      'Plug your YubiKey into this Mac and touch it when it blinks.';
+
+  @override
+  String get securityKeyPinBodyMac =>
+      'The PIN you set for this YubiKey. It is not your Mac\'s password.';
+
+  @override
+  String get desktopAutoLockLabel => 'Lock after';
+
+  @override
+  String desktopAutoLockDescription(String appName) {
+    return 'After this long without use, $appName closes the wallet and forgets its password. Unlock it again to carry on.';
+  }
 }

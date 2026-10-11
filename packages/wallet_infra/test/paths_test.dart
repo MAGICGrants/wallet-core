@@ -92,9 +92,37 @@ void main() {
     expect(torCache.existsSync(), !Platform.isIOS);
   });
 
-  test('excludeFromDeviceBackup is a no-op off iOS', () {
-    expect(excludeFromDeviceBackup(tmp.path), Platform.isIOS);
+  // On a macOS host this runs the real CoreFoundation calls (Time Machine's
+  // exclusion is the same flag); elsewhere it is a no-op.
+  test('excludeFromDeviceBackup sets the flag on Apple platforms only', () {
+    expect(excludeFromDeviceBackup(tmp.path), Platform.isIOS || Platform.isMacOS);
   });
+
+  // With no injected root, macOS takes its own branch: an excluded directory
+  // under Application Support, and nothing moved out of Documents, which
+  // outside the sandbox is the user's own folder.
+  test(
+    'macOS keeps the app dir under Application Support, out of Time Machine',
+    () async {
+      final support = Directory('${tmp.path}/Support')..createSync();
+      final docs = Directory('${tmp.path}/Documents')..createSync();
+      File('${docs.path}/mine').writeAsStringSync('mine');
+      WalletPaths.install(
+        linuxDirName: '.test_wallet',
+        windowsAppDataDir: 'MAGIC Grants/Test Wallet',
+        directories: _NoRoot(support: support, documents: docs),
+      );
+
+      final dir = await getAppDir();
+      expect(dir.path, '${support.path}/$iosAppDirName');
+      expect(dir.existsSync(), isTrue);
+      expect(File('${docs.path}/mine').readAsStringSync(), 'mine');
+      // Reads the flag getAppDir set, through the system's own tool.
+      final excluded = Process.runSync('tmutil', ['isexcluded', dir.path]);
+      expect(excluded.stdout as String, contains('[Excluded]'));
+    },
+    skip: Platform.isMacOS ? false : 'macOS-only branch',
+  );
 
   // The one-time move of the iOS app directory out of Documents (which iOS
   // backs up). Runs before any wallet is opened, from whichever isolate starts
@@ -180,6 +208,23 @@ void main() {
       expect(Directory('${target.path}.migrating').existsSync(), isFalse);
     });
   });
+}
+
+/// Names no app root, so [getAppDir] makes its own platform decision.
+class _NoRoot extends DirectoryProvider {
+  const _NoRoot({required this.support, required this.documents});
+
+  final Directory support;
+  final Directory documents;
+
+  @override
+  Future<Directory> applicationDocuments() async => documents;
+
+  @override
+  Future<Directory> applicationSupport() async => support;
+
+  @override
+  Future<Directory?> externalStorage() async => null;
 }
 
 /// Fails if consulted. Used to prove the desktop path never touches the

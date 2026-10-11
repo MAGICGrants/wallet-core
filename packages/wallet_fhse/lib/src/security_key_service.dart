@@ -161,7 +161,7 @@ class SecurityKeyService implements SecurityKeyAuthenticator {
   /// Security keys on this platform: iPhone and Android. Not the iPhone app
   /// running on a Mac, which has neither NFC nor the USB path.
   static bool get isSupportedPlatform =>
-      (Platform.isAndroid || Platform.isIOS) && !HostPlatform.isIosAppOnMac;
+      (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) && !HostPlatform.isIosAppOnMac;
 
   Future<T> _call<T>(String method, [Map<String, Object?>? args]) async {
     try {

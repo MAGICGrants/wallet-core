@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:wallet_domain/wallet_domain.dart' show SeedSource, WalletManager;
-import 'package:wallet_infra/wallet_infra.dart' show SharedPreferencesService;
+import 'package:wallet_domain/wallet_domain.dart'
+    show DomainPreferenceKeys, SeedSource, WalletManager;
+import 'package:wallet_infra/wallet_infra.dart' show SharedPreferencesService, WalletSecrets;
 
 import '../fhse_native.dart';
 import '../fhse_vault.dart';
@@ -157,6 +159,10 @@ Future<void> _fullyLock(WalletManager manager) async {
   }
 }
 
+/// Waits for a full lock under way, for an app's own unlock path: it must not
+/// reopen wallets that are still being closed.
+Future<void> waitForFullLock() => _awaitFullLock();
+
 /// Waits for a full lock under way, so an unlock never reopens wallets that are
 /// still being closed. A lock that failed does not stop the unlock.
 Future<void> _awaitFullLock() async {
@@ -193,6 +199,136 @@ Future<void> renameSecurityKey(SecurityKeyRecord record, String name) =>
 /// Turns security keys off: the password goes back into the keystore.
 Future<void> turnOffSecurityKeys(BuildContext context) =>
     FhseWalletGuard.release(_manager(context));
+
+/// Nanoseconds on a clock the user cannot set, for the lock deadlines: FHSE's
+/// boot clock ([FhseNative.bootClockNanos], which also counts sleep) where its
+/// library is built (Android, iOS, macOS), otherwise a monotonic clock in this
+/// process (Linux and Windows, where it may stop while the computer sleeps, so
+/// the wall clock may be the one that decides). Null when unreadable.
+int? lockClockNanos() {
+  if (_nativeLockClock != false) {
+    try {
+      final ns = FhseNative.instance.bootClockNanos();
+      _nativeLockClock = true;
+      return ns;
+    } catch (_) {
+      _nativeLockClock = false;
+    }
+  }
+  return _processClock.elapsedMicroseconds * 1000;
+}
+
+bool? _nativeLockClock;
+final _processClock = Stopwatch()..start();
+
+/// Whether this platform locks after a time without use ([DesktopAutoLock]):
+/// the desktop OSes. Mobile locks after a time in the background instead
+/// ([SecurityKeyFullLock]).
+final bool isDesktopAutoLockPlatform = Platform.isMacOS || Platform.isLinux || Platform.isWindows;
+
+/// After App Lock has let the user in: puts the keystore password back in
+/// memory (an App Lock relock drops it) and, after a full lock, opens the
+/// wallets again. Does nothing when security keys hold the password; a key
+/// comes next ([walletNeedsSecurityKey]).
+Future<void> reopenAfterAppLock(BuildContext context) async {
+  final manager = _manager(context);
+  await _awaitFullLock();
+  if (!manager.hasPassword) await manager.loadMobileWalletPassword();
+  if (manager.hasPassword && manager.loadedWallets.isEmpty) manager.openWalletFilesAndSync();
+}
+
+/// Whether "Lock after" has anything to do on a desktop OS: the wallet is open
+/// (its password in memory, or its files) and something will be asked for to
+/// open it again:
+/// the typed password (Linux, Windows), security keys, or App Lock (macOS).
+/// Without any of these a lock would reopen at once, so it is skipped.
+Future<bool> desktopAutoLockApplies(BuildContext context) async {
+  final manager = _manager(context);
+  // An App Lock relock drops the password but leaves the wallets open; those
+  // still need closing.
+  if (!manager.hasPassword && manager.loadedWallets.isEmpty) return false;
+  if (!WalletSecrets.holdsWalletPassword) return true;
+  if (await manager.isPasswordGuarded()) return true;
+  return await SharedPreferencesService.get<bool>(DomainPreferenceKeys.appLockEnabled) ?? false;
+}
+
+/// "Lock after" on a desktop OS: once the app has gone
+/// [SecurityKeysPreferences.fullLockMinutes] without use, the wallet is closed
+/// and its password forgotten, and the app shows its unlock screen (the typed
+/// password on Linux and Windows; App Lock and, with keys on, a key on macOS).
+///
+/// "Without use" means no pointer or key input reached the app: a window that
+/// is hidden, minimised or behind others gets none, so this covers leaving the
+/// app as well as leaving the computer. The time is measured as for "Fully
+/// lock after" ([fullLockDue]): on the wall clock and on a clock the user
+/// cannot set, either one deciding, so setting the date back does not skip it.
+///
+/// The app records use from its root ([recordUse]), calls [start] once with
+/// what to do when the time is up, and calls [check] when the app comes back
+/// to the front (timers can stall while a computer sleeps). The lock itself is
+/// the app's: put the unlock screen up first, then [lock].
+class DesktopAutoLock {
+  DateTime _lastUse = SecurityKeyFullLock.wallClock();
+  int? _lastUseBootNs = SecurityKeyFullLock.bootClock();
+  var _limit = const Duration(minutes: SecurityKeysPreferences.fullLockDefaultMinutes);
+  Timer? _ticker;
+  Future<void> Function()? _onDue;
+  bool _checking = false;
+
+  /// How often the time is checked while the app runs.
+  static const tick = Duration(seconds: 15);
+
+  void start(Future<void> Function() onDue) {
+    _onDue = onDue;
+    _ticker?.cancel();
+    _ticker = Timer.periodic(tick, (_) => unawaited(check()));
+  }
+
+  /// Input reached the app. Cheap enough for every pointer move: it reads the
+  /// clocks at most once a second.
+  void recordUse() {
+    final now = SecurityKeyFullLock.wallClock();
+    final sinceLast = now.difference(_lastUse);
+    if (!sinceLast.isNegative && sinceLast < const Duration(seconds: 1)) return;
+    _lastUse = now;
+    _lastUseBootNs = SecurityKeyFullLock.bootClock();
+  }
+
+  /// Whether the time without use has run out, from the setting last read.
+  bool get isDue => fullLockDue(
+    limit: _limit,
+    backgroundedAt: _lastUse,
+    now: SecurityKeyFullLock.wallClock(),
+    backgroundedBootNs: _lastUseBootNs,
+    nowBootNs: SecurityKeyFullLock.bootClock(),
+  );
+
+  /// Re-reads the setting and, when the time has run out, runs the app's
+  /// `onDue` once. Afterwards the time starts again from now.
+  Future<void> check() async {
+    final onDue = _onDue;
+    if (onDue == null || _checking) return;
+    _checking = true;
+    try {
+      _limit = Duration(minutes: await SecurityKeysPreferences.fullLockMinutes());
+      if (!isDue) return;
+      await onDue();
+      _lastUse = SecurityKeyFullLock.wallClock();
+      _lastUseBootNs = SecurityKeyFullLock.bootClock();
+    } finally {
+      _checking = false;
+    }
+  }
+
+  /// Closes the wallet and forgets its password ([fullyLockWallet]), joining
+  /// a lock already under way.
+  Future<void> lock(BuildContext context) => fullyLockWallet(context);
+
+  void dispose() {
+    _ticker?.cancel();
+    _ticker = null;
+  }
+}
 
 /// Whether "Fully lock after" is due: [limit] has passed since the app went to
 /// the background on either clock, or the clocks cannot be trusted.
@@ -243,9 +379,9 @@ class SecurityKeyFullLock {
   /// when the app comes back does not arm a timer in the foreground.
   var _generation = 0;
 
-  /// The boot clock ([FhseNative.bootClockNanos]); replaced in tests.
+  /// The boot clock ([lockClockNanos]); replaced in tests.
   @visibleForTesting
-  static int? Function() bootClock = () => FhseNative.instance.bootClockNanos();
+  static int? Function() bootClock = lockClockNanos;
 
   /// The wall clock; replaced in tests.
   @visibleForTesting

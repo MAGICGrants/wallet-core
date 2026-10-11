@@ -48,16 +48,17 @@ class FhseException implements Exception {
 
 /// Where the native library comes from.
 ///
-/// The plugin builds it per platform: a shared object on Android, and on iOS a
-/// framework CocoaPods links into the app (Skylight's Podfile uses
+/// The plugin builds it per platform: a shared object on Android, and on iOS
+/// and macOS a framework CocoaPods links into the app (the apps' Podfiles use
 /// `use_frameworks!`). Host tests point [FhseNative.libraryPathOverride] at a
 /// CMake build of `src/`; see test/README.md.
 DynamicLibrary _open() {
   final override = FhseNative.libraryPathOverride;
   if (override != null) return DynamicLibrary.open(override);
   if (Platform.isAndroid || Platform.isLinux) return DynamicLibrary.open('libwallet_fhse.so');
-  if (Platform.isIOS) return DynamicLibrary.open('wallet_fhse.framework/wallet_fhse');
-  if (Platform.isMacOS) return DynamicLibrary.open('libwallet_fhse.dylib');
+  if (Platform.isIOS || Platform.isMacOS) {
+    return DynamicLibrary.open('wallet_fhse.framework/wallet_fhse');
+  }
   throw UnsupportedError('wallet_fhse is not built for ${Platform.operatingSystem}');
 }
 

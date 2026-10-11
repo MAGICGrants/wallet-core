@@ -110,7 +110,7 @@ void main() {
     // `runTxNotifier` opens with no password argument, so it depends on the
     // mobile password already being in the keystore, which is the real shape: a
     // background isolate has no user to ask. Pinned to the mobile model, since
-    // the test host is a desktop OS, which keeps no password there.
+    // the default follows the test host, and Linux keeps no password there.
     WalletSecrets.holdsWalletPassword = true;
     await storeMobileWalletPassword('background-test-password');
     // Tor resolvable and instant. The default mode is `builtIn`, whose

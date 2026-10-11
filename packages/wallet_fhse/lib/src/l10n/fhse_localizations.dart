@@ -788,6 +788,48 @@ abstract class FhseLocalizations {
   /// In en, this message translates to:
   /// **'Using this recovery phrase in another wallet app too? Protect that app as well. Once unlocked, either app can show the phrase, so it is only as safe as the less protected one.'**
   String get securityKeysSharedPhraseWarning;
+
+  /// No description provided for @securityKeysIntroBodyMac.
+  ///
+  /// In en, this message translates to:
+  /// **'Require a YubiKey and its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this Mac cannot be decrypted, even by someone who can log in to it.'**
+  String get securityKeysIntroBodyMac;
+
+  /// No description provided for @securityKeysRequirementsMac.
+  ///
+  /// In en, this message translates to:
+  /// **'Works with YubiKey 5 series keys and YubiKey Bio plugged into this Mac. Each key needs a FIDO2 PIN.'**
+  String get securityKeysRequirementsMac;
+
+  /// No description provided for @securityKeysTurnOffBodyMac.
+  ///
+  /// In en, this message translates to:
+  /// **'The wallet password goes back into this Mac\'s keychain, and the wallet opens without a key.'**
+  String get securityKeysTurnOffBodyMac;
+
+  /// No description provided for @securityKeyConnectBodyMac.
+  ///
+  /// In en, this message translates to:
+  /// **'Plug your YubiKey into this Mac and touch it when it blinks.'**
+  String get securityKeyConnectBodyMac;
+
+  /// No description provided for @securityKeyPinBodyMac.
+  ///
+  /// In en, this message translates to:
+  /// **'The PIN you set for this YubiKey. It is not your Mac\'s password.'**
+  String get securityKeyPinBodyMac;
+
+  /// No description provided for @desktopAutoLockLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock after'**
+  String get desktopAutoLockLabel;
+
+  /// No description provided for @desktopAutoLockDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'After this long without use, {appName} closes the wallet and forgets its password. Unlock it again to carry on.'**
+  String desktopAutoLockDescription(String appName);
 }
 
 class _FhseLocalizationsDelegate extends LocalizationsDelegate<FhseLocalizations> {

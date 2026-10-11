@@ -82,7 +82,7 @@ void main() {
     SharedPreferencesService.store = MemoryPreferenceStore();
     secrets = MemorySecretStore();
     WalletSecrets.store = secrets;
-    // `flutter test` runs on a desktop OS; these are the mobile paths.
+    // The default follows the test host; these are the mobile paths.
     WalletSecrets.holdsWalletPassword = true;
     guard = _Guard();
     WalletManager.passwordGuard = guard;

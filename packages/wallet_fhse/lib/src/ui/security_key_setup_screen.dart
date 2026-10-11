@@ -4,6 +4,7 @@ import 'package:wallet_ui/wallet_ui.dart';
 
 import '../fhse_vault.dart' show FhseSetup, SecurityKeyRecord;
 import '../l10n/fhse_localizations.dart';
+import 'platform_copy.dart';
 import 'security_key_flow.dart';
 import 'security_keys_app.dart';
 
@@ -126,12 +127,12 @@ class _SecurityKeySetupScreenState extends State<SecurityKeySetupScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _again ? i18n.securityKeysSetupAgainNote : i18n.securityKeysIntroBody,
+                  _again ? i18n.securityKeysSetupAgainNote : i18n.introBody,
                   style: BrandText.body,
                 ),
                 const SizedBox(height: BrandSpacing.md),
                 Text(
-                  i18n.securityKeysRequirements,
+                  i18n.requirements,
                   style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
                 ),
                 const SizedBox(height: BrandSpacing.sm),

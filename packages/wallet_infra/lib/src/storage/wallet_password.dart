@@ -51,13 +51,14 @@ class WalletSecrets {
 
   /// Whether [store] keeps the wallet password on this platform.
   ///
-  /// True on Android and iOS, the iOS build on a Mac included: the password is
-  /// minted at onboarding, nobody types it, and it lives in the keystore behind
-  /// App Lock when that is on. False on Linux, Windows and macOS, where the user
-  /// types it at every launch and it is held in memory only. A stored copy there
-  /// would make typing it unnecessary: for the app, and on Windows and Linux for
-  /// any process running as the same user (see `secureStorage`). The same split
-  /// as `WalletFileCrypto.defaultIterations`, and for the same reason.
+  /// True on Android, iOS (the iOS build on a Mac included) and macOS: the
+  /// password is minted at onboarding, nobody types it, and it lives in the
+  /// keystore behind App Lock when that is on (Touch ID or the Mac's password
+  /// on macOS), or behind security keys. False on Linux and Windows, where the
+  /// user types it at every launch and it is held in memory only: a stored copy
+  /// there would be readable by any process running as the same user (see
+  /// `secureStorage`), while the macOS Keychain ties it to this app. The same
+  /// split as `WalletFileCrypto.defaultIterations`, and for the same reason.
   static bool holdsWalletPassword = _platformHoldsWalletPassword;
 
   static void resetForTesting() {
@@ -66,7 +67,7 @@ class WalletSecrets {
   }
 }
 
-final bool _platformHoldsWalletPassword = Platform.isAndroid || Platform.isIOS;
+final bool _platformHoldsWalletPassword = Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
 
 /// Mints a random wallet password: 16 bytes from [Random.secure], hex-encoded.
 ///

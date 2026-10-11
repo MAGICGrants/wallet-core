@@ -22,12 +22,14 @@ class WalletFileCrypto {
   static const _keyLen = 32;
   static const _tagLenBits = 128;
 
-  /// Low on mobile, OWASP count on desktop.
+  /// Low where the password is generated, OWASP count where it is typed.
   ///
-  /// On mobile the password is a full-entropy 128-bit value from
+  /// On Android, iOS and macOS the password is a full-entropy 128-bit value from
   /// `genWalletPassword()`, so there is no brute-force surface for iterations to
-  /// defend. On desktop the user picks the password, so the count matters.
-  static int get defaultIterations => (Platform.isAndroid || Platform.isIOS) ? 100000 : 600000;
+  /// defend. On Linux and Windows the user picks the password, so the count
+  /// matters. The same split as `WalletSecrets.holdsWalletPassword`.
+  static int get defaultIterations =>
+      (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) ? 100000 : 600000;
 
   /// Bounds accepted when *reading* a blob's header.
   ///

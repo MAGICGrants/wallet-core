@@ -4,6 +4,7 @@ import 'package:wallet_ui/wallet_ui.dart';
 
 import '../fhse_vault.dart' show FhseVault;
 import '../l10n/fhse_localizations.dart';
+import 'platform_copy.dart';
 import 'security_key_flow.dart';
 import 'security_key_setup_screen.dart';
 import 'security_keys_app.dart';
@@ -11,6 +12,112 @@ import 'security_keys_app.dart';
 /// "Fully lock after" for [minutes], e.g. "30 minutes" or "24 hours".
 String fullLockLabel(FhseLocalizations i18n, int minutes) =>
     minutes % 60 == 0 ? i18n.securityKeysHours(minutes ~/ 60) : i18n.securityKeysMinutes(minutes);
+
+/// The setting's name and explanation. Mobile counts the time in the
+/// background ("Fully lock after"); a desktop OS counts the time without use
+/// ("Lock after"), which covers a window left open as well as one left behind.
+({String label, String description}) fullLockCopy(FhseLocalizations i18n) {
+  final appName = SecurityKeysUi.config.appName;
+  return isDesktopAutoLockPlatform
+      ? (label: i18n.desktopAutoLockLabel, description: i18n.desktopAutoLockDescription(appName))
+      : (label: i18n.securityKeysFullLockLabel, description: i18n.securityKeysFullLockDescription(appName));
+}
+
+/// Shows the [SecurityKeysPreferences.fullLockMinuteOptions], saves the one
+/// picked and returns it; null when dismissed.
+Future<int?> pickFullLockMinutes(
+  BuildContext context, {
+  required String title,
+  required String description,
+}) async {
+  final current = await SecurityKeysPreferences.fullLockMinutes();
+  if (!context.mounted) return null;
+  final i18n = FhseLocalizations.of(context);
+  final picked = await showBrandSheet<int>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 10, 22, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SheetHandle(),
+            Text(title, style: BrandText.sheetTitle),
+            const SizedBox(height: BrandSpacing.xs),
+            Text(description, style: BrandText.bodyMuted),
+            const SizedBox(height: BrandSpacing.lg),
+            SettingsGroup(
+              tiles: [
+                for (final minutes in SecurityKeysPreferences.fullLockMinuteOptions)
+                  InkWell(
+                    onTap: () => Navigator.pop(sheetContext, minutes),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(fullLockLabel(i18n, minutes), style: BrandText.listTitle),
+                          ),
+                          RadioDot(selected: minutes == current),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (picked == null) return null;
+  await SharedPreferencesService.set<int>(SecurityKeysPreferences.fullLockAfterMinutes, picked);
+  return picked;
+}
+
+/// Settings > "Lock after" on a desktop OS, where it applies whether or not
+/// security keys are on (see [DesktopAutoLock]).
+class DesktopAutoLockTile extends StatefulWidget {
+  const DesktopAutoLockTile({super.key});
+
+  @override
+  State<DesktopAutoLockTile> createState() => _DesktopAutoLockTileState();
+}
+
+class _DesktopAutoLockTileState extends State<DesktopAutoLockTile> {
+  int? _minutes;
+
+  @override
+  void initState() {
+    super.initState();
+    SecurityKeysPreferences.fullLockMinutes().then((m) {
+      if (mounted) setState(() => _minutes = m);
+    });
+  }
+
+  Future<void> _pick() async {
+    final copy = fullLockCopy(FhseLocalizations.of(context));
+    final picked = await pickFullLockMinutes(
+      context,
+      title: copy.label,
+      description: copy.description,
+    );
+    if (picked != null && mounted) setState(() => _minutes = picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final i18n = FhseLocalizations.of(context);
+    final minutes = _minutes;
+    return SettingsNavTile(
+      title: i18n.desktopAutoLockLabel,
+      value: minutes == null ? '' : fullLockLabel(i18n, minutes),
+      onTap: _pick,
+    );
+  }
+}
 
 /// Settings > Advanced security: YubiKeys guarding the wallet password.
 ///
@@ -97,7 +204,7 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
       iconBg: BrandColors.errorBg,
       iconColor: BrandColors.error,
       title: i18n.securityKeysTurnOff,
-      body: i18n.securityKeysTurnOffBody,
+      body: i18n.turnOffBody,
       confirmLabel: i18n.securityKeysTurnOffConfirm,
       cancelLabel: i18n.securityKeysCancel,
     );
@@ -114,49 +221,13 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
   }
 
   Future<void> _pickFullLock() async {
-    final i18n = FhseLocalizations.of(context);
-    final picked = await showBrandSheet<int>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 10, 22, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SheetHandle(),
-              Text(i18n.securityKeysFullLockLabel, style: BrandText.sheetTitle),
-              const SizedBox(height: BrandSpacing.xs),
-              Text(i18n.securityKeysFullLockDescription(SecurityKeysUi.config.appName), style: BrandText.bodyMuted),
-              const SizedBox(height: BrandSpacing.lg),
-              SettingsGroup(
-                tiles: [
-                  for (final minutes in SecurityKeysPreferences.fullLockMinuteOptions)
-                    InkWell(
-                      onTap: () => Navigator.pop(sheetContext, minutes),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(fullLockLabel(i18n, minutes), style: BrandText.listTitle),
-                            ),
-                            RadioDot(selected: minutes == _fullLockMinutes),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+    final copy = fullLockCopy(FhseLocalizations.of(context));
+    final picked = await pickFullLockMinutes(
+      context,
+      title: copy.label,
+      description: copy.description,
     );
-    if (picked == null) return;
-    await SharedPreferencesService.set<int>(SecurityKeysPreferences.fullLockAfterMinutes, picked);
-    if (mounted) setState(() => _fullLockMinutes = picked);
+    if (picked != null && mounted) setState(() => _fullLockMinutes = picked);
   }
 
   @override
@@ -183,10 +254,10 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
             children: [
               Text(i18n.securityKeysIntroTitle, style: BrandText.listTitle),
               const SizedBox(height: BrandSpacing.sm),
-              Text(i18n.securityKeysIntroBody, style: BrandText.body),
+              Text(i18n.introBody, style: BrandText.body),
               const SizedBox(height: BrandSpacing.md),
               Text(
-                i18n.securityKeysRequirements,
+                i18n.requirements,
                 style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
               ),
               const SizedBox(height: BrandSpacing.sm),
@@ -238,7 +309,7 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
           label: i18n.securityKeysLockSection,
           tiles: [
             SettingsNavTile(
-              title: i18n.securityKeysFullLockLabel,
+              title: fullLockCopy(i18n).label,
               value: fullLockLabel(i18n, _fullLockMinutes),
               onTap: _pickFullLock,
             ),
@@ -247,7 +318,7 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(4, BrandSpacing.sm, 4, 0),
           child: Text(
-            i18n.securityKeysFullLockDescription(SecurityKeysUi.config.appName),
+            fullLockCopy(i18n).description,
             style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
           ),
         ),

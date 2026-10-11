@@ -100,16 +100,17 @@ How each part fits:
   are exported.
 - `src/CMakeLists.txt`: the Android build and host builds. The defines follow
   libsodium's own `build.zig`.
-- `ios/`: the CocoaPods build of the same sources, through forwarding files
-  that `tool/generate_ios_classes.sh` generates. Re-run that script after
-  changing anything under `src/`.
+- `ios/` and `macos/`: the CocoaPods builds of the same sources, through
+  forwarding files that `tool/generate_ios_classes.sh` generates for both.
+  Re-run that script after changing anything under `src/`.
 - `lib/wallet_fhse.dart`: `FhseSecret`, `WalletKeyTree`, `FhseVault`,
   `FhseWalletGuard` (wallet_domain's `WalletPasswordGuard`), and
   `SecurityKeyService`, the Dart end of the security key channel.
 - `lib/security_keys_ui.dart`: the shared screens (Advanced security, setting
   keys up, unlocking with a key or the recovery phrase), their strings
   (`lib/src/l10n`, `FhseLocalizations`; regenerate with `flutter gen-l10n`
-  here) and "Fully lock after" (`SecurityKeyFullLock`). An app
+  here), "Fully lock after" on mobile (`SecurityKeyFullLock`) and "Lock
+  after" on a desktop OS (`DesktopAutoLock`, `DesktopAutoLockTile`). An app
   installs `SecurityKeysUi` with its name, logo, home route and
   `WalletManager`, adds `FhseLocalizations.delegate`, and routes to
   `AdvancedSecurityScreen` and `SecurityKeyUnlockScreen`.
@@ -117,12 +118,14 @@ How each part fits:
   (`WalletFhsePlugin`, YubiKit from Maven Central), registered like any
   plugin. Its manifest adds the NFC permission and the optional NFC and USB
   host features.
-- iOS: the channel's Swift half (`SecurityKeyChannel.swift`,
-  `SecurityKeyOperations.swift`) is still each app's, in `ios/Runner`, with
-  YubiKit Swift added to the Runner project as a Swift package. A CocoaPods
-  plugin cannot depend on a Swift package; the files can move here once the
-  apps build their plugins with Swift Package Manager. Keep the two apps'
-  copies identical.
+- iOS and macOS: the channel's Swift half (`SecurityKeyChannel.swift`,
+  `SecurityKeyOperations.swift`) is still each app's, in `ios/Runner` and
+  `macos/Runner`, with YubiKit Swift added to each Runner project as a Swift
+  package. One file serves both platforms (`#if os(...)` around the
+  connection: NFC, USB-C smart card and Lightning on iOS; USB HID on macOS).
+  A CocoaPods plugin cannot depend on a Swift package; the files can move here
+  once the apps build their plugins with Swift Package Manager. Keep all four
+  copies (two apps, two platforms) identical.
 
 ## Why not a Rust crate like wallet_openalias
 
@@ -151,7 +154,23 @@ key: set up, unlock, add, set up again, recovery phrase, turn off, delete.
 - **Not erased from memory:** PINs and the z85 password, as Dart strings.
   Native buffers are wiped.
 - **YubiKey Bio** speaks FIDO over USB HID only (no NFC, no CCID), so it works
-  on Android over USB-C but cannot reach an iPhone.
+  on Android over USB-C and on a Mac, but cannot reach an iPhone.
+- **macOS** works like mobile: a generated wallet password in the Keychain,
+  App Lock through Touch ID or the Mac's password, and security keys over USB
+  HID (any FIDO2 YubiKey firmware; no NFC). It needs macOS 13 (YubiKit Swift)
+  and the sandbox's `com.apple.security.device.usb` entitlement. The password
+  goes in the data-protection keychain, which only a build signed by an Apple
+  team with a provisioning profile can use: a release build signed ad hoc
+  cannot create a wallet, and a debug build signed ad hoc falls back to the
+  login keychain, where any process of that user can read it
+  (`wallet_infra`'s `secureStorage`). Background
+  sync does not exist on a desktop OS, so nothing reads the view-only data
+  kept at engagement there. Wallets created by earlier macOS builds, under a
+  typed password, are not migrated.
+- **"Lock after" on a desktop OS** closes the wallet and forgets its password
+  after a time without use (no pointer or key input reaching the app), on the
+  same two clocks as below; Linux and Windows have no FHSE library, so their
+  second clock is a monotonic one in the process, which may stop during sleep.
 - **"Fully lock after" is measured on two clocks.** The wall clock and a boot
   clock (`wfhse_boot_ns`: `CLOCK_BOOTTIME` on Android, `CLOCK_MONOTONIC` on
   Apple) that keeps counting while the phone sleeps and cannot be set. Either

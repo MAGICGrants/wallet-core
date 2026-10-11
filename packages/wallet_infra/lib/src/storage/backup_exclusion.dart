@@ -6,9 +6,10 @@ import 'package:ffi/ffi.dart';
 import '../logging.dart';
 
 /// Keeps [path], a directory, and everything in it now and later, out of the
-/// phone's iCloud and computer backups. Returns whether the flag reads back as
-/// set. iOS only: Android's backup rules already leave out everything but the
-/// metadata backup, and the desktop builds have no such backups.
+/// device's backups: iCloud and computer backups on iOS, Time Machine on macOS.
+/// Returns whether the flag reads back as set. iOS and macOS only: Android's
+/// backup rules already leave out everything but the metadata backup, and
+/// nothing on Linux or Windows reads this flag.
 ///
 /// Why it matters: the wallet files, the seed store and the security-key file
 /// must not reach a backup. Their keystore items are this-device-only, but an
@@ -22,7 +23,7 @@ import '../logging.dart';
 /// the vault replace files by rename, which drops a per-file flag, while a
 /// directory's flag covers whatever is inside it.
 bool excludeFromDeviceBackup(String path) {
-  if (!Platform.isIOS) return false;
+  if (!Platform.isIOS && !Platform.isMacOS) return false;
   try {
     return (_coreFoundation ??= _CoreFoundation()).exclude(path);
   } catch (e) {
@@ -49,7 +50,7 @@ typedef _ReleaseN = Void Function(Pointer<Void>);
 typedef _ReleaseD = void Function(Pointer<Void>);
 
 /// The handful of CoreFoundation calls [excludeFromDeviceBackup] needs, looked
-/// up in the process: CoreFoundation is always loaded in an iOS app.
+/// up in the process: CoreFoundation is always loaded in an iOS or macOS app.
 class _CoreFoundation {
   _CoreFoundation() : this._(DynamicLibrary.process());
 

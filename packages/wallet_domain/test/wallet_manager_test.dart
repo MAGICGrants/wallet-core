@@ -41,6 +41,13 @@ class _RecordingWallet extends FakeWallet {
   }
 }
 
+/// A keystore that refuses every write, as macOS does a release build that is
+/// not team-signed.
+class _RefusingSecretStore extends MemorySecretStore {
+  @override
+  Future<void> write(String key, String value) async => throw StateError('keystore refused');
+}
+
 void main() {
   late Directory tmp;
   late MemoryPreferenceStore prefs;
@@ -215,6 +222,24 @@ void main() {
       m.dispose();
     });
 
+    test('a keystore that refuses the password stops it before any file is written', () async {
+      installSpice();
+      WalletSecrets.holdsWalletPassword = true;
+      WalletSecrets.store = _RefusingSecretStore();
+      final btc = FakeWallet('BTC');
+      final m = manager([btc])..useGeneratedPassword();
+
+      await expectLater(
+        m.restoreAll(seed: const Bip39Seed(_bip39), from: RestorePoint.date(DateTime.utc(2026))),
+        throwsStateError,
+      );
+
+      // Nothing is encrypted under a password no one holds.
+      expect(btc.restores, isEmpty);
+      expect(await SeedStore.exists(), isFalse);
+      m.dispose();
+    });
+
     test('skips coins that cannot derive from the seed rather than failing', () async {
       // A polyseed restore in a multicoin wallet must not blow up on Bitcoin.
       installSkylight();
@@ -248,7 +273,7 @@ void main() {
 
   group('the typed desktop password stays out of the keystore', () {
     // `holdsWalletPassword` is pinned in each test: the default follows the
-    // host, and `flutter test` runs on a desktop OS.
+    // host, which may be a Mac (holds it) or Linux (does not).
     Future<void> restoreWith(WalletManager m) =>
         m.restoreAll(seed: const Bip39Seed(_bip39), from: RestorePoint.date(DateTime.utc(2026)));
 

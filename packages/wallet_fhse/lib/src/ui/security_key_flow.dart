@@ -13,6 +13,7 @@ import '../fhse_vault.dart'
         SecurityKeyRecord;
 import '../l10n/fhse_localizations.dart';
 import '../security_key_service.dart';
+import 'platform_copy.dart';
 import 'security_keys_app.dart' show SecurityKeysUi;
 
 /// A security-key or vault failure as one sentence for the user, or null when
@@ -111,8 +112,9 @@ class SecurityKeyFlow extends StatefulWidget {
   /// Full-screen type sizes (the unlock screen) rather than a sheet's.
   final bool large;
 
-  /// Start waiting for a key straight away. Defaults to Android, where that
-  /// is silent; on iOS it raises the NFC sheet, so it waits for a tap.
+  /// Start waiting for a key straight away. Defaults to Android and macOS,
+  /// where that is silent; on iOS it raises the NFC sheet, so it waits for a
+  /// tap.
   final bool? autoStart;
 
   @override
@@ -154,7 +156,9 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
   void initState() {
     super.initState();
     _statusSub = _service.status.listen(_onStatus);
-    if (widget.autoStart ?? Platform.isAndroid) {
+    // Where nothing system-owned asks the user first (Android, and a Mac, which
+    // has only USB), start listening for the key straight away.
+    if (widget.autoStart ?? (Platform.isAndroid || Platform.isMacOS)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _connect();
       });
@@ -394,9 +398,7 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
   }
 
   ({String title, String body}) _copy(FhseLocalizations i18n) {
-    final connectBody = Platform.isIOS
-        ? i18n.securityKeyConnectBodyIos
-        : i18n.securityKeyConnectBodyAndroid;
+    final connectBody = i18n.connectBody;
     return switch (_step) {
       _Step.connect when _status == SecurityKeyStatus.touchNeeded => (
         title: i18n.securityKeyTouchToSelect,
@@ -410,7 +412,7 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
         title: _known == null
             ? i18n.securityKeyPinTitle
             : i18n.securityKeyPinTitleNamed(_known!.name),
-        body: i18n.securityKeyPinBody,
+        body: i18n.pinBody,
       ),
       _Step.newPin => (
         title: i18n.securityKeysNewPinTitle,
@@ -446,7 +448,7 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
     if (_status == SecurityKeyStatus.waitingForKey) {
       return (
         title: _nfc ? i18n.securityKeyHoldAgain : i18n.securityKeyConnectAgain,
-        body: Platform.isIOS ? i18n.securityKeyConnectBodyIos : i18n.securityKeyConnectBodyAndroid,
+        body: i18n.connectBody,
       );
     }
     return (
