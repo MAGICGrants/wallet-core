@@ -257,6 +257,49 @@ void main() {
       m.dispose();
     });
 
+    test('a fresh seed starts at a zero balance; a restored one at none', () async {
+      // Monero's node mode loads no stats until the first scan finishes, so a
+      // new wallet with no balance sat on a skeleton (fiat with it) for the
+      // whole scan. A seed generated this session has received nothing.
+      installSpice();
+      final fresh = FakeWallet('BTC')..deferStats = true;
+      final m = manager([fresh])..setWalletPassword('pw');
+      await m.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+        freshSeed: true,
+      );
+      expect(fresh.unlockedBalanceBaseUnits, BigInt.zero);
+      expect(fresh.totalBalanceBaseUnits, BigInt.zero);
+      m.dispose();
+
+      // A typed seed may hold funds the scan has not reached; zero would lie.
+      final restored = FakeWallet('BTC')..deferStats = true;
+      final m2 = manager([restored])..setWalletPassword('pw');
+      await m2.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+      );
+      expect(restored.unlockedBalanceBaseUnits, isNull);
+      expect(restored.totalBalanceBaseUnits, isNull);
+      m2.dispose();
+    });
+
+    test('a fresh seed leaves skipped coins without a balance', () async {
+      installSkylight();
+      final xmr = FakeWallet('XMR', seedFormats: {SeedFormat.polyseed, SeedFormat.bip39});
+      final btc = FakeWallet('BTC');
+      final m = manager([xmr, btc])..setWalletPassword('pw');
+      await m.restoreAll(
+        seed: const PolyseedSeed('sixteen words here'),
+        from: RestorePoint.date(DateTime.utc(2026)),
+        freshSeed: true,
+      );
+      expect(xmr.unlockedBalanceBaseUnits, BigInt.zero);
+      expect(btc.unlockedBalanceBaseUnits, isNull, reason: 'BTC was never created');
+      m.dispose();
+    });
+
     test('rejects a format the app policy forbids', () async {
       installSpice();
       final m = manager([FakeWallet('BTC')])..setWalletPassword('pw');

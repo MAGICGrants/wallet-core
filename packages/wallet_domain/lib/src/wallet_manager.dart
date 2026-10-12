@@ -522,8 +522,9 @@ class WalletManager with ChangeNotifier {
     CryptoWallet w,
     SeedSource seed,
     RestorePoint from,
-    String password,
-  ) async {
+    String password, {
+    bool freshSeed = false,
+  }) async {
     if (!_seedPolicy.accepts(seed.format) || !w.supportedSeedFormats.contains(seed.format)) {
       log(
         LogLevel.info,
@@ -533,6 +534,7 @@ class WalletManager with ChangeNotifier {
       return;
     }
     await w.restoreFromSeed(seed: seed, from: from, password: password);
+    if (freshSeed) w.markFreshlyGenerated();
 
     // Everything this seed already received is history, not news. Done here
     // rather than inside each coin's `restoreFromSeed` so a coin added later
@@ -666,7 +668,16 @@ class WalletManager with ChangeNotifier {
   ///
   /// Coins that cannot derive from this seed format are skipped rather than
   /// failing the restore; see [_restoreOne].
-  Future<void> restoreAll({required SeedSource seed, required RestorePoint from}) async {
+  ///
+  /// [freshSeed] is for a seed [generateSeed] just produced, never a typed one:
+  /// such a seed has received nothing, so each wallet starts at a known zero
+  /// balance instead of none until its first sync. See
+  /// [CryptoWallet.markFreshlyGenerated].
+  Future<void> restoreAll({
+    required SeedSource seed,
+    required RestorePoint from,
+    bool freshSeed = false,
+  }) async {
     if (_password == null) {
       throw StateError('Wallet password must be set before restoring wallets.');
     }
@@ -712,7 +723,7 @@ class WalletManager with ChangeNotifier {
 
     for (final w in _visibleWallets) {
       w.setCachePassword(walletPassword);
-      await _restoreOne(w, seed, from, walletPassword);
+      await _restoreOne(w, seed, from, walletPassword, freshSeed: freshSeed);
     }
 
     // Persist the seed so coins added in a future release can be bootstrapped

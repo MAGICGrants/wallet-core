@@ -1469,6 +1469,21 @@ abstract class CryptoWallet with ChangeNotifier {
   @protected
   Future<void> pauseSync() async {}
 
+  /// Records a zero balance for a wallet just created from a freshly generated
+  /// seed, which cannot have received anything yet.
+  ///
+  /// Without it the balance stays unknown until the first sync loads stats,
+  /// and a coin that defers stats until synced (Monero in node mode) leaves
+  /// the home screen on a skeleton, fiat included, for the whole initial scan.
+  /// The first [loadAllStats] replaces it with real figures. Only for a seed
+  /// generated this session; on a restored one zero would be a lie.
+  void markFreshlyGenerated() {
+    if (!_isLoaded) return;
+    _unlockedBalanceBaseUnits ??= BigInt.zero;
+    _totalBalanceBaseUnits ??= BigInt.zero;
+    notifyListeners();
+  }
+
   // ----- Protected state mutators -----
 
   @protected
