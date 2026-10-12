@@ -15,6 +15,22 @@ set(VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 
+if(MSVC)
+  # Control Flow Guard: an indirect call may only reach a real function entry
+  # point. The library links with it too, below.
+  add_compile_options(/guard:cf)
+else()
+  # Stack variables start zeroed, so a missed initialisation cannot expose
+  # key material left on the stack. The iOS and macOS builds get the same
+  # from the apps' Podfiles (CLANG_ENABLE_STACK_ZERO_INIT). Compilers without
+  # the flag (clang before 16 needs another to accept it) go without.
+  include(CheckCCompilerFlag)
+  check_c_compiler_flag(-ftrivial-auto-var-init=zero WFHSE_HAVE_ZERO_INIT)
+  if(WFHSE_HAVE_ZERO_INIT)
+    add_compile_options(-ftrivial-auto-var-init=zero)
+  endif()
+endif()
+
 # ----- libsodium -----
 #
 # Every source file, as libsodium's own build.zig compiles it. The optimised
@@ -125,4 +141,9 @@ set_target_properties(wallet_fhse PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED O
 if(ANDROID)
   # 16 KB pages, required for apps targeting Android 15 and later.
   target_link_options(wallet_fhse PRIVATE "-Wl,-z,max-page-size=16384")
+elseif(MSVC)
+  target_link_options(wallet_fhse PRIVATE /guard:cf)
+elseif(UNIX AND NOT APPLE)
+  # Linux: the GOT read-only after load, and no executable stack.
+  target_link_options(wallet_fhse PRIVATE "-Wl,-z,relro" "-Wl,-z,now" "-Wl,-z,noexecstack")
 endif()
