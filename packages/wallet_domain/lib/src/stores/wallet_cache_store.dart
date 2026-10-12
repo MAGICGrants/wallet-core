@@ -70,13 +70,15 @@ class WalletCacheStore {
     final file = await _file(coinSymbol);
     final json = jsonEncode(data);
     // Captured out here on purpose: static state does not cross into the
-    // spawned isolate, so the injected backend would revert to the default
-    // inside, the same trap [load] documents.
+    // spawned isolate, so the injected backend and the count for this kind of
+    // password would revert to their defaults inside, the same trap [load]
+    // documents.
     final kdf = WalletFileCrypto.kdf;
+    final iterations = WalletFileCrypto.walletPasswordIterations;
     final blob = await Isolate.run(
-      () => WalletFileCrypto.encryptToBase64(json, password, kdf: kdf),
+      () => WalletFileCrypto.encryptToBase64(json, password, kdf: kdf, iterations: iterations),
     );
-    await file.writeAsString(blob);
+    await writeStringAtomic(file, blob);
   }
 
   static Future<void> delete(String coinSymbol) async {

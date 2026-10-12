@@ -39,7 +39,13 @@ class SecurityKeyChannel(activity: Activity, messenger: BinaryMessenger) :
         }
 
         private fun hmacSecretReply(r: SecurityKeyOperations.HmacSecretResult): Map<String, Any?> =
-            mapOf("credentialId" to r.credentialId, "hmacSecret" to r.hmacSecret, "serial" to r.serial)
+            mapOf(
+                "credentialId" to r.credentialId,
+                "hmacSecret" to r.hmacSecret,
+                "serial" to r.serial,
+                "authenticatorData" to r.authenticatorData,
+                "creationAuthenticatorData" to r.creationAuthenticatorData,
+            )
     }
 
     private val channel = MethodChannel(messenger, NAME)

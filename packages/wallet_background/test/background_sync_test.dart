@@ -112,7 +112,7 @@ void main() {
     // background isolate has no user to ask. Pinned to the mobile model, since
     // the default follows the test host, and Linux keeps no password there.
     WalletSecrets.holdsWalletPassword = true;
-    await storeMobileWalletPassword('background-test-password');
+    await storeKeystoreWalletPassword('background-test-password');
     // Tor resolvable and instant. The default mode is `builtIn`, whose
     // `getProxy()` waits on a Tor daemon that never starts under `flutter test`
     //; every Tor case then failed on a 30-second timeout rather than on

@@ -21,7 +21,11 @@
 extern "C" {
 #endif
 
+#if defined(_WIN32)
+#define WFHSE_EXPORT __declspec(dllexport)
+#else
 #define WFHSE_EXPORT __attribute__((visibility("default"))) __attribute__((used))
+#endif
 
 // Codes above FHSE's own range.
 #define WFHSE_BUFFER_TOO_SMALL 100
@@ -73,7 +77,8 @@ WFHSE_EXPORT void wfhse_memzero(void* ptr, size_t len);
 
 //! Nanoseconds on a clock that keeps counting while the device sleeps and that
 //! the user cannot set: CLOCK_BOOTTIME on Linux and Android, CLOCK_MONOTONIC on
-//! Apple platforms (which, unlike Linux's, includes sleep). -1 when unreadable.
+//! Apple platforms (which, unlike Linux's, includes sleep), GetTickCount64 on
+//! Windows (milliseconds). -1 when unreadable.
 //! For "Fully lock after", whose deadline must survive both a sleeping phone and
 //! a clock set back.
 WFHSE_EXPORT int64_t wfhse_boot_ns(void);

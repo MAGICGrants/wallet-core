@@ -254,7 +254,7 @@ class EthereumChainWallet extends CryptoWallet {
       'address': _address,
       'restore_date_iso': _restoreDate?.toIso8601String(),
     });
-    await file.writeAsString(await WalletFileCrypto.encryptToBase64(json, password));
+    await writeStringAtomic(file, await WalletFileCrypto.encryptToBase64(json, password));
   }
 
   /// This wallet's file holds a mnemonic, an address and a restore date, and

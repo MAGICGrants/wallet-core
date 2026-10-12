@@ -38,6 +38,9 @@ void main() {
   });
 
   test('due when the boot clock went backwards', () {
-    expect(due(wall: const Duration(minutes: 1), bootThen: 100 * second, bootNow: 50 * second), isTrue);
+    expect(
+      due(wall: const Duration(minutes: 1), bootThen: 100 * second, bootNow: 50 * second),
+      isTrue,
+    );
   });
 }

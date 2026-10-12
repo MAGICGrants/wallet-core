@@ -73,6 +73,10 @@ enum _Step { connect, pin, newPin, confirm, name }
 /// sheets do not offer (see [SecurityKeyService]). The prompts follow what the
 /// key reports while it waits ([SecurityKeyService.status]), so "touch your
 /// key" shows when the key is actually blinking.
+///
+/// Windows is the exception ([SecurityKeyService.systemPrompts]): its own
+/// security-key dialog asks for the PIN or fingerprint and the touch, so the
+/// flow goes from connect straight to confirm, then the name.
 class SecurityKeyFlow extends StatefulWidget {
   const SecurityKeyFlow({
     super.key,
@@ -112,9 +116,9 @@ class SecurityKeyFlow extends StatefulWidget {
   /// Full-screen type sizes (the unlock screen) rather than a sheet's.
   final bool large;
 
-  /// Start waiting for a key straight away. Defaults to Android and macOS,
-  /// where that is silent; on iOS it raises the NFC sheet, so it waits for a
-  /// tap.
+  /// Start waiting for a key straight away. Defaults to Android, macOS and
+  /// Linux, where that is silent; on iOS it raises the NFC sheet and on Windows
+  /// the Windows Security dialog, so it waits for a tap.
   final bool? autoStart;
 
   @override
@@ -152,13 +156,18 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
 
   bool get _canUseFingerprint => !_fingerprintOff && (_info?.canUseFingerprint ?? false);
 
+  /// Windows' own dialog does the connect, PIN and touch steps.
+  bool get _system => _service.systemPrompts;
+
   @override
   void initState() {
     super.initState();
     _statusSub = _service.status.listen(_onStatus);
-    // Where nothing system-owned asks the user first (Android, and a Mac, which
-    // has only USB), start listening for the key straight away.
-    if (widget.autoStart ?? (Platform.isAndroid || Platform.isMacOS)) {
+    // Where nothing system-owned asks the user first (Android, and a Mac or a
+    // Linux computer, which have only USB), start listening for the key
+    // straight away.
+    if (widget.autoStart ??
+        (!_system && (Platform.isAndroid || Platform.isMacOS || Platform.isLinux))) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _connect();
       });
@@ -197,6 +206,7 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
   // ----- Steps -----
 
   Future<void> _connect() async {
+    if (_system) return _confirm(const KeyVerification.system());
     _begin(_Step.connect);
     _verification = null;
     _known = null;
@@ -369,20 +379,22 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
 
   // ----- Layout -----
 
-  int get _dotCount => widget.enrolling ? 4 : 3;
+  int get _dotCount => (widget.enrolling ? 4 : 3) - (_system ? 1 : 0);
 
   int get _dotIndex => switch (_step) {
     _Step.connect => 0,
     _Step.pin || _Step.newPin => 1,
-    _Step.confirm => 2,
-    _Step.name => 3,
+    _Step.confirm => _system ? 1 : 2,
+    _Step.name => _system ? 2 : 3,
   };
 
   bool get _nfc => _info?.transport == SecurityKeyTransport.nfc;
 
   bool get _waitingForUser =>
       _busy &&
-      (_status == SecurityKeyStatus.touchNeeded || _status == SecurityKeyStatus.fingerprintNeeded);
+      (_system ||
+          _status == SecurityKeyStatus.touchNeeded ||
+          _status == SecurityKeyStatus.fingerprintNeeded);
 
   IconData get _glyph {
     if (_step == _Step.name) return Icons.check_rounded;
@@ -416,7 +428,10 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
       ),
       _Step.newPin => (
         title: i18n.securityKeysNewPinTitle,
-        body: i18n.securityKeysNewPinBodyCount(_info?.minPinLength ?? 4, SecurityKeysUi.config.appName),
+        body: i18n.securityKeysNewPinBodyCount(
+          _info?.minPinLength ?? 4,
+          SecurityKeysUi.config.appName,
+        ),
       ),
       _Step.confirm => _confirmCopy(i18n),
       _Step.name => (title: i18n.securityKeyAddedTitle, body: i18n.securityKeyNameBody),
@@ -424,6 +439,14 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
   }
 
   ({String title, String body}) _confirmCopy(FhseLocalizations i18n) {
+    if (_system) {
+      return (
+        title: i18n.securityKeyWindowsPromptTitle,
+        body: widget.enrolling
+            ? i18n.securityKeyWindowsPromptEnrollBody
+            : i18n.securityKeyWindowsPromptBody,
+      );
+    }
     final second = widget.enrolling && _touches >= 2;
     if (_status == SecurityKeyStatus.fingerprintNeeded || (_usingFingerprint && _touches == 0)) {
       return (
@@ -547,14 +570,16 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
   /// One quiet line under the prompt: what the app is waiting on.
   Widget _statusLine(FhseLocalizations i18n) {
     final waitingForUser = _waitingForUser;
-    final text = switch (_status) {
-      null || SecurityKeyStatus.waitingForKey => i18n.securityKeyWaiting,
-      SecurityKeyStatus.touchNeeded || SecurityKeyStatus.fingerprintNeeded =>
-        widget.enrolling && _step == _Step.confirm
-            ? i18n.securityKeyTouchCount(_touches.clamp(1, 2), 2)
-            : i18n.securityKeyKeyBlinking,
-      _ => i18n.securityKeyTalkingToKey,
-    };
+    final text = _system
+        ? i18n.securityKeyWindowsWaiting
+        : switch (_status) {
+            null || SecurityKeyStatus.waitingForKey => i18n.securityKeyWaiting,
+            SecurityKeyStatus.touchNeeded || SecurityKeyStatus.fingerprintNeeded =>
+              widget.enrolling && _step == _Step.confirm
+                  ? i18n.securityKeyTouchCount(_touches.clamp(1, 2), 2)
+                  : i18n.securityKeyKeyBlinking,
+            _ => i18n.securityKeyTalkingToKey,
+          };
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -587,7 +612,11 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
       case _Step.connect:
         return [
           BrandButton(
-            label: _started ? i18n.securityKeyTryAgain : i18n.securityKeyConnectButton,
+            label: _started
+                ? i18n.securityKeyTryAgain
+                : _system
+                ? i18n.securityKeyUseButton
+                : i18n.securityKeyConnectButton,
             icon: Icons.key_outlined,
             onPressed: _connect,
           ),

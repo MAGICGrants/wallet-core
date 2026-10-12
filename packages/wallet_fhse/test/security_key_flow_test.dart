@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_fhse/security_keys_ui.dart';
+import 'package:wallet_fhse/src/key_reply.dart';
+import 'package:wallet_fhse/src/security_key_backend.dart';
 import 'package:wallet_fhse/wallet_fhse.dart';
 
 /// The key-first flow against a simulated native side: what `inspect` reports
@@ -33,6 +35,55 @@ Map<String, Object?> _key({
   'touched': true,
 };
 
+/// Windows' backend as the flow sees it: the operating system draws the
+/// prompts, and nothing about the key can be read first.
+class _SystemPrompts implements SecurityKeyBackend {
+  bool inspected = false;
+
+  @override
+  bool get systemPrompts => true;
+
+  @override
+  Stream<SecurityKeyStatus> get status => const Stream.empty();
+
+  @override
+  Future<({bool nfc, bool usb})> capabilities() async => (nfc: false, usb: true);
+
+  @override
+  Future<SecurityKeyInfo> inspect({required bool touch, required String prompt}) async {
+    inspected = true;
+    throw StateError('not reachable on Windows');
+  }
+
+  @override
+  Future<void> setPin(String newPin, {int? expectSerial, required String prompt}) =>
+      throw StateError('not reachable on Windows');
+
+  @override
+  Future<KeyReply> enroll({
+    required String rpId,
+    required Uint8List userId,
+    required Uint8List salt,
+    required KeyVerification verification,
+    required List<Uint8List> excludeCredentialIds,
+    int? expectSerial,
+    required String prompt,
+  }) => throw StateError('the test supplies useKey');
+
+  @override
+  Future<KeyReply> getHmacSecret({
+    required String rpId,
+    required Uint8List salt,
+    required KeyVerification verification,
+    required List<Uint8List> credentialIds,
+    int? expectSerial,
+    required String prompt,
+  }) => throw StateError('the test supplies useKey');
+
+  @override
+  Future<void> cancel() async {}
+}
+
 void main() {
   late List<MethodCall> calls;
   late Map<String, Object?> inspectResult;
@@ -58,6 +109,8 @@ void main() {
             'credentialId': Uint8List(16),
             'hmacSecret': Uint8List(32),
             'serial': inspectResult['serial'],
+            // rpIdHash, flags (user present and verified), signCount.
+            'authenticatorData': Uint8List.fromList([...List.filled(32, 0), 0x05, 0, 0, 0, 1]),
           },
           _ => null,
         };
@@ -381,6 +434,49 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Try again'), findsOneWidget);
+    });
+  });
+
+  group('when Windows draws the prompts', () {
+    late _SystemPrompts backend;
+
+    setUp(() => SecurityKeyService.instance.backendForTesting = backend = _SystemPrompts());
+    tearDown(() => SecurityKeyService.instance.backendForTesting = null);
+
+    testWidgets('adding a key: one tap, Windows asks for the rest, then a name', (tester) async {
+      final result = Completer<SecurityKeyRecord?>();
+      KeyVerification? used;
+      await pumpFlow(
+        tester,
+        enrolling: true,
+        useKey: (v, _) {
+          used = v;
+          return result.future;
+        },
+      );
+
+      expect(find.text('Use security key'), findsOneWidget);
+      await tap(tester, 'Use security key');
+      expect(used?.isSystem, isTrue);
+      expect(backend.inspected, isFalse, reason: 'nothing is read from the key first');
+      expect(find.text("Enter your key's PIN"), findsNothing);
+      expect(find.text('Continue in Windows Security'), findsOneWidget);
+      expect(find.text('Waiting for Windows Security…'), findsOneWidget);
+
+      result.complete(SecurityKeyRecord(id: 'k1', name: 'YubiKey 1', addedAt: DateTime(2026)));
+      await settle(tester);
+      expect(find.text('Key added'), findsOneWidget);
+    });
+
+    testWidgets('closing the Windows dialog goes back to the start', (tester) async {
+      await pumpFlow(
+        tester,
+        enrolling: false,
+        useKey: (_, _) async => throw const SecurityKeyException(SecurityKeyFailure.cancelled),
+      );
+      await tap(tester, 'Use security key');
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text('Unlock with your security key'), findsOneWidget);
     });
   });
 }

@@ -291,7 +291,7 @@ void main() {
     test('a copy an earlier build stored is never loaded', () async {
       installSpice();
       WalletSecrets.holdsWalletPassword = false;
-      await storeMobileWalletPassword('typed');
+      await storeKeystoreWalletPassword('typed');
       final btc = FakeWallet('BTC', existing: true);
       final m = manager([btc]);
 
@@ -299,7 +299,7 @@ void main() {
       expect(m.hasPassword, isFalse, reason: 'nothing may decrypt before the unlock');
       await m.openAll();
       expect(btc.openCount, 0);
-      expect(await m.loadMobileWalletPassword(), isFalse);
+      expect(await m.loadStoredPassword(), isFalse);
       m.dispose();
     });
 
@@ -323,7 +323,7 @@ void main() {
       final m = manager([FakeWallet('BTC')])..setWalletPassword('typed');
       await restoreWith(m);
       m.clearPassword();
-      await storeMobileWalletPassword('typed');
+      await storeKeystoreWalletPassword('typed');
 
       await m.unlockWithTypedPassword('wrong');
       expect(secrets.values[walletPasswordStorageKey], 'typed', reason: 'kept until proven');
@@ -362,7 +362,7 @@ void main() {
 
       expect(secrets.values[walletPasswordStorageKey], isNotNull);
       final fresh = manager([FakeWallet('BTC', existing: true)]);
-      expect(await fresh.loadMobileWalletPassword(), isTrue);
+      expect(await fresh.loadStoredPassword(), isTrue);
       m.dispose();
       fresh.dispose();
     });
@@ -608,7 +608,7 @@ void main() {
       // Background isolates run only on mobile, the platforms that keep the
       // password in the keystore.
       WalletSecrets.holdsWalletPassword = true;
-      await storeMobileWalletPassword('kept-in-the-keystore');
+      await storeKeystoreWalletPassword('kept-in-the-keystore');
       final xmr = await openWallet('XMR');
       final m = manager([xmr]);
 

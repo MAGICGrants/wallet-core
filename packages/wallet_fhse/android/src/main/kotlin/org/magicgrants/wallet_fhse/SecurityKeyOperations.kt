@@ -167,8 +167,19 @@ class SecurityKeyOperations(
     /**
      * [hmacSecret] is secret: the caller should overwrite it once it has been
      * sent. [serial] is that of the key that did the work, or null.
+     *
+     * [authenticatorData] (the getAssertion's) and, for an enrollment,
+     * [creationAuthenticatorData] (the makeCredential's) go to Dart as the key
+     * sent them, where every platform's reply is checked the same way
+     * (wallet_fhse's key_reply.dart). The checks here stay as a first line.
      */
-    class HmacSecretResult(val credentialId: ByteArray, val hmacSecret: ByteArray, val serial: Int? = null)
+    class HmacSecretResult(
+        val credentialId: ByteArray,
+        val hmacSecret: ByteArray,
+        val serial: Int? = null,
+        val authenticatorData: ByteArray = ByteArray(0),
+        val creationAuthenticatorData: ByteArray? = null,
+    )
 
     /** How [enroll] and [getHmacSecret] get the user verified for their PIN/UV auth tokens. */
     sealed class Verification {
@@ -539,6 +550,7 @@ class SecurityKeyOperations(
 
         // c. PIN/UV token for makeCredential + getAssertion, bound to rpId.
         val credentialId: ByteArray
+        val creationAuthenticatorData: ByteArray
         var token = getToken(op, clientPin, verification, ClientPin.PIN_PERMISSION_MC or ClientPin.PIN_PERMISSION_GA, rpId)
         try {
             // d. makeCredential.
@@ -576,6 +588,7 @@ class SecurityKeyOperations(
             }
             credentialId = authData.attestedCredentialData?.credentialId?.copyOf()
                 ?: throw SecurityKeyException(UNKNOWN, "The security key returned no credential")
+            creationAuthenticatorData = credential.authenticatorData.copyOf()
         } finally {
             token.fill(0)
         }
@@ -590,7 +603,13 @@ class SecurityKeyOperations(
             } catch (e: CtapException) {
                 throw mapCtapException(e, op.builtInUv)
             }
-            HmacSecretResult(credentialId, result.hmacSecret, session.serial)
+            HmacSecretResult(
+                credentialId,
+                result.hmacSecret,
+                session.serial,
+                result.authenticatorData,
+                creationAuthenticatorData,
+            )
         } finally {
             token.fill(0)
         }
@@ -639,7 +658,7 @@ class SecurityKeyOperations(
         }
         val result = found
             ?: throw SecurityKeyException(NO_CREDENTIALS, "None of the enrolled credentials is on this security key")
-        HmacSecretResult(result.credentialId, result.hmacSecret, session.serial)
+        HmacSecretResult(result.credentialId, result.hmacSecret, session.serial, result.authenticatorData)
     }
 
     // ---------------------------------------------------------------- CTAP helpers
@@ -716,7 +735,11 @@ class SecurityKeyOperations(
                 ?: allowIds.singleOrNull()?.copyOf()
                 ?: throw SecurityKeyException(UNKNOWN, "The security key did not say which credential it used")
 
-            val result = HmacSecretResult(credentialId, output)
+            val result = HmacSecretResult(
+                credentialId,
+                output,
+                authenticatorData = assertion.authenticatorData.copyOf(),
+            )
             output = null // ownership passes to the caller
             return result
         } finally {

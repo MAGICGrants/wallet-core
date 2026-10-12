@@ -6,6 +6,11 @@
 
 #include "wfhse.h"
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -206,6 +211,10 @@ int64_t wfhse_boot_ns(void)
   // (CLOCK_UPTIME_RAW is the one that stops) and is not settable.
   const uint64_t ns = clock_gettime_nsec_np(CLOCK_MONOTONIC);
   return ns == 0 ? -1 : (int64_t)ns;
+#elif defined(_WIN32)
+  // Milliseconds since boot. It is not settable, and unlike
+  // QueryUnbiasedInterruptTime it does not leave out time asleep.
+  return (int64_t)GetTickCount64() * 1000000LL;
 #elif defined(CLOCK_BOOTTIME)
   // Linux's CLOCK_MONOTONIC stops during suspend; CLOCK_BOOTTIME does not.
   struct timespec ts;

@@ -38,8 +38,10 @@ _CoreFoundation? _coreFoundation;
 typedef _CreateUrlN = Pointer<Void> Function(Pointer<Void>, Pointer<Uint8>, IntPtr, Uint8);
 typedef _CreateUrlD = Pointer<Void> Function(Pointer<Void>, Pointer<Uint8>, int, int);
 // Boolean CFURLSetResourcePropertyForKey(CFURLRef, CFStringRef, CFTypeRef, CFErrorRef*)
-typedef _SetPropN = Uint8 Function(Pointer<Void>, Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>);
-typedef _SetPropD = int Function(Pointer<Void>, Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>);
+typedef _SetPropN =
+    Uint8 Function(Pointer<Void>, Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>);
+typedef _SetPropD =
+    int Function(Pointer<Void>, Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>);
 // Boolean CFURLCopyResourcePropertyForKey(CFURLRef, CFStringRef, void* (CFTypeRef*), CFErrorRef*)
 typedef _CopyPropN =
     Uint8 Function(Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>, Pointer<Pointer<Void>>);
@@ -59,9 +61,7 @@ class _CoreFoundation {
         'CFURLCreateFromFileSystemRepresentation',
       ),
       _setProperty = lib.lookupFunction<_SetPropN, _SetPropD>('CFURLSetResourcePropertyForKey'),
-      _copyProperty = lib.lookupFunction<_CopyPropN, _CopyPropD>(
-        'CFURLCopyResourcePropertyForKey',
-      ),
+      _copyProperty = lib.lookupFunction<_CopyPropN, _CopyPropD>('CFURLCopyResourcePropertyForKey'),
       _release = lib.lookupFunction<_ReleaseN, _ReleaseD>('CFRelease'),
       // Both are `const` globals holding a CF object pointer.
       _excludedKey = lib.lookup<Pointer<Void>>('kCFURLIsExcludedFromBackupKey').value,
@@ -79,18 +79,18 @@ class _CoreFoundation {
     if (set == 0) return false;
     // Read back through a new URL: a CFURL caches the values set on it.
     return _withDirectoryUrl(path, (url) {
-      final value = calloc<Pointer<Void>>();
-      try {
-        if (_copyProperty(url, _excludedKey, value, nullptr) == 0) return 0;
-        final read = value.value;
-        if (read == nullptr) return 0;
-        _release(read);
-        // CFBoolean values are singletons, so identity is equality.
-        return read == _true ? 1 : 0;
-      } finally {
-        calloc.free(value);
-      }
-    }) ==
+          final value = calloc<Pointer<Void>>();
+          try {
+            if (_copyProperty(url, _excludedKey, value, nullptr) == 0) return 0;
+            final read = value.value;
+            if (read == nullptr) return 0;
+            _release(read);
+            // CFBoolean values are singletons, so identity is equality.
+            return read == _true ? 1 : 0;
+          } finally {
+            calloc.free(value);
+          }
+        }) ==
         1;
   }
 

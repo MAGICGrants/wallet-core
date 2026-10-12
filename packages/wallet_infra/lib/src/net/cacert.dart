@@ -1,11 +1,11 @@
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show listEquals, visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../paths.dart';
+import '../storage/atomic_file.dart';
 
 /// Mozilla's CA set, as published at curl.se/docs/caextract.html, shipped with
 /// this package.
@@ -91,17 +91,9 @@ class CaBundle {
     await dir.create(recursive: true);
 
     if (!await file.exists() || !listEquals(await file.readAsBytes(), contents)) {
-      // Write beside the target and rename over it, so no reader (a background
-      // isolate, a second process) ever sees a half-written bundle. The name is
-      // unique per writer so two of them cannot interleave in one temp file.
-      final tmp = File('${file.path}.${pid}_${Random().nextInt(1 << 32)}.tmp');
-      try {
-        await tmp.writeAsBytes(contents, flush: true);
-        await tmp.rename(file.path);
-      } catch (_) {
-        if (await tmp.exists()) await tmp.delete();
-        rethrow;
-      }
+      // No reader (a background isolate, a second process) ever sees a
+      // half-written bundle.
+      await writeFileAtomic(file, contents);
     }
 
     return _written = file.path;

@@ -37,6 +37,23 @@ There are two states:
 | **Off** (after onboarding) | `k_p`, as the random password used to be | none | App Lock, if on |
 | **On** (Settings > Advanced security) | the FHSE outer password, a random 32 bytes | `wallet.fhse`: `k_p` wrapped once per key | App Lock, if on, then a key and its PIN or fingerprint |
 
+On Linux and Windows the user types the wallet password, and no keystore
+holds one. There the typed password takes the keystore's place: while keys are
+off, `wallet.key` holds `k_p` encrypted with it (PBKDF2, as the wallet files
+were before); once they are on, it is `wallet.fhse`'s outer password and
+`wallet.key` is gone, so opening the wallet takes the typed password and then a
+key. Only wallets created on this build work this way. An older desktop wallet
+keeps its typed password as its wallet password, and keys are not offered for
+it, as for an older phone wallet.
+
+Where the password's copy lives is wallet_domain's `WalletPasswordStore`: the
+keystore on Android, iOS and macOS, `wallet.key` (or nothing, for an older
+wallet) on Linux and Windows. FHSE only removes the copy when keys go on and
+puts it back when they go off. Files are encrypted with 600,000 PBKDF2
+iterations under a typed password (`wallet.key`, an older desktop wallet's
+files) and 100,000 under a generated or seed-derived one, which nobody can
+guess anyway.
+
 How each part fits:
 
 - **The FHSE seed is stored, not discarded.** `s_f` sits in `fhse_seed`,
@@ -52,6 +69,13 @@ How each part fits:
   enrolled with one opens with the other. See the platform halves:
   this plugin's `android/src/main/kotlin/.../SecurityKeyOperations.kt`, and
   each app's `ios/Runner/SecurityKeyOperations.swift`.
+- **Every key's answer is checked once, in Dart.** Each platform reaches the
+  key its own way, but returns what the key sent, authenticator data included,
+  and `SecurityKeyService` checks it the same way for all of them
+  (`lib/src/key_reply.dart`): user verified, credProtect level 3 and
+  hmac-secret on for a new credential, an answer from a credential that was
+  asked for, a 32-byte secret. The Kotlin and Swift halves keep their own
+  checks as a first line.
 - **Names come after the touches.** The app asks for a key's name once it has
   been enrolled (`FhseSetup.rename`, `FhseVault.renameKey`). Names live in the
   keystore; FHSE's file holds only credential ids.
@@ -93,7 +117,10 @@ How each part fits:
   - FHSE, from the `implement-fhse-concept` branch of
     [MAGICGrants/fhse](https://github.com/MAGICGrants/fhse) (a fork of
     vtnerd/fhse): `35b32c6` plus the audit fixes (32-byte KDF input, atomic
-    open, PIN and credProtect in `device.c`).
+    open, PIN and credProtect in `device.c`). `device.c` is not compiled here
+    (no `FHSE_LIBFIDO2`), and its credProtect check cannot fail:
+    `fido_cred_prot()` returns the level asked for, not the key's. The Linux
+    backend reads the key's own answer instead.
   - libcbor 0.13.0, with its two CMake-generated headers written by hand.
   - libsodium 1.0.22 stable.
 - `src/wfhse.{h,c}`: the C interface Dart binds to. Only these 19 functions
@@ -103,6 +130,13 @@ How each part fits:
 - `ios/` and `macos/`: the CocoaPods builds of the same sources, through
   forwarding files that `tool/generate_ios_classes.sh` generates for both.
   Re-run that script after changing anything under `src/`.
+- `linux/` and `windows/`: the FFI plugin builds of `src/` (MSVC on
+  Windows; `src/CMakeLists.txt` has its settings).
+- `lib/src/backends/`: how Dart reaches a key where no platform channel does:
+  `LinuxLibFido2Backend` (the system's libfido2, through `dart:ffi`, on a
+  background isolate) and `WindowsWebAuthnBackend` (`webauthn.dll` from
+  System32, whose Windows Security dialog asks for the PIN and the touch).
+  `SecurityKeyService` picks the backend for the platform.
 - `lib/wallet_fhse.dart`: `FhseSecret`, `WalletKeyTree`, `FhseVault`,
   `FhseWalletGuard` (wallet_domain's `WalletPasswordGuard`), and
   `SecurityKeyService`, the Dart end of the security key channel.
@@ -167,10 +201,31 @@ key: set up, unlock, add, set up again, recovery phrase, turn off, delete.
   sync does not exist on a desktop OS, so nothing reads the view-only data
   kept at engagement there. Wallets created by earlier macOS builds, under a
   typed password, are not migrated.
+- **Linux** reaches keys through the system's libfido2 (`libfido2.so.1`,
+  version 1.6 or later, which openssh-client already pulls in on Debian,
+  Ubuntu and Fedora; the `.deb` recommends `libfido2-1`). Before 1.12 the
+  key's minimum PIN length and forced PIN change cannot be read, so 4 and
+  "no" are assumed. Without it the app runs as before and keys
+  are unavailable. The key's `/dev/hidraw` node must be readable: systemd 244
+  and later grant that to the logged-in user for FIDO keys. Flatpak and Snap
+  builds would need device access. libfido2 cannot read a YubiKey's serial, so
+  the "which key is this" check before the PIN does not happen on Linux.
+- **Windows** needs Windows 11, version 22H2 or later (WebAuthn API version 4,
+  raw hmac-secret salts). Windows draws the PIN and touch prompts, so the app
+  never sees the PIN and cannot check which key is connected first. Untested:
+  whether Windows accepts the relying party id `fhse:encryption`, and whether
+  it honours hmac-secret on a non-discoverable credential; if it does not, the
+  backend retries with a discoverable one (one slot on the key per wallet).
+  The MSVC build of `src/` has not been compiled.
+- **The typed password as FHSE's outer password** (Linux, Windows) inherits
+  the minimum Argon2id cost above. Someone who already holds a key, its PIN
+  and the file can then guess a weak typed password quickly; the key and its
+  PIN are the real barrier, which the maintainer accepted.
 - **"Lock after" on a desktop OS** closes the wallet and forgets its password
   after a time without use (no pointer or key input reaching the app), on the
-  same two clocks as below; Linux and Windows have no FHSE library, so their
-  second clock is a monotonic one in the process, which may stop during sleep.
+  same two clocks as below (the boot clock is `CLOCK_BOOTTIME` on Linux and
+  `GetTickCount64` on Windows). Where FHSE's library does not load, the second
+  clock is a monotonic one in the process, which may stop during sleep.
 - **"Fully lock after" is measured on two clocks.** The wall clock and a boot
   clock (`wfhse_boot_ns`: `CLOCK_BOOTTIME` on Android, `CLOCK_MONOTONIC` on
   Apple) that keeps counting while the phone sleeps and cannot be set. Either

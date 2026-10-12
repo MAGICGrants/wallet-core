@@ -30,6 +30,50 @@ class _Guard extends WalletPasswordGuard {
   Future<void> walletDeleted() async => deleted++;
 }
 
+/// A guard on Linux or Windows. Everything it and [_FlakyWallet] do goes into
+/// one [log], so their order can be checked.
+class _TypedGuard extends _Guard {
+  _TypedGuard(this.log);
+
+  final List<String> log;
+
+  /// Whether the typed password opens the guard while it is engaged.
+  bool accepts = true;
+
+  @override
+  Future<String> passwordForNewWallet(SeedSource seed) async {
+    log.add('derive');
+    return 'from-guard';
+  }
+
+  @override
+  Future<bool> acceptsTypedPassword(String typed) async => accepts;
+}
+
+/// Fails its first restore when asked to, and logs the password of each and
+/// whether `wallet.key` was already written.
+class _FlakyWallet extends FakeWallet {
+  _FlakyWallet(this.log, {this.failFirst = false}) : super('XMR', seedFormats: {SeedFormat.bip39});
+
+  final List<String> log;
+  bool failFirst;
+
+  @override
+  Future<void> restoreFromSeed({
+    required SeedSource seed,
+    required RestorePoint from,
+    required String password,
+  }) async {
+    final kept = (await TypedPasswordStore.wrapFile()).existsSync();
+    log.add('restore $password${kept ? ' after wallet.key' : ''}');
+    if (failFirst) {
+      failFirst = false;
+      throw StateError('connection lost');
+    }
+    await super.restoreFromSeed(seed: seed, from: from, password: password);
+  }
+}
+
 class _ViewOnlyWallet extends FakeWallet {
   _ViewOnlyWallet(super.symbol) : super(existing: true);
 
@@ -106,7 +150,7 @@ void main() {
     expect(m.passwordForGuard, 'from-guard');
     expect(guard.created, 'from-guard');
     // Until keys are set up, the keystore holds it as it always did.
-    expect(await getMobileWalletPassword(), 'from-guard');
+    expect(await readKeystoreWalletPassword(), 'from-guard');
     m.dispose();
   });
 
@@ -119,10 +163,10 @@ void main() {
   });
 
   test('once engaged, a keystore copy is not read back', () async {
-    await storeMobileWalletPassword('left over');
+    await storeKeystoreWalletPassword('left over');
     guard.engaged = true;
     final m = WalletManager(coins: () => [FakeWallet('XMR')]);
-    expect(await m.loadMobileWalletPassword(), isFalse);
+    expect(await m.loadStoredPassword(), isFalse);
     expect(m.hasPassword, isFalse);
     expect(await m.isPasswordGuarded(), isTrue);
     m.dispose();
@@ -144,12 +188,12 @@ void main() {
   });
 
   test('unlocking with the guard sets the password and clears a keystore leftover', () async {
-    await storeMobileWalletPassword('pw');
+    await storeKeystoreWalletPassword('pw');
     guard.engaged = true;
     final m = WalletManager(coins: () => [FakeWallet('XMR')]);
     await m.unlockWithGuardedPassword('pw');
     expect(m.passwordForGuard, 'pw');
-    expect(await getMobileWalletPassword(), isNull);
+    expect(await readKeystoreWalletPassword(), isNull);
     m.dispose();
   });
 
@@ -228,6 +272,150 @@ void main() {
     expect(w.prepared, 1);
     expect(w.forgotten, 1);
     m.dispose();
+  });
+
+  test('a failed restore derives again on the retry, keystore copy first', () async {
+    final log = <String>[];
+    final m = WalletManager(coins: () => [_FlakyWallet(log, failFirst: true)])
+      ..useGeneratedPassword();
+    await expectLater(restore(m), throwsStateError);
+    expect(await readKeystoreWalletPassword(), 'from-guard', reason: 'stored before any file');
+    await restore(m);
+    expect(m.passwordForGuard, 'from-guard');
+    expect(guard.created, 'from-guard');
+    expect(log, ['restore from-guard', 'restore from-guard']);
+    m.dispose();
+  });
+
+  group('typed passwords (Linux, Windows)', () {
+    late List<String> log;
+    late _TypedGuard typedGuard;
+
+    setUp(() {
+      WalletSecrets.holdsWalletPassword = false;
+      log = [];
+      typedGuard = _TypedGuard(log);
+      WalletManager.passwordGuard = typedGuard;
+    });
+
+    tearDown(() {
+      TypedPasswordStore.instance.resetForTesting();
+      WalletFileCrypto.walletPasswordIterations = WalletFileCrypto.typedPasswordIterations;
+    });
+
+    Future<String> keptCopy(String typed) async => WalletFileCrypto.decryptFromBase64(
+      await (await TypedPasswordStore.wrapFile()).readAsString(),
+      typed,
+    );
+
+    test("the guard's password opens the new wallet, kept under the typed one first", () async {
+      final m = WalletManager(coins: () => [_FlakyWallet(log)])..setWalletPassword('typed');
+      await restore(m);
+      expect(log, ['derive', 'restore from-guard after wallet.key']);
+      expect(await keptCopy('typed'), 'from-guard');
+      expect(typedGuard.created, 'from-guard');
+      expect(m.passwordForGuard, 'from-guard');
+      expect(
+        secrets.values.containsKey(walletPasswordStorageKey),
+        isFalse,
+        reason: 'no keystore copy on Linux or Windows',
+      );
+      expect(
+        WalletFileCrypto.walletPasswordIterations,
+        WalletFileCrypto.generatedPasswordIterations,
+        reason: 'files under a seed-derived password need no typed-password cost',
+      );
+      m.dispose();
+    });
+
+    test('a failed restore is retried from the typed password', () async {
+      final m = WalletManager(coins: () => [_FlakyWallet(log, failFirst: true)])
+        ..setWalletPassword('typed');
+      await expectLater(restore(m), throwsStateError);
+      expect(m.passwordForGuard, 'typed', reason: 'still the typed password');
+      await restore(m);
+      expect(log, [
+        'derive',
+        'restore from-guard after wallet.key',
+        'derive',
+        'restore from-guard after wallet.key',
+      ]);
+      expect(await keptCopy('typed'), 'from-guard');
+      expect(m.passwordForGuard, 'from-guard');
+      m.dispose();
+    });
+
+    test(
+      'without a guard, the typed password is the wallet password and nothing is kept',
+      () async {
+        WalletManager.passwordGuard = null;
+        final m = WalletManager(coins: () => [_FlakyWallet(log)])..setWalletPassword('typed');
+        await restore(m);
+        expect(log, ['restore typed']);
+        expect((await TypedPasswordStore.wrapFile()).existsSync(), isFalse);
+        expect(WalletFileCrypto.walletPasswordIterations, WalletFileCrypto.typedPasswordIterations);
+        m.dispose();
+      },
+    );
+
+    test('the typed unlock: a wrong password, the kept copy, and keys on', () async {
+      await TypedPasswordStore.instance.saveCopy('from-guard', typed: 'typed');
+      TypedPasswordStore.instance.endSession();
+      final m = WalletManager(coins: () => [FakeWallet('XMR')]);
+
+      expect(await m.unlockWithTypedPassword('wrong'), isFalse);
+      expect(m.hasPassword, isFalse);
+
+      expect(await m.unlockWithTypedPassword('typed'), isTrue);
+      expect(m.passwordForGuard, 'from-guard');
+      expect(TypedPasswordStore.instance.typedPassword, 'typed');
+
+      await m.fullyLock();
+      expect(TypedPasswordStore.instance.typedPassword, isNull);
+      typedGuard.engaged = true;
+      typedGuard.accepts = false;
+      expect(await m.unlockWithTypedPassword('typed'), isFalse);
+      typedGuard.accepts = true;
+      expect(await m.unlockWithTypedPassword('typed'), isTrue);
+      expect(m.hasPassword, isFalse, reason: 'a key comes next');
+      expect(TypedPasswordStore.instance.typedPassword, 'typed');
+      m.dispose();
+    });
+
+    test("an older wallet's typed password is its wallet password, at the typed cost", () async {
+      await SeedStore.save(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+        password: 'old typed',
+      );
+      final m = WalletManager(coins: () => [FakeWallet('XMR')]);
+      expect(await m.unlockWithTypedPassword('wrong'), isFalse);
+      expect(await m.unlockWithTypedPassword('old typed'), isTrue);
+      expect(m.passwordForGuard, 'old typed');
+      expect(WalletFileCrypto.walletPasswordIterations, WalletFileCrypto.typedPasswordIterations);
+      m.dispose();
+    });
+
+    test("a guard's password cannot start another wallet without the typed one", () async {
+      await TypedPasswordStore.instance.saveCopy('from-guard', typed: 'typed');
+      final m = WalletManager(
+        coins: () => [
+          FakeWallet('XMR', seedFormats: {SeedFormat.bip39}),
+        ],
+      );
+      await m.unlockWithTypedPassword('typed');
+      await expectLater(restore(m), throwsStateError);
+      expect(log, isEmpty);
+      m.dispose();
+    });
+
+    test('a key unlock finishes an engage that was cut short before wallet.key went', () async {
+      await TypedPasswordStore.instance.saveCopy('from-guard', typed: 'typed');
+      final m = WalletManager(coins: () => [FakeWallet('XMR')]);
+      await m.unlockWithGuardedPassword('from-guard');
+      expect((await TypedPasswordStore.wrapFile()).existsSync(), isFalse);
+      m.dispose();
+    });
   });
 
   test('deleting the wallet tells the guard', () async {

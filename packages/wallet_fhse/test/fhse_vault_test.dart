@@ -242,13 +242,13 @@ void main() {
 
   test('engage takes the password out of the keystore; release puts it back', () async {
     final password = await createWallet(PolyseedSeed(newPolyseed()));
-    await storeMobileWalletPassword(password);
+    await storeKeystoreWalletPassword(password);
     final manager = WalletManager(coins: () => [])..setWalletPassword(password);
     final setup = await FhseVault.beginSetup(walletPassword: password);
     await setup.addKey(authenticator: FakeSecurityKey(), verification: _pin, name: 'Key');
 
     await FhseWalletGuard.engage(setup, manager);
-    expect(await getMobileWalletPassword(), isNull);
+    expect(await readKeystoreWalletPassword(), isNull);
     expect(await const FhseWalletGuard().isEngaged(), isTrue);
     expect(
       await manager.isPasswordGuarded(),
@@ -257,7 +257,7 @@ void main() {
     );
 
     await FhseWalletGuard.release(manager);
-    expect(await getMobileWalletPassword(), password);
+    expect(await readKeystoreWalletPassword(), password);
     expect(await FhseVault.isEngaged(), isFalse);
     expect(await FhseVault.isAvailable(), isTrue, reason: 'keys can be set up again later');
     manager.dispose();

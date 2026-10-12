@@ -12,7 +12,12 @@
 #define CBOR_MAX_STACK_SIZE 2048
 #define CBOR_PRETTY_PRINTER 0
 
+// MSVC spells C99's restrict its own way (Windows builds).
+#if defined(_MSC_VER)
+#define CBOR_RESTRICT_SPECIFIER __restrict
+#else
 #define CBOR_RESTRICT_SPECIFIER restrict
+#endif
 #define CBOR_INLINE_SPECIFIER
 
 #endif //LIBCBOR_CONFIGURATION_H

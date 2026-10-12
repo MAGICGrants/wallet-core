@@ -20,7 +20,10 @@ String fullLockLabel(FhseLocalizations i18n, int minutes) =>
   final appName = SecurityKeysUi.config.appName;
   return isDesktopAutoLockPlatform
       ? (label: i18n.desktopAutoLockLabel, description: i18n.desktopAutoLockDescription(appName))
-      : (label: i18n.securityKeysFullLockLabel, description: i18n.securityKeysFullLockDescription(appName));
+      : (
+          label: i18n.securityKeysFullLockLabel,
+          description: i18n.securityKeysFullLockDescription(appName),
+        );
 }
 
 /// Shows the [SecurityKeysPreferences.fullLockMinuteOptions], saves the one
@@ -242,7 +245,10 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
       content = [
         BrandCard(
           padding: const EdgeInsets.all(BrandSpacing.lg),
-          child: Text(i18n.securityKeysUnavailable(SecurityKeysUi.config.appName), style: BrandText.body),
+          child: Text(
+            i18n.securityKeysUnavailable(SecurityKeysUi.config.appName),
+            style: BrandText.body,
+          ),
         ),
       ];
     } else if (!state.engaged) {

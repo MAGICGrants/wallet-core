@@ -445,7 +445,7 @@ class BitcoinChainWallet extends CryptoWallet {
           },
       ],
     });
-    await file.writeAsString(await WalletFileCrypto.encryptToBase64(json, password));
+    await writeStringAtomic(file, await WalletFileCrypto.encryptToBase64(json, password));
   }
 
   /// This wallet's file holds the mnemonic, the account xprv, the two

@@ -16,8 +16,10 @@ import 'seed/seed.dart';
 ///   [WalletManager.unlockWithGuardedPassword]. It then stays in memory until
 ///   [WalletManager.fullyLock].
 ///
-/// Only consulted for generated (mobile) passwords. A desktop OS, where the
-/// user types the password, never uses one.
+/// On Linux and Windows the user types a password and nothing is kept in a
+/// keystore. A guard still supplies a new wallet's password there, and the
+/// typed one only unlocks it (`WalletPasswordStore`). Without a guard the
+/// typed password is the wallet password, as it always was.
 abstract class WalletPasswordGuard {
   const WalletPasswordGuard();
 
@@ -34,4 +36,11 @@ abstract class WalletPasswordGuard {
 
   /// The wallet was deleted; forget everything kept for it.
   Future<void> walletDeleted();
+
+  /// Linux and Windows, while engaged: whether [typed] is the password the
+  /// guard was engaged under. The typed password unlocks the guard there
+  /// (`wallet_fhse`: the FHSE file's outer password), so a wrong one is
+  /// turned away before anything else is asked for. A guard that cannot tell
+  /// refuses.
+  Future<bool> acceptsTypedPassword(String typed) async => false;
 }

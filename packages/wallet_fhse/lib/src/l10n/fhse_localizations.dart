@@ -830,6 +830,78 @@ abstract class FhseLocalizations {
   /// In en, this message translates to:
   /// **'After this long without use, {appName} closes the wallet and forgets its password. Unlock it again to carry on.'**
   String desktopAutoLockDescription(String appName);
+
+  /// No description provided for @securityKeysIntroBodyDesktop.
+  ///
+  /// In en, this message translates to:
+  /// **'Require your password and a YubiKey with its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this computer cannot be decrypted, even by someone who knows your password.'**
+  String get securityKeysIntroBodyDesktop;
+
+  /// No description provided for @securityKeysRequirementsLinux.
+  ///
+  /// In en, this message translates to:
+  /// **'Works with YubiKey 5 series keys and YubiKey Bio plugged into this computer. Each key needs a FIDO2 PIN. Uses the system\'s libfido2, which most Linux systems already have.'**
+  String get securityKeysRequirementsLinux;
+
+  /// No description provided for @securityKeysRequirementsWindows.
+  ///
+  /// In en, this message translates to:
+  /// **'Works with FIDO2 security keys such as the YubiKey 5 series, plugged into this computer. Needs Windows 11, version 22H2 or later. Windows asks for the key\'s PIN itself.'**
+  String get securityKeysRequirementsWindows;
+
+  /// No description provided for @securityKeysTurnOffBodyDesktop.
+  ///
+  /// In en, this message translates to:
+  /// **'Your password alone opens the wallet again, without a key.'**
+  String get securityKeysTurnOffBodyDesktop;
+
+  /// No description provided for @securityKeyConnectBodyDesktop.
+  ///
+  /// In en, this message translates to:
+  /// **'Plug your YubiKey into this computer and touch it when it blinks.'**
+  String get securityKeyConnectBodyDesktop;
+
+  /// No description provided for @securityKeyConnectBodyWindows.
+  ///
+  /// In en, this message translates to:
+  /// **'Windows asks for your security key, its PIN or fingerprint, and a touch.'**
+  String get securityKeyConnectBodyWindows;
+
+  /// No description provided for @securityKeyPinBodyDesktop.
+  ///
+  /// In en, this message translates to:
+  /// **'The PIN you set for this YubiKey. It is not your wallet password.'**
+  String get securityKeyPinBodyDesktop;
+
+  /// No description provided for @securityKeyWindowsPromptTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue in Windows Security'**
+  String get securityKeyWindowsPromptTitle;
+
+  /// No description provided for @securityKeyWindowsPromptBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your key\'s PIN or use its fingerprint, then touch the key.'**
+  String get securityKeyWindowsPromptBody;
+
+  /// No description provided for @securityKeyWindowsPromptEnrollBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Windows asks twice: once to register the key and once to read it back. Each time, enter the key\'s PIN or use its fingerprint, then touch the key.'**
+  String get securityKeyWindowsPromptEnrollBody;
+
+  /// No description provided for @securityKeyWindowsWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for Windows Security…'**
+  String get securityKeyWindowsWaiting;
+
+  /// No description provided for @securityKeyUseButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Use security key'**
+  String get securityKeyUseButton;
 }
 
 class _FhseLocalizationsDelegate extends LocalizationsDelegate<FhseLocalizations> {

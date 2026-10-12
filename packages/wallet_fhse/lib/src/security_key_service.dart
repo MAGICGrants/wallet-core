@@ -1,16 +1,22 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
-import 'package:wallet_infra/wallet_infra.dart' show HostPlatform;
+import 'package:wallet_infra/wallet_infra.dart' show HostPlatform, LogLevel, log;
 
+import 'backends/linux_libfido2.dart';
+import 'backends/windows_webauthn.dart';
 import 'fhse_vault.dart' show KeyAssertion, KeyVerification, SecurityKeyAuthenticator;
+import 'key_reply.dart';
+import 'security_key_backend.dart';
 
 /// Why a security-key operation failed, as the native side reports it.
 ///
 /// The codes are the channel contract's; the native halves are this plugin's
-/// android/src/main/kotlin/.../SecurityKeyOperations.kt and, on iOS, the
-/// app's own ios/Runner/SecurityKeyOperations.swift (see README.md).
+/// android/src/main/kotlin/.../SecurityKeyOperations.kt and, on iOS and macOS,
+/// the app's own Runner/SecurityKeyOperations.swift (see README.md). The
+/// Linux and Windows backends (lib/src/backends) report the same codes.
 enum SecurityKeyFailure {
   cancelled,
   timeout,
@@ -119,95 +125,84 @@ class SecurityKeyInfo {
   bool get canUseFingerprint => fingerprintReady && (fingerprintRetries ?? 1) > 0;
 }
 
-/// The FIDO2 key, through Yubico's SDKs on each platform.
+/// The FIDO2 key, through whatever reaches it on this platform
+/// ([SecurityKeyBackend]): Yubico's SDKs on Android, iOS and macOS, the
+/// system's libfido2 on Linux, and Windows' WebAuthn API on Windows.
 ///
 /// FHSE needs raw CTAP2: a non-discoverable credential under the relying party
 /// "fhse:encryption" with the hmac-secret extension, and later its output for
-/// a 32-byte salt. Platform passkey APIs cannot do that (they insist on a web
-/// domain and hash the salt), so each platform talks CTAP2 to the key itself,
-/// and the app draws the steps the system would otherwise: connect, PIN,
-/// touch. Every credential is created with credProtect level 3 and every call
-/// verifies the user, with the key's PIN or a YubiKey Bio's fingerprint, so a
-/// key found by someone else opens nothing.
+/// a 32-byte salt. Passkey APIs built for websites cannot do that (they insist
+/// on a web domain and hash the salt), so the mobile platforms and Linux talk
+/// CTAP2 to the key themselves, and the app draws the steps the system would
+/// otherwise: connect, PIN, touch. Windows' own API passes the salt through
+/// unhashed when asked to, so there the Windows Security dialog draws them
+/// ([systemPrompts]). Every credential is created with credProtect level 3 and
+/// every call verifies the user, with the key's PIN or a YubiKey Bio's
+/// fingerprint, so a key found by someone else opens nothing.
 class SecurityKeyService implements SecurityKeyAuthenticator {
-  SecurityKeyService._() {
-    _channel.setMethodCallHandler(_onNativeCall);
+  SecurityKeyService._(this._platformBackend) : _backend = _platformBackend;
+
+  static final instance = SecurityKeyService._(_backendForThisPlatform());
+
+  static SecurityKeyBackend _backendForThisPlatform() {
+    if (Platform.isLinux) return LinuxLibFido2Backend();
+    if (Platform.isWindows) {
+      // Which enrollment path Windows took is still unknown on real keys, so
+      // keep it in the app's log. Nothing secret is in these messages.
+      WindowsWebAuthnBackend.debugLog ??= (message) => log(LogLevel.info, '[WebAuthn] $message');
+      return WindowsWebAuthnBackend();
+    }
+    return _ChannelBackend();
   }
 
-  static final instance = SecurityKeyService._();
+  final SecurityKeyBackend _platformBackend;
+  SecurityKeyBackend _backend;
+
+  /// Replaces the platform's backend, so a test can play Windows (or any
+  /// other platform) on the host it runs on. Null restores it.
+  @visibleForTesting
+  set backendForTesting(SecurityKeyBackend? backend) => _backend = backend ?? _platformBackend;
 
   static const rpId = 'fhse:encryption';
-  /// The channel the native halves answer on. On iOS the app's Swift
-  /// registers it under this same name.
-  static const channelName = 'org.magicgrants.wallet_fhse/security_key';
-  static const _channel = MethodChannel(channelName);
 
-  final _status = StreamController<SecurityKeyStatus>.broadcast();
+  /// The channel the mobile and macOS halves answer on. On iOS and macOS the
+  /// app's Swift registers it under this same name.
+  static const channelName = 'org.magicgrants.wallet_fhse/security_key';
 
   /// What the key is waiting for, while an operation runs: a touch, a
   /// fingerprint, or to be connected again.
-  Stream<SecurityKeyStatus> get status => _status.stream;
+  Stream<SecurityKeyStatus> get status => _backend.status;
 
-  Future<void> _onNativeCall(MethodCall call) async {
-    if (call.method != 'status') return;
-    final args = call.arguments;
-    final status = args is Map ? SecurityKeyStatus.fromCode(args['state']) : null;
-    if (status != null) _status.add(status);
-  }
+  /// The operating system asks for the PIN and the touch itself (Windows), so
+  /// the app skips its own steps and verifies with [KeyVerification.system].
+  bool get systemPrompts => _backend.systemPrompts;
 
-  /// Shown in the iOS NFC sheet; Android has no system sheet.
+  /// Shown in the iOS NFC sheet; nothing else has a system sheet for it.
   String nfcPrompt = 'Hold your security key near the top of your iPhone.';
 
-  /// Security keys on this platform: iPhone and Android. Not the iPhone app
-  /// running on a Mac, which has neither NFC nor the USB path.
+  /// Security keys on this platform: phones, and the desktop OSes. Not the
+  /// iPhone app running on a Mac, which has neither NFC nor the USB path.
   static bool get isSupportedPlatform =>
-      (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) && !HostPlatform.isIosAppOnMac;
+      (Platform.isAndroid ||
+          Platform.isIOS ||
+          Platform.isMacOS ||
+          Platform.isLinux ||
+          Platform.isWindows) &&
+      !HostPlatform.isIosAppOnMac;
 
-  Future<T> _call<T>(String method, [Map<String, Object?>? args]) async {
-    try {
-      return await _channel.invokeMethod<T>(method, args) as T;
-    } on PlatformException catch (e) {
-      throw SecurityKeyException(
-        SecurityKeyFailure.fromCode(e.code),
-        message: e.message,
-        retries: e.details is int ? e.details as int : null,
-      );
-    }
-  }
-
-  Future<({bool nfc, bool usb})> capabilities() async {
-    final result = await _call<Map<Object?, Object?>>('capabilities');
-    return (nfc: result['nfc'] == true, usb: result['usb'] == true);
-  }
+  Future<({bool nfc, bool usb})> capabilities() => _backend.capabilities();
 
   /// Waits for a key and reads what it supports. With [touch], a plugged-in
   /// key is also asked for a touch, so the user picks the key they mean.
-  Future<SecurityKeyInfo> inspect({bool touch = false}) async {
-    final result = await _call<Map<Object?, Object?>>('inspect', {
-      'prompt': nfcPrompt,
-      'touch': touch,
-    });
-    return SecurityKeyInfo(
-      pinSet: result['pinSet'] == true,
-      pinRetries: result['pinRetries'] as int?,
-      supportsHmacSecret: result['hmacSecret'] == true,
-      supportsCredProtect: result['credProtect'] == true,
-      transport: SecurityKeyTransport.fromCode(result['transport']),
-      serial: result['serial'] as int?,
-      fingerprintReady: result['uv'] == true && result['pinUvAuthToken'] == true,
-      fingerprintRetries: result['uvRetries'] as int?,
-      minPinLength: result['minPinLength'] as int? ?? 4,
-      forcePinChange: result['forcePinChange'] == true,
-      touched: result['touched'] == true,
-    );
-  }
+  Future<SecurityKeyInfo> inspect({bool touch = false}) =>
+      _backend.inspect(touch: touch, prompt: nfcPrompt);
 
   /// Sets the PIN of a key that has none. With [expectSerial], a different
   /// key is refused before anything is sent to it.
   Future<void> setPin(String newPin, {int? expectSerial}) =>
-      _call<void>('setPin', {'newPin': newPin, 'expectSerial': expectSerial, 'prompt': nfcPrompt});
+      _backend.setPin(newPin, expectSerial: expectSerial, prompt: nfcPrompt);
 
-  Future<void> cancel() => _call<void>('cancel');
+  Future<void> cancel() => _backend.cancel();
 
   /// This service held to the key with [serial], the one the user touched in
   /// [inspect]: a different key is refused before any PIN reaches it, so a
@@ -241,6 +236,115 @@ class SecurityKeyService implements SecurityKeyAuthenticator {
     required KeyVerification verification,
     required List<Uint8List> excludeCredentialIds,
     int? expectSerial,
+  }) async => checkEnrollment(
+    await _backend.enroll(
+      rpId: rpId,
+      userId: userId,
+      salt: salt,
+      verification: verification,
+      excludeCredentialIds: excludeCredentialIds,
+      expectSerial: expectSerial,
+      prompt: nfcPrompt,
+    ),
+  );
+
+  Future<KeyAssertion> _getHmacSecret({
+    required Uint8List salt,
+    required KeyVerification verification,
+    required List<Uint8List> credentialIds,
+    int? expectSerial,
+  }) async => checkAssertion(
+    await _backend.getHmacSecret(
+      rpId: rpId,
+      salt: salt,
+      verification: verification,
+      credentialIds: credentialIds,
+      expectSerial: expectSerial,
+      prompt: nfcPrompt,
+    ),
+    allowed: credentialIds,
+  );
+}
+
+/// The platform channel to Yubico's SDKs: this plugin's Kotlin on Android, and
+/// the app's own Swift on iOS and macOS (see README.md).
+class _ChannelBackend implements SecurityKeyBackend {
+  _ChannelBackend() {
+    _channel.setMethodCallHandler(_onNativeCall);
+  }
+
+  static const _channel = MethodChannel(SecurityKeyService.channelName);
+
+  final _status = StreamController<SecurityKeyStatus>.broadcast();
+
+  @override
+  Stream<SecurityKeyStatus> get status => _status.stream;
+
+  @override
+  bool get systemPrompts => false;
+
+  Future<void> _onNativeCall(MethodCall call) async {
+    if (call.method != 'status') return;
+    final args = call.arguments;
+    final status = args is Map ? SecurityKeyStatus.fromCode(args['state']) : null;
+    if (status != null) _status.add(status);
+  }
+
+  Future<T> _call<T>(String method, [Map<String, Object?>? args]) async {
+    try {
+      return await _channel.invokeMethod<T>(method, args) as T;
+    } on PlatformException catch (e) {
+      throw SecurityKeyException(
+        SecurityKeyFailure.fromCode(e.code),
+        message: e.message,
+        retries: e.details is int ? e.details as int : null,
+      );
+    }
+  }
+
+  @override
+  Future<({bool nfc, bool usb})> capabilities() async {
+    final result = await _call<Map<Object?, Object?>>('capabilities');
+    return (nfc: result['nfc'] == true, usb: result['usb'] == true);
+  }
+
+  @override
+  Future<SecurityKeyInfo> inspect({required bool touch, required String prompt}) async {
+    final result = await _call<Map<Object?, Object?>>('inspect', {
+      'prompt': prompt,
+      'touch': touch,
+    });
+    return SecurityKeyInfo(
+      pinSet: result['pinSet'] == true,
+      pinRetries: result['pinRetries'] as int?,
+      supportsHmacSecret: result['hmacSecret'] == true,
+      supportsCredProtect: result['credProtect'] == true,
+      transport: SecurityKeyTransport.fromCode(result['transport']),
+      serial: result['serial'] as int?,
+      fingerprintReady: result['uv'] == true && result['pinUvAuthToken'] == true,
+      fingerprintRetries: result['uvRetries'] as int?,
+      minPinLength: result['minPinLength'] as int? ?? 4,
+      forcePinChange: result['forcePinChange'] == true,
+      touched: result['touched'] == true,
+    );
+  }
+
+  @override
+  Future<void> setPin(String newPin, {int? expectSerial, required String prompt}) =>
+      _call<void>('setPin', {'newPin': newPin, 'expectSerial': expectSerial, 'prompt': prompt});
+
+  @override
+  Future<void> cancel() => _call<void>('cancel');
+
+  @override
+  Future<KeyReply> enroll({
+    required String rpId,
+    required Uint8List userId,
+    required Uint8List salt,
+    required KeyVerification verification,
+    required List<Uint8List> excludeCredentialIds,
+    int? expectSerial,
+    required String prompt,
   }) async {
     final result = await _call<Map<Object?, Object?>>('enroll', {
       'rpId': rpId,
@@ -249,16 +353,19 @@ class SecurityKeyService implements SecurityKeyAuthenticator {
       ..._verification(verification),
       'excludeCredentialIds': excludeCredentialIds,
       'expectSerial': expectSerial,
-      'prompt': nfcPrompt,
+      'prompt': prompt,
     });
-    return _assertion(result);
+    return _reply(result);
   }
 
-  Future<KeyAssertion> _getHmacSecret({
+  @override
+  Future<KeyReply> getHmacSecret({
+    required String rpId,
     required Uint8List salt,
     required KeyVerification verification,
     required List<Uint8List> credentialIds,
     int? expectSerial,
+    required String prompt,
   }) async {
     final result = await _call<Map<Object?, Object?>>('getHmacSecret', {
       'rpId': rpId,
@@ -266,19 +373,32 @@ class SecurityKeyService implements SecurityKeyAuthenticator {
       ..._verification(verification),
       'credentialIds': credentialIds,
       'expectSerial': expectSerial,
-      'prompt': nfcPrompt,
+      'prompt': prompt,
     });
-    return _assertion(result);
+    return _reply(result);
   }
 
-  static Map<String, Object?> _verification(KeyVerification verification) => verification.isBuiltIn
-      ? {'verification': 'uv'}
-      : {'verification': 'pin', 'pin': verification.pin};
+  static Map<String, Object?> _verification(KeyVerification verification) {
+    if (verification.isSystem) {
+      throw const SecurityKeyException(
+        SecurityKeyFailure.unsupported,
+        message: 'no system security-key prompt on this platform',
+      );
+    }
+    return verification.isBuiltIn
+        ? {'verification': 'uv'}
+        : {'verification': 'pin', 'pin': verification.pin};
+  }
 
-  static KeyAssertion _assertion(Map<Object?, Object?> result) {
+  static KeyReply _reply(Map<Object?, Object?> result) {
     final credentialId = result['credentialId'];
     final hmacSecret = result['hmacSecret'];
-    if (credentialId is! Uint8List || hmacSecret is! Uint8List || hmacSecret.length != 32) {
+    final authenticatorData = result['authenticatorData'];
+    final creation = result['creationAuthenticatorData'];
+    if (credentialId is! Uint8List ||
+        hmacSecret is! Uint8List ||
+        authenticatorData is! Uint8List ||
+        (creation != null && creation is! Uint8List)) {
       throw const SecurityKeyException(
         SecurityKeyFailure.unsupported,
         message: 'malformed key response',
@@ -287,9 +407,13 @@ class SecurityKeyService implements SecurityKeyAuthenticator {
     // Copies: the engine hands channel replies over as unmodifiable views, and
     // KeyAssertion.wipe() overwrites hmacSecret in place. (The reply buffer
     // itself cannot be overwritten; it is freed with the message.)
-    return KeyAssertion(
+    return KeyReply(
       credentialId: Uint8List.fromList(credentialId),
       hmacSecret: Uint8List.fromList(hmacSecret),
+      authenticatorData: Uint8List.fromList(authenticatorData),
+      creationAuthenticatorData: creation == null
+          ? null
+          : Uint8List.fromList(creation as Uint8List),
       serial: result['serial'] as int?,
     );
   }

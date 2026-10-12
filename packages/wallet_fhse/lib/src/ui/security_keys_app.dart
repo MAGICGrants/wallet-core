@@ -202,9 +202,9 @@ Future<void> turnOffSecurityKeys(BuildContext context) =>
 
 /// Nanoseconds on a clock the user cannot set, for the lock deadlines: FHSE's
 /// boot clock ([FhseNative.bootClockNanos], which also counts sleep) where its
-/// library is built (Android, iOS, macOS), otherwise a monotonic clock in this
-/// process (Linux and Windows, where it may stop while the computer sleeps, so
-/// the wall clock may be the one that decides). Null when unreadable.
+/// library loads, otherwise a monotonic clock in this process (which may stop
+/// while the computer sleeps, so the wall clock may be the one that decides).
+/// Null when unreadable.
 int? lockClockNanos() {
   if (_nativeLockClock != false) {
     try {
@@ -233,7 +233,7 @@ final bool isDesktopAutoLockPlatform = Platform.isMacOS || Platform.isLinux || P
 Future<void> reopenAfterAppLock(BuildContext context) async {
   final manager = _manager(context);
   await _awaitFullLock();
-  if (!manager.hasPassword) await manager.loadMobileWalletPassword();
+  if (!manager.hasPassword) await manager.loadStoredPassword();
   if (manager.hasPassword && manager.loadedWallets.isEmpty) manager.openWalletFilesAndSync();
 }
 

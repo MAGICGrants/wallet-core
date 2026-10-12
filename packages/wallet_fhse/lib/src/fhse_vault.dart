@@ -29,20 +29,30 @@ class KeyAssertion {
 /// so either gives the same hmac-secret: a key enrolled with its PIN opens with
 /// its fingerprint, and the other way round.
 class KeyVerification {
-  const KeyVerification.pin(String this.pin);
-  const KeyVerification.builtIn() : pin = null;
+  const KeyVerification.pin(String this.pin) : isSystem = false;
+  const KeyVerification.builtIn() : pin = null, isSystem = false;
 
-  /// Null for [KeyVerification.builtIn].
+  /// The operating system's own security-key prompt verifies the user, with the
+  /// key's PIN or fingerprint, and the app never sees either (Windows).
+  const KeyVerification.system() : pin = null, isSystem = true;
+
+  /// Null for [KeyVerification.builtIn] and [KeyVerification.system].
   final String? pin;
 
-  bool get isBuiltIn => pin == null;
+  final bool isSystem;
+
+  bool get isBuiltIn => pin == null && !isSystem;
 
   @override
-  String toString() => isBuiltIn ? 'KeyVerification.builtIn' : 'KeyVerification.pin';
+  String toString() => isSystem
+      ? 'KeyVerification.system'
+      : isBuiltIn
+      ? 'KeyVerification.builtIn'
+      : 'KeyVerification.pin';
 }
 
-/// The app's way to a FIDO2 key. Skylight implements it with a platform
-/// channel to Yubico's SDKs.
+/// The app's way to a FIDO2 key. `SecurityKeyService` implements it on each
+/// platform (Yubico's SDKs, the system's libfido2, or Windows' WebAuthn API).
 ///
 /// Both calls must verify the user ([KeyVerification]): enrollment creates a
 /// credential with credProtect level 3 (user verification required) and the
@@ -154,6 +164,12 @@ enum FhseVaultFailure {
 /// the keystore. The keystore holds no wallet password; opening the wallet
 /// needs a key and its PIN or fingerprint ([unlock]).
 ///
+/// **Where the user types a password** (Linux, Windows) the typed password
+/// takes the keystore's place (`TypedPasswordStore` in wallet_domain): before
+/// keys, `wallet.key` holds the root encrypted with it; with keys on, it is the
+/// FHSE file's outer password, and `wallet.key` is gone. Unlocking then takes
+/// the typed password and a key.
+///
 /// Files, beside the wallet's in the app directory:
 ///  - `wallet.fhse`: the FHSE file. Kept on this device; nothing it protects
 ///    needs it for recovery, which is the seed's job.
@@ -199,7 +215,7 @@ class FhseVault {
 
   static Future<void> _writeSeed(Uint8List sf, String password) async {
     final blob = await WalletFileCrypto.encryptToBase64(base64.encode(sf), password);
-    await _writeAtomic(await _file(_seedName), utf8.encode(blob));
+    await writeFileAtomic(await _file(_seedName), utf8.encode(blob));
   }
 
   static Future<Uint8List> _readSeed(String password) async {
@@ -208,6 +224,24 @@ class FhseVault {
     final plain = await WalletFileCrypto.decryptFromBase64(await file.readAsString(), password);
     return Uint8List.fromList(base64.decode(plain));
   }
+
+  // ----- Typed passwords (Linux, Windows) -----
+
+  /// Whether [typed] opens the FHSE file's outer layer: the check a typed
+  /// password passes before a key is asked for.
+  static Future<bool> acceptsOuterPassword(String typed) async {
+    final blob = await _readBlob();
+    if (blob == null) return false;
+    try {
+      FhseSecret.open(blob, password: _bytes(typed)).dispose();
+      return true;
+    } on FhseException catch (e) {
+      if (e.code == FhseException.decryptionFailure) return false;
+      rethrow;
+    }
+  }
+
+  static Uint8List _bytes(String text) => Uint8List.fromList(utf8.encode(text));
 
   // ----- State -----
 
@@ -304,8 +338,12 @@ class FhseVault {
   /// after an unlock with the recovery phrase: keys are then set up again.
   static bool get hasSession => _session != null;
 
-  /// Drops the unlocked file: part of a full lock.
-  static void endSession() {
+  /// Drops the unlocked file: part of a full lock. (The typed password, on
+  /// Linux and Windows, is the password store's, which the manager's full lock
+  /// clears.)
+  static void endSession() => _dropSession();
+
+  static void _dropSession() {
     _session?.dispose();
     _session = null;
   }
@@ -359,7 +397,7 @@ class FhseVault {
       verification: verification,
       name: name,
     );
-    await _writeAtomic(await _file(_blobName), secret.store());
+    await writeFileAtomic(await _file(_blobName), secret.store());
     await _saveLabels([...await _labels(), record]);
     return record;
   }
@@ -430,7 +468,7 @@ class FhseVault {
   /// Removes the FHSE file and everything kept for it. The caller puts the
   /// wallet password back in the keystore first ([FhseWalletGuard.release]).
   static Future<void> deleteEngagement() async {
-    endSession();
+    _dropSession();
     final blob = await _file(_blobName);
     if (await blob.exists()) await blob.delete();
     await WalletSecrets.store.delete(keyLabelsKey);
@@ -456,10 +494,20 @@ class FhseVault {
 
   /// The outer password: a random secret in this device's keystore, which
   /// keeps the FHSE file useless off this device. FHSE's outer layer uses
-  /// libsodium's minimum Argon2id cost, which is fine for 256 random bits and
-  /// would not be for a typed password. Kept across set-ups; each new file
-  /// still gets a new FIDO2 salt.
+  /// libsodium's minimum Argon2id cost, which is fine for 256 random bits.
+  /// Kept across set-ups; each new file still gets a new FIDO2 salt.
+  ///
+  /// On Linux and Windows it is the typed password instead, as the password
+  /// store holds it for this session. That minimum cost then lets someone who
+  /// already holds a key, its PIN and the file guess the typed password
+  /// quickly; the key and its PIN remain the real barrier.
   static Future<Uint8List> _outerPassword({bool create = false}) async {
+    final store = WalletPasswordStore.current;
+    if (store.typesPassword) {
+      final typed = store.typedPassword;
+      if (typed == null) throw StateError('The typed password is not in memory');
+      return _bytes(typed);
+    }
     final stored = await WalletSecrets.store.read(outerPasswordKey);
     if (stored != null && stored.isNotEmpty) return Uint8List.fromList(utf8.encode(stored));
     if (!create) throw const FhseVaultException(FhseVaultFailure.corrupt);
@@ -489,12 +537,6 @@ class FhseVault {
   static String labelId(Uint8List credentialId) {
     final digest = WalletKeyTree.hashPersonal(credentialId, 'SKYPOC-KEYLABEL1');
     return digest.sublist(0, 16).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  }
-
-  static Future<void> _writeAtomic(File file, List<int> bytes) async {
-    final tmp = File('${file.path}.new');
-    await tmp.writeAsBytes(bytes, flush: true);
-    await tmp.rename(file.path);
   }
 }
 
@@ -537,7 +579,7 @@ class FhseSetup {
   Future<void> commit() async {
     if (_done) throw StateError('Setup already finished');
     if (_records.isEmpty) throw StateError('Add at least one key first');
-    await FhseVault._writeAtomic(await FhseVault._file(FhseVault._blobName), _secret.store());
+    await writeFileAtomic(await FhseVault._file(FhseVault._blobName), _secret.store());
     await FhseVault._saveLabels(_records);
     _done = true;
     FhseVault._replaceSession(_secret);
@@ -567,23 +609,29 @@ class FhseWalletGuard extends WalletPasswordGuard {
   @override
   Future<void> walletDeleted() => FhseVault.deleteAll();
 
-  /// Commits [setup] and, if keys were not already on, takes the password out
-  /// of the keystore. Before that, every wallet keeps what an unattended run
-  /// needs to check in without it (the background view-key path).
+  @override
+  Future<bool> acceptsTypedPassword(String typed) => FhseVault.acceptsOuterPassword(typed);
+
+  /// Commits [setup] and, if keys were not already on, removes the password's
+  /// kept copy (the keystore's, or `wallet.key` on Linux and Windows). Before
+  /// that, where the keystore holds the password, every wallet keeps what an
+  /// unattended run needs to check in without it (the background view-key
+  /// path); nothing runs unattended on Linux or Windows.
   static Future<void> engage(FhseSetup setup, WalletManager manager) async {
     final wasEngaged = await FhseVault.isEngaged();
     await setup.commit();
     if (wasEngaged) return;
-    await manager.prepareViewOnlyAll();
-    await deleteMobileWalletPassword();
+    final store = WalletPasswordStore.current;
+    if (!store.typesPassword) await manager.prepareViewOnlyAll();
+    await store.deleteCopy();
   }
 
-  /// Turns security keys off: the password goes back into the keystore before
+  /// Turns security keys off: the password's copy is kept again before
   /// anything else is removed, so no step leaves the wallet unopenable.
   static Future<void> release(WalletManager manager) async {
     final password = manager.passwordForGuard;
     if (password == null) throw StateError('The wallet must be unlocked to turn security keys off');
-    await storeMobileWalletPassword(password);
+    await WalletPasswordStore.current.saveCopy(password);
     await FhseVault.deleteEngagement();
     await manager.forgetViewOnlyAll();
   }

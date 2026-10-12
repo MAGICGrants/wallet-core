@@ -471,4 +471,49 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String desktopAutoLockDescription(String appName) {
     return 'After this long without use, $appName closes the wallet and forgets its password. Unlock it again to carry on.';
   }
+
+  @override
+  String get securityKeysIntroBodyDesktop =>
+      'Require your password and a YubiKey with its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this computer cannot be decrypted, even by someone who knows your password.';
+
+  @override
+  String get securityKeysRequirementsLinux =>
+      'Works with YubiKey 5 series keys and YubiKey Bio plugged into this computer. Each key needs a FIDO2 PIN. Uses the system\'s libfido2, which most Linux systems already have.';
+
+  @override
+  String get securityKeysRequirementsWindows =>
+      'Works with FIDO2 security keys such as the YubiKey 5 series, plugged into this computer. Needs Windows 11, version 22H2 or later. Windows asks for the key\'s PIN itself.';
+
+  @override
+  String get securityKeysTurnOffBodyDesktop =>
+      'Your password alone opens the wallet again, without a key.';
+
+  @override
+  String get securityKeyConnectBodyDesktop =>
+      'Plug your YubiKey into this computer and touch it when it blinks.';
+
+  @override
+  String get securityKeyConnectBodyWindows =>
+      'Windows asks for your security key, its PIN or fingerprint, and a touch.';
+
+  @override
+  String get securityKeyPinBodyDesktop =>
+      'The PIN you set for this YubiKey. It is not your wallet password.';
+
+  @override
+  String get securityKeyWindowsPromptTitle => 'Continue in Windows Security';
+
+  @override
+  String get securityKeyWindowsPromptBody =>
+      'Enter your key\'s PIN or use its fingerprint, then touch the key.';
+
+  @override
+  String get securityKeyWindowsPromptEnrollBody =>
+      'Windows asks twice: once to register the key and once to read it back. Each time, enter the key\'s PIN or use its fingerprint, then touch the key.';
+
+  @override
+  String get securityKeyWindowsWaiting => 'Waiting for Windows Security…';
+
+  @override
+  String get securityKeyUseButton => 'Use security key';
 }

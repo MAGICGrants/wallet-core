@@ -98,9 +98,9 @@ void main() {
       // And it is the key the store actually reaches for, not just a constant
       // sitting next to one; the same reasoning as this file's header.
       WalletSecrets.store = secrets;
-      await storeMobileWalletPassword('minted-at-restore');
+      await storeKeystoreWalletPassword('minted-at-restore');
       expect(secrets.values.keys, ['walletPassword']);
-      expect(await getMobileWalletPassword(), 'minted-at-restore');
+      expect(await readKeystoreWalletPassword(), 'minted-at-restore');
     });
   });
 

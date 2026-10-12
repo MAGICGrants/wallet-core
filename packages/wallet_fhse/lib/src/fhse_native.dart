@@ -48,9 +48,9 @@ class FhseException implements Exception {
 
 /// Where the native library comes from.
 ///
-/// The plugin builds it per platform: a shared object on Android, and on iOS
-/// and macOS a framework CocoaPods links into the app (the apps' Podfiles use
-/// `use_frameworks!`). Host tests point [FhseNative.libraryPathOverride] at a
+/// The plugin builds it per platform: a shared object on Android and Linux, a
+/// DLL on Windows, and on iOS and macOS a framework CocoaPods links into the
+/// app (the apps' Podfiles use `use_frameworks!`). Host tests point [FhseNative.libraryPathOverride] at a
 /// CMake build of `src/`; see test/README.md.
 DynamicLibrary _open() {
   final override = FhseNative.libraryPathOverride;
@@ -59,6 +59,7 @@ DynamicLibrary _open() {
   if (Platform.isIOS || Platform.isMacOS) {
     return DynamicLibrary.open('wallet_fhse.framework/wallet_fhse');
   }
+  if (Platform.isWindows) return DynamicLibrary.open('wallet_fhse.dll');
   throw UnsupportedError('wallet_fhse is not built for ${Platform.operatingSystem}');
 }
 
@@ -121,6 +122,18 @@ class FhseNative {
 
   static FhseNative? _instance;
   static FhseNative get instance => _instance ??= FhseNative._(_open());
+
+  /// Whether the library loads here. An app installs FHSE's password guard
+  /// only then: on Linux and Windows a new wallet's password comes from it, so
+  /// a missing library must leave onboarding as it was rather than break it.
+  static bool get isAvailable {
+    try {
+      instance;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   final Pointer<Void> Function() secretNew;
   final Pointer<NativeFunction<WfhseSecretFreeN>> secretFreePointer;

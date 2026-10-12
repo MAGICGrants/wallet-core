@@ -6,7 +6,11 @@
 
 #define CBOR_EXPORT
 #define CBOR_NO_EXPORT
+#if defined(_MSC_VER)
+#define CBOR_DEPRECATED __declspec(deprecated)
+#else
 #define CBOR_DEPRECATED __attribute__((__deprecated__))
+#endif
 #define CBOR_DEPRECATED_EXPORT CBOR_DEPRECATED
 #define CBOR_DEPRECATED_NO_EXPORT CBOR_DEPRECATED
 

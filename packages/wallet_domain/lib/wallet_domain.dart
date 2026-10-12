@@ -27,3 +27,4 @@ export 'src/tx/tx_details.dart';
 export 'src/tx/tx_notifications.dart';
 export 'src/wallet_manager.dart';
 export 'src/wallet_password_guard.dart';
+export 'src/wallet_password_store.dart';
