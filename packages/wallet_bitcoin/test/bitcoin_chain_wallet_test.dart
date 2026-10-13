@@ -297,6 +297,45 @@ void main() {
       expect(fake.countOf('connect'), 1);
     });
 
+    test('a changed server drops the old socket and reconnects', () async {
+      await restore();
+      await wallet.connectToDaemonImpl(address: 'electrum.example.com:50002');
+      await wallet.connectToDaemonImpl(address: 'other.example.com:50002');
+
+      expect(fake.countOf('connect'), 2, reason: 'the new server must not be ignored');
+      expect(fake.countOf('close'), 1, reason: 'the old socket is closed first');
+      expect(fake.connections.last.host, 'other.example.com');
+    });
+
+    test('turning a proxy on reconnects instead of reusing the direct socket', () async {
+      await restore();
+      await wallet.connectToDaemonImpl(address: 'electrum.example.com:50002');
+      await wallet.connectToDaemonImpl(address: 'electrum.example.com:50002', proxyPort: '9050');
+
+      expect(fake.countOf('connect'), 2);
+      expect(fake.connections.last.socksPort, 9050);
+    });
+
+    test('disabling global Tor drops a Tor-routed socket', () async {
+      await restore();
+      wallet.setConnection(address: 'electrum.example.com:50002', proxyPort: '9050', useTor: true);
+      await wallet.connectToDaemonImpl(address: 'electrum.example.com:50002', proxyPort: '9050');
+
+      wallet.onGlobalTorDisabled();
+
+      expect(fake.countOf('close'), 1);
+    });
+
+    test('disabling global Tor leaves a clearnet socket alone', () async {
+      await restore();
+      setConnection();
+      await wallet.connectToDaemon();
+
+      wallet.onGlobalTorDisabled();
+
+      expect(fake.countOf('close'), 0);
+    });
+
     group('TLS is derived from the host, not a toggle', () {
       // Electrum is raw TCP with no scheme, so there is no `useSsl` to set. A
       // routable server is connected with TLS; an onion or local one is left
@@ -640,6 +679,120 @@ void main() {
       await wallet.loadPersistedSnapshot();
       expect(wallet.readTxHistory(), isEmpty);
     });
+
+    test('one unparseable transaction does not freeze the whole history', () async {
+      // Raw-hex path (the production default): a tx the parser throws on must not
+      // abandon the pass and blank every other transaction.
+      const validRaw =
+          '01000000000102fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f'
+          '00000000494830450221008b9d1dc26ba6a9cb62127b02742fa9d754cd3bebf337f7a55d114c8e5cdd30be'
+          '022040529b194ba3f9281a99f2b1c0a19c0489bc22ede944ccf4ecbab4cc618ef3ed01eeffffffef51e1b8'
+          '04cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a0100000000ffffffff02202cb20600'
+          '0000001976a9148280b37df378db99f66f85c95a783a76ac7a6d5988ac9093510d000000001976a9143bde'
+          '42dbee7e4dbe6a21b2d50ce2f0167faa815988ac000247304402203609e17b84f6a7d30c80bfa610b5b454'
+          '2f32a8a0d5447a12fb1366d7f01cc44a0220573a954c4518331561406f90300e8f3358f51928d43c212a8ca'
+          'ed02de67eebee0121025476c2e83188368da1ff3e292e7acafcdb3566bb0ad253f62fc70f07aeee63571100'
+          '0000';
+      final validTxid = computeTxid(validRaw);
+      final badTxid = 'b' * 64;
+
+      await restore();
+      scriptUsed({
+        _sh(_receive0): (valueSats: 51000, height: 800000, txHash: validTxid, vout: 0),
+        _sh(_receive1): (valueSats: 1000, height: 800000, txHash: badTxid, vout: 0),
+      });
+      fake.failing.remove('blockchain.transaction.get');
+      fake.handlers['blockchain.transaction.get'] = (params) {
+        final txid = params[0] as String;
+        if (txid == validTxid) return validRaw;
+        if (txid == badTxid) return '00'; // unparseable
+        return null; // parents unavailable, as a server reports per request
+      };
+
+      await connectAndRefresh();
+      await wallet.loadTxHistory();
+
+      final hashes = wallet.readTxHistory().map((t) => t.hash);
+      expect(hashes, contains(validTxid), reason: 'a parseable tx must survive a bad one');
+      expect(hashes, isNot(contains(badTxid)));
+    });
+
+    test('a short OP_RETURN tx bitcoin_base rejects still appears in history', () async {
+      // Standard and relayable, but bitcoin_base throws on a <8-byte OP_RETURN
+      // push. The in-house parser reads it, so it must land in history rather
+      // than be dropped like the genuinely corrupt case above.
+      const opReturnRaw =
+          '0100000001' // version + 1 input
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' // previous txid
+          '00000000' // previous index
+          '00' // empty scriptSig
+          'ffffffff' // sequence
+          '01' // 1 output
+          '0000000000000000' // 0 sats
+          '036a0100' // scriptPubKey: OP_RETURN, push 1 byte
+          '00000000'; // locktime
+      expect(
+        () => BtcTransaction.fromRaw(opReturnRaw),
+        throwsA(anything),
+        reason: 'premise: bitcoin_base cannot parse this standard shape',
+      );
+      final opReturnTxid = computeTxid(opReturnRaw);
+
+      await restore();
+      scriptUsed({_sh(_receive0): (valueSats: 0, height: 800000, txHash: opReturnTxid, vout: 0)});
+      fake.failing.remove('blockchain.transaction.get');
+      fake.handlers['blockchain.transaction.get'] = (params) {
+        final txid = params[0] as String;
+        if (txid == opReturnTxid) return opReturnRaw;
+        return null; // parents unavailable
+      };
+
+      await connectAndRefresh();
+      await wallet.loadTxHistory();
+
+      expect(wallet.readTxHistory().map((t) => t.hash), contains(opReturnTxid));
+    });
+
+    test('a raw whose bytes do not hash to the requested txid is dropped', () async {
+      // A server answering transaction.get with some other tx's bytes would feed
+      // wrong prevouts into history; the raw must be verified against the txid.
+      const someTxRaw =
+          '0100000001' // version + 1 input
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+          '00000000' // previous index
+          '00' // empty scriptSig
+          'ffffffff' // sequence
+          '01' // 1 output
+          'e803000000000000' // 1000 sats
+          '1976a914000000000000000000000000000000000000000088ac' // P2PKH
+          '00000000'; // locktime
+      final honestTxid = computeTxid(someTxRaw);
+      final impostorTxid = 'c' * 64;
+
+      await restore();
+      scriptUsed({
+        _sh(_receive0): (valueSats: 1000, height: 800000, txHash: honestTxid, vout: 0),
+        _sh(_receive1): (valueSats: 1000, height: 800000, txHash: impostorTxid, vout: 0),
+      });
+      fake.failing.remove('blockchain.transaction.get');
+      fake.handlers['blockchain.transaction.get'] = (params) {
+        final txid = params[0] as String;
+        if (txid == honestTxid) return someTxRaw;
+        if (txid == impostorTxid) return someTxRaw; // wrong bytes for this txid
+        return null;
+      };
+
+      await connectAndRefresh();
+      await wallet.loadTxHistory();
+
+      final hashes = wallet.readTxHistory().map((t) => t.hash);
+      expect(hashes, contains(honestTxid));
+      expect(
+        hashes,
+        isNot(contains(impostorTxid)),
+        reason: 'bytes that hash to a different txid must not be trusted',
+      );
+    });
   });
 
   group('send', () {
@@ -838,6 +991,22 @@ void main() {
 
       // The outpoint is still spendable, so a retry can build the same send.
       await expectLater(wallet.createTx(_theirs, BigInt.from(50000), false), completes);
+    });
+
+    test('an accepted broadcast survives a post-broadcast sync failure', () async {
+      // The broadcast was accepted; a later refresh error (a timeout, not a
+      // disconnect) must not turn the send into a thrown failure that reads as
+      // "not sent" and invites a double-send.
+      await fundedWallet();
+      final tx = await wallet.createTx(_theirs, BigInt.from(50000), false);
+      final txid = computeTxid((tx as BitcoinPendingTx).rawHex);
+      fake.failing['blockchain.scripthash.get_history'] = StateError('read timed out');
+      fake.failing['blockchain.scripthash.listunspent'] = StateError('read timed out');
+
+      await expectLater(wallet.commitTx(tx, _theirs), completes);
+
+      final entry = wallet.readTxHistory().firstWhere((t) => t.hash == txid);
+      expect(entry.status, TxStatus.ok, reason: 'accepted, not retro-failed by a sync hiccup');
     });
 
     test('an unresolved broadcast is recorded, flagged, and reported', () async {

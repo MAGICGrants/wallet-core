@@ -4,13 +4,24 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
+  guard:
+    name: Only from main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse dispatch from a non-main ref
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "::error::build-monero-c must run from main (got ${{ github.ref }})"
+            exit 1
+          fi
+
   build-x86_64-linux-gnu:
     name: Build x86_64-linux-gnu
     runs-on: ubuntu-latest
+    needs: guard
     container:
       image: debian:bookworm@sha256:30482e873082e906a4908c10529180aefb6f77620aea7404b909829fadc5d168
     steps:
@@ -36,6 +47,7 @@ jobs:
   build-x86_64-linux-android:
     name: Build x86_64-linux-android
     runs-on: ubuntu-latest
+    needs: guard
     container:
       image: debian:trixie@sha256:d07d1b51c39f51188e60be9b64e6bf769fa94e187f092bc32b91305cfa34ba5a
     steps:
@@ -61,6 +73,7 @@ jobs:
   build-aarch64-linux-android:
     name: Build aarch64-linux-android
     runs-on: ubuntu-latest
+    needs: guard
     container:
       image: debian:trixie@sha256:d07d1b51c39f51188e60be9b64e6bf769fa94e187f092bc32b91305cfa34ba5a
     steps:
@@ -86,6 +99,7 @@ jobs:
   build-armv7a-linux-androideabi:
     name: Build armv7a-linux-androideabi
     runs-on: ubuntu-latest
+    needs: guard
     container:
       image: debian:trixie@sha256:d07d1b51c39f51188e60be9b64e6bf769fa94e187f092bc32b91305cfa34ba5a
     steps:
@@ -111,6 +125,7 @@ jobs:
   build-x86_64-w64-mingw32:
     name: Build x86_64-w64-mingw32
     runs-on: ubuntu-latest
+    needs: guard
     container:
       image: debian:bookworm@sha256:30482e873082e906a4908c10529180aefb6f77620aea7404b909829fadc5d168
     steps:
@@ -138,6 +153,7 @@ jobs:
   build-ios-targets:
     name: Build ${{ matrix.target }}
     runs-on: macos-15
+    needs: guard
     strategy:
       matrix:
         target:
@@ -258,6 +274,7 @@ jobs:
   create-pr:
     name: PR binaries to ${{ matrix.repo }}
     runs-on: ubuntu-latest
+    environment: MonerocBinaries
     needs:
       - build-x86_64-linux-gnu
       - build-x86_64-linux-android
@@ -355,6 +372,24 @@ jobs:
       - name: Fix Linux library executable stack
         run: bash app/scripts/fix-linux-moneroc-execstack.sh app/linux/monero_libwallet2_api_c.so
 
+      # Manifest the app's release CI (verify-native) checks against pubspec.lock.
+      - name: Write monero_c manifest
+        run: |
+          cd app
+          {
+            echo "# monero_c ${{ steps.pin.outputs.commit }}"
+            sha256sum \
+              android/app/src/main/jniLibs/x86_64/libmonero_libwallet2_api_c.so \
+              android/app/src/main/jniLibs/arm64-v8a/libmonero_libwallet2_api_c.so \
+              android/app/src/main/jniLibs/armeabi-v7a/libmonero_libwallet2_api_c.so \
+              linux/monero_libwallet2_api_c.so \
+              windows/monero_libwallet2_api_c.dll \
+              windows/libwinpthread-1.dll \
+              windows/libssp-0.dll \
+              ios/Frameworks/MoneroWallet.xcframework/ios-arm64/MoneroWallet.framework/MoneroWallet \
+              ios/Frameworks/MoneroWallet.xcframework/ios-arm64-simulator/MoneroWallet.framework/MoneroWallet
+          } > monero_c.sha256
+
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
@@ -372,6 +407,7 @@ jobs:
             - `android/app/src/main/jniLibs/armeabi-v7a/libmonero_libwallet2_api_c.so`
             - `windows/monero_libwallet2_api_c.dll` (+ `libwinpthread-1.dll`, `libssp-0.dll`)
             - `ios/Frameworks/MoneroWallet.xcframework`
+            - `monero_c.sha256` (release CI checks this against `pubspec.lock`)
 
             Built from [monero_c](https://github.com/magicgrants/monero_c) at
             `${{ steps.pin.outputs.commit }}`, pinned in wallet-core's `pubspec.lock`.

@@ -36,6 +36,7 @@ export 'src/wallet/connection_pills.dart';
 export 'src/wallet/format.dart';
 export 'src/wallet/key_reveal_view.dart';
 export 'src/wallet/lws_keys_view.dart';
+export 'src/wallet/reauth_gate.dart';
 export 'src/wallet/receive_view.dart';
 export 'src/wallet/send_view.dart';
 export 'src/wallet/tx_activity_row.dart';

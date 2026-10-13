@@ -27,8 +27,13 @@ final _trustTestRoot = SecurityContext(withTrustedRoots: false)
 ({InternetAddress host, int port}) _via(int port) =>
     (host: InternetAddress.loopbackIPv4, port: port);
 
+/// A connect/handshake-phase failure from makeSocksHttpRequest is a never-sent:
+/// the underlying error is wrapped so a caller can tell it from a lost reply.
+Matcher _notSent(Matcher cause) =>
+    isA<RequestNotSentException>().having((e) => e.cause, 'cause', cause);
+
 Matcher _socksError(String message) =>
-    isA<SocksProxyException>().having((e) => e.message, 'message', message);
+    _notSent(isA<SocksProxyException>().having((e) => e.message, 'message', message));
 
 /// A loopback listener that is not a working SOCKS5 proxy. [onData] decides
 /// what it does with each chunk a client sends; it never answers unless told
@@ -567,14 +572,16 @@ void main() {
           securityContext: _trustTestRoot,
         ),
         throwsA(
-          isA<TimeoutException>()
-              .having((e) => e.duration, 'duration', _deadline)
-              .having(
-                (e) => e.message,
-                'message',
-                'TLS handshake with ${TestPki.routableHost}:${server.port} through the proxy at '
-                    '127.0.0.1:${proxy.port} did not complete',
-              ),
+          _notSent(
+            isA<TimeoutException>()
+                .having((e) => e.duration, 'duration', _deadline)
+                .having(
+                  (e) => e.message,
+                  'message',
+                  'TLS handshake with ${TestPki.routableHost}:${server.port} through the proxy at '
+                      '127.0.0.1:${proxy.port} did not complete',
+                ),
+          ),
         ),
       );
       expect(clock.elapsed, lessThan(_prompt));
@@ -608,7 +615,7 @@ void main() {
           handshakeTimeout: _deadline,
           securityContext: _trustTestRoot,
         ),
-        throwsA(isA<TimeoutException>()),
+        throwsA(_notSent(isA<TimeoutException>())),
       );
       expect(clock.elapsed, lessThan(_deadline * 3), reason: 'failed without waiting it out');
 

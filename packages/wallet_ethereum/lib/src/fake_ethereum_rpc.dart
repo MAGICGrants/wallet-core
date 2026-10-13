@@ -21,6 +21,10 @@ class FakeEthereumRpc implements EthereumRpcApi {
   int blockNumberValue = 21000000;
   BigInt balanceValue = BigInt.zero;
   int nonceValue = 0;
+
+  /// Mined nonce reported for `pending: false`; defaults to [nonceValue] when left
+  /// null, so tests that don't care about reconciliation need not set it.
+  int? minedNonceValue;
   BigInt baseFeeValue = BigInt.from(20000000000); // 20 gwei
   BigInt tipValue = BigInt.from(1000000000); // 1 gwei
   BigInt? estimateGasValue;
@@ -77,8 +81,8 @@ class FakeEthereumRpc implements EthereumRpcApi {
   Future<BigInt> getBalance(String address) async => _guard('getBalance', balanceValue);
 
   @override
-  Future<int> getTransactionCount(String address) async =>
-      _guard('getTransactionCount', nonceValue);
+  Future<int> getTransactionCount(String address, {bool pending = true}) async =>
+      _guard('getTransactionCount', pending ? nonceValue : (minedNonceValue ?? nonceValue));
 
   @override
   Future<BigInt> baseFeePerGas() async => _guard('baseFeePerGas', baseFeeValue);

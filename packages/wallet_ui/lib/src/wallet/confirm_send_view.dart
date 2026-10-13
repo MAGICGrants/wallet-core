@@ -515,7 +515,11 @@ class _ConfirmSendSheetState extends State<_ConfirmSendSheet> {
     try {
       await widget.onConfirm();
       if (mounted) Navigator.of(context).pop(true);
-      return;
+    } catch (_) {
+      // [onConfirm] surfaces its own error (a snackbar) and throws to signal the
+      // send did not go through. Swallow it here so a failed send keeps the sheet
+      // open for a retry rather than escaping as an unhandled framework error — a
+      // dropped connection at confirm time used to crash the app this way.
     } finally {
       if (mounted) setState(() => _loading = false);
     }

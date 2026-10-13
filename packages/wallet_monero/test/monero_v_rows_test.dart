@@ -242,7 +242,13 @@ void main() {
       final tx = await wallet.createTx('4${'a' * 94}', BigInt.from(1000), false);
 
       backend.commitResult = false;
-      await expectLater(wallet.commitTx(tx, '4${'a' * 94}'), throwsA(isA<FormatException>()));
+      // No daemon reason given, so the outcome is unknown, not a flat failure.
+      await expectLater(
+        wallet.commitTx(tx, '4${'a' * 94}'),
+        throwsA(
+          isA<BroadcastFailure>().having((e) => e.outcome, 'outcome', BroadcastOutcome.unknown),
+        ),
+      );
     });
   });
 }

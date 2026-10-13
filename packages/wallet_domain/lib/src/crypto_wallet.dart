@@ -9,6 +9,7 @@ import 'alias.dart';
 import 'amounts.dart';
 import 'app_config.dart';
 import 'background_sync_mode.dart';
+import 'payment_uri.dart';
 import 'seed/seed.dart';
 import 'stores/tx_notification_store.dart';
 import 'stores/wallet_cache_store.dart';
@@ -512,6 +513,32 @@ abstract class CryptoWallet with ChangeNotifier {
   String? getReceiveAddress() => getPrimaryAddress();
 
   bool isAddressValid(String address);
+
+  /// URI scheme this coin answers to (`monero`, `bitcoin`, `ethereum`). Null ⇒
+  /// the coin takes no payment links.
+  String? get uriScheme => null;
+
+  /// Query parameter carrying the amount in a BIP-21-style link. Monero uses
+  /// `tx_amount`; Bitcoin uses `amount`.
+  String get uriAmountParam => 'amount';
+
+  /// Parses [uri] into a payment request if this coin claims it, else null.
+  ///
+  /// The default handles BIP-21-style links — address in the path, amount in
+  /// [uriAmountParam], both in the coin's own units. Chains with their own URI
+  /// grammar (EIP-681) override this.
+  PaymentRequest? parsePaymentUri(Uri uri) {
+    final scheme = uriScheme;
+    if (scheme == null || uri.scheme.toLowerCase() != scheme) return null;
+    final address = uri.path;
+    if (!isAddressValid(address)) return null;
+    final amount = uri.queryParameters[uriAmountParam];
+    return PaymentRequest(
+      coinSymbol: coinSymbol,
+      address: address,
+      amount: (amount != null && amount.isNotEmpty) ? amount : null,
+    );
+  }
 
   /// Builds and signs a transaction, without broadcasting it.
   ///
@@ -1019,6 +1046,13 @@ abstract class CryptoWallet with ChangeNotifier {
     return out;
   }
 
+  /// Whether an empty [readTxHistory] should replace the cached list rather than
+  /// be ignored. False for network-derived histories (an empty sync is usually a
+  /// disconnect, not an emptied wallet); a coin whose history is a local record
+  /// set overrides this so a removed transaction actually disappears.
+  @protected
+  bool get emptyTxHistoryIsAuthoritative => false;
+
   Future<void> loadTxHistory({bool persistCount = true}) async {
     final previousLength = _txHistory.length;
     final newHistory = _withCarriedFields(readTxHistory());
@@ -1028,8 +1062,10 @@ abstract class CryptoWallet with ChangeNotifier {
 
     final hadGrowth = newHistory.length > previousLength;
 
-    // Keep the cached list when a sync returns nothing, e.g. not connected yet.
-    if (newHistory.isNotEmpty || previousLength == 0) {
+    // Keep the cached list when a sync returns nothing, e.g. not connected yet —
+    // unless this coin's history is a local record set, where an empty read is
+    // authoritative (a tx was removed) rather than a failed fetch.
+    if (newHistory.isNotEmpty || previousLength == 0 || emptyTxHistoryIsAuthoritative) {
       _txHistory = newHistory;
     }
 
@@ -1256,6 +1292,20 @@ abstract class CryptoWallet with ChangeNotifier {
     // Settings replaced mid-connect: whatever this attempt learns is about the
     // old server, so it reports nothing. The next connect reports for the new.
     bool stale() => generation != _connectGeneration;
+
+    // Tor can't reach a LAN; it would hand the name to an exit. Refuse before any
+    // proxy work. Keyed on Tor, not on having a proxy — a user's own proxy is fine.
+    if (isLocalHostRoutedThroughTor(
+      Uri.parse('http://$_connectionAddress').host,
+      viaTor: _connectionUseTor,
+    )) {
+      walletLog(LogLevel.warn, 'refusing to reach a local address over Tor');
+      _torRequirementBroken = true;
+      _isConnected = false;
+      _connectFailures++;
+      notifyListeners();
+      return;
+    }
 
     String? torProxyPort;
     if (_connectionUseTor) {

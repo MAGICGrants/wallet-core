@@ -38,10 +38,17 @@ class EthereumRpcClient implements EthereumRpcApi {
 
   @override
   void configure({required String url, int? socksPort}) {
-    // The connection form strips the scheme (it's built for host:port); RPC
-    // URLs need one, so default to https.
+    // The connection form strips the scheme (it's built for host:port); RPC URLs
+    // need one. Default to https for a routable host, but http for a local or
+    // onion host, where plaintext is fine (and TLS usually absent) — otherwise a
+    // local node on http is unreachable. An explicit scheme is always honoured.
     final u = url.trim();
-    _url = (u.startsWith('http://') || u.startsWith('https://')) ? u : 'https://$u';
+    if (u.startsWith('http://') || u.startsWith('https://')) {
+      _url = u;
+    } else {
+      final host = Uri.parse('http://$u').host;
+      _url = '${requiresSecureTransport(host) ? 'https' : 'http'}://$u';
+    }
     _socksPort = socksPort;
   }
 
@@ -73,7 +80,9 @@ class EthereumRpcClient implements EthereumRpcApi {
       final msg = error is Map<dynamic, dynamic>
           ? (error['message']?.toString() ?? '$error')
           : '$error';
-      throw EthereumRpcException(msg);
+      // The node answered with an error: it saw the request. commitTx relies on
+      // this to tell a refusal from a lost reply.
+      throw EthereumRpcException(msg, fromNode: true);
     }
     return decoded['result'];
   }
@@ -122,10 +131,17 @@ class EthereumRpcClient implements EthereumRpcApi {
   Future<dynamic> _postDirect(String url, String body, Duration timeout) async {
     final client = HttpClient();
     try {
-      final req = await client.postUrl(Uri.parse(url)).timeout(timeout);
-      req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-      req.write(body);
-      final resp = await req.close().timeout(timeout);
+      final HttpClientResponse resp;
+      try {
+        final req = await client.postUrl(Uri.parse(url)).timeout(timeout);
+        req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+        req.write(body);
+        resp = await req.close().timeout(timeout);
+      } catch (e) {
+        // Failed before the request was transmitted (connect/write/close): the
+        // server never saw it, so nothing was sent. See RequestNotSentException.
+        throw RequestNotSentException(e);
+      }
       // `transform(utf8.decoder).join()` was unbounded: it reads whatever the
       // node sends, for as long as it sends it.
       final text = await readBoundedBody(resp, maxBytes: maxRpcResponseBytes, timeout: timeout);
@@ -148,8 +164,8 @@ class EthereumRpcClient implements EthereumRpcApi {
       _hexToBigInt(await call('eth_getBalance', [address, 'latest']));
 
   @override
-  Future<int> getTransactionCount(String address) async =>
-      _hexToInt(await call('eth_getTransactionCount', [address, 'pending']));
+  Future<int> getTransactionCount(String address, {bool pending = true}) async =>
+      _hexToInt(await call('eth_getTransactionCount', [address, pending ? 'pending' : 'latest']));
 
   @override
   Future<BigInt> baseFeePerGas() async {

@@ -33,6 +33,68 @@ String computeTxid(String rawHex) {
   return _encodeHex(Uint8List.fromList(sha256d(stripped).reversed.toList()));
 }
 
+/// One previous-output reference of a parsed transaction.
+class ParsedBtcInput {
+  const ParsedBtcInput(this.prevTxid, this.prevIndex);
+
+  /// Display (big-endian) hex of the spent transaction's id.
+  final String prevTxid;
+  final int prevIndex;
+}
+
+/// One output of a parsed transaction: value in satoshis and raw scriptPubKey.
+class ParsedBtcOutput {
+  const ParsedBtcOutput(this.valueSats, this.scriptHex);
+
+  final int valueSats;
+  final String scriptHex;
+}
+
+class ParsedBtcTx {
+  const ParsedBtcTx(this.inputs, this.outputs);
+
+  final List<ParsedBtcInput> inputs;
+  final List<ParsedBtcOutput> outputs;
+}
+
+/// Parses [rawHex] as far as the history view needs: input outpoints and output
+/// value + scriptPubKey. Witness stacks and nLockTime are not read.
+///
+/// Bounds-checked through [_Cursor] (see [computeTxid]), so a standard but
+/// awkward transaction `bitcoin_base` rejects with a `RangeError` — a short
+/// `OP_RETURN`, a P2A anchor, a stubby final witness — parses here and a truly
+/// malformed one is a [FormatException], never a crash.
+ParsedBtcTx parseBtcTx(String rawHex) {
+  final r = _Cursor(_decodeHex(rawHex));
+  r.skip(4); // version
+  // 0x00 cannot begin a real input count, so it marks a segwit envelope.
+  if (r.peek() == 0x00) {
+    r.skip(1); // marker
+    if (r.readByte() == 0x00) {
+      throw const FormatException('Transaction has a segwit marker with a zero flag');
+    }
+  }
+
+  final inputs = <ParsedBtcInput>[];
+  final inputCount = r.readVarInt();
+  for (var i = 0; i < inputCount; i++) {
+    final prev = r.readBytes(32);
+    final index = r.readUintLE(4);
+    r.skip(r.readVarInt()); // scriptSig
+    r.skip(4); // nSequence
+    // Wire order is little-endian; displayed reversed.
+    inputs.add(ParsedBtcInput(_encodeHex(Uint8List.fromList(prev.reversed.toList())), index));
+  }
+
+  final outputs = <ParsedBtcOutput>[];
+  final outputCount = r.readVarInt();
+  for (var i = 0; i < outputCount; i++) {
+    final value = r.readUintLE(8);
+    outputs.add(ParsedBtcOutput(value, _encodeHex(r.readBytes(r.readVarInt()))));
+  }
+  return ParsedBtcTx(inputs, outputs);
+}
+
 /// Re-serializes [bytes] without the segwit marker, flag and witness stacks.
 ///
 /// Returns [bytes] unchanged for a pre-segwit transaction, whose serialization is
@@ -126,6 +188,21 @@ class _Cursor {
     if (count < 0) throw const FormatException('Negative field length');
     _require(count);
     offset += count;
+  }
+
+  Uint8List readBytes(int count) {
+    skip(count);
+    return Uint8List.sublistView(bytes, offset - count, offset);
+  }
+
+  int readUintLE(int width) {
+    _require(width);
+    var value = 0;
+    for (var i = 0; i < width; i++) {
+      value |= bytes[offset + i] << (8 * i);
+    }
+    offset += width;
+    return value;
   }
 
   /// CompactSize, per BIP 144's underlying encoding.

@@ -52,6 +52,7 @@ class BitcoinChainWallet extends CryptoWallet {
        _client = client ?? ElectrumClient(coinSymbol: coinSymbol) {
     _client.onConnectionChanged = (connected) {
       if (!connected) {
+        _liveConnection = null;
         // Server-side subscriptions die with the socket; force re-subscribe
         // on reconnect. _statusByScripthash kept so unchanged scripthashes
         // skip the refetch when subscribe returns the same status.
@@ -101,6 +102,10 @@ class BitcoinChainWallet extends CryptoWallet {
   /// testing here misbehave against a real server, and a
   /// socket cannot be made to misbehave on demand.
   final ElectrumApi _client;
+
+  // The endpoint the live socket uses, so a changed connection reconnects
+  // instead of being skipped as "already connected".
+  ({String host, int port, bool useSsl, int? socksPort})? _liveConnection;
 
   // ----- In-memory wallet state (set once on open/restore) -----
 
@@ -181,6 +186,11 @@ class BitcoinChainWallet extends CryptoWallet {
 
   @override
   String get blockchainName => _blockchainName;
+
+  // BIP-21; the amount param is the default `amount`. Testnet shares the scheme
+  // and self-selects by address validity.
+  @override
+  String? get uriScheme => 'bitcoin';
 
   @override
   String get iconAsset => _iconAsset;
@@ -654,6 +664,18 @@ class BitcoinChainWallet extends CryptoWallet {
     super.dispose();
   }
 
+  @override
+  void onGlobalTorDisabled() {
+    final wasTor = connectionUseTor && !torRequirementBroken;
+    super.onGlobalTorDisabled();
+    // The base only flips the flag; the socket's ping would keep it on the now
+    // stale Tor proxy. Drop it so nothing lingers on the old route.
+    if (wasTor) {
+      unawaited(_client.close().catchError((Object _) {}));
+      _liveConnection = null;
+    }
+  }
+
   // ----- HD derivation -----
 
   Bip32Slip10Secp256k1 _deriveAccountHd(String mnemonic) {
@@ -734,12 +756,6 @@ class BitcoinChainWallet extends CryptoWallet {
 
   @override
   Future<void> connectToDaemonImpl({required String address, String? proxyPort}) async {
-    // Idempotent: pre-open connect + post-open connect share the same socket.
-    if (_client.isConnected) {
-      walletLog(LogLevel.info, 'connectToDaemonImpl skipped (already connected)');
-      return;
-    }
-
     final (host, port) = _splitHostPort(address);
     // Electrum is raw TCP with no scheme, so TLS is derived from the host:
     // required for a routable server, skipped for an onion (confidential over
@@ -747,6 +763,19 @@ class BitcoinChainWallet extends CryptoWallet {
     // connects; the user points at the TLS port, an onion, or a local node.
     final useSsl = requiresSecureTransport(host);
     final socksPort = (proxyPort != null && proxyPort.isNotEmpty) ? int.tryParse(proxyPort) : null;
+    final requested = (host: host, port: port, useSsl: useSsl, socksPort: socksPort);
+
+    // Skip only when the live socket is the same endpoint; a changed one
+    // (server switch, Tor toggled) must drop the old socket, not keep using it.
+    if (_client.isConnected && _liveConnection == requested) {
+      walletLog(LogLevel.info, 'connectToDaemonImpl skipped (same endpoint)');
+      return;
+    }
+    if (_client.isConnected) {
+      walletLog(LogLevel.info, 'connection changed; closing the old socket');
+      await _client.close();
+      _liveConnection = null;
+    }
 
     // The server address is the user's own configuration, not a secret, and is
     // usually the whole point of a connection bug.
@@ -755,6 +784,7 @@ class BitcoinChainWallet extends CryptoWallet {
 
     final socketTimer = Stopwatch()..start();
     await _client.connect(host: host, port: port, useSsl: useSsl, socksPort: socksPort);
+    _liveConnection = requested;
     socketTimer.stop();
 
     // Push routes get registered before any subscribe RPC so notifications
@@ -810,6 +840,9 @@ class BitcoinChainWallet extends CryptoWallet {
     String connectionType = '',
   }) async {
     final (host, port) = _splitHostPort(address);
+    if (isLocalHostRoutedThroughTor(host, viaTor: useTor)) {
+      throw Exception(localHostOverTorMessage);
+    }
     // Same derivation as the live connect.
     final useSsl = requiresSecureTransport(host);
     final socksPort = (proxyPort != null && proxyPort.isNotEmpty) ? int.tryParse(proxyPort) : null;
@@ -1440,7 +1473,7 @@ class BitcoinChainWallet extends CryptoWallet {
       if (result is Map<dynamic, dynamic>) {
         verboseInto[txid] = Map<String, dynamic>.from(result);
       } else if (result is String) {
-        rawInto[txid] = result;
+        _storeRawIfTxidMatches(txid, result, rawInto);
       }
     }
     // Demote to raw-only mode if no verbose result came back and at least
@@ -1474,8 +1507,26 @@ class BitcoinChainWallet extends CryptoWallet {
         );
         continue;
       }
-      if (r.result is String) rawInto[txid] = r.result as String;
+      if (r.result is String) _storeRawIfTxidMatches(txid, r.result as String, rawInto);
     }
+  }
+
+  /// Stores [raw] under [txid] only when it actually hashes to it. A server
+  /// returning some other transaction's bytes (or garbage) would otherwise feed
+  /// wrong prevouts and amounts into the history display; drop and log instead.
+  void _storeRawIfTxidMatches(String txid, String raw, Map<String, String> rawInto) {
+    String computed;
+    try {
+      computed = computeTxid(raw);
+    } catch (e) {
+      walletLog(LogLevel.warn, 'raw for ${Redact.id(txid)} did not parse: ${e.runtimeType}');
+      return;
+    }
+    if (computed != txid) {
+      walletLog(LogLevel.warn, 'raw for ${Redact.id(txid)} hashes to a different txid; dropped');
+      return;
+    }
+    rawInto[txid] = raw;
   }
 
   static bool _isVerboseUnsupportedError(Object error) {
@@ -1711,11 +1762,11 @@ class BitcoinChainWallet extends CryptoWallet {
       await refresh();
       await loadTxHistory();
     } catch (e) {
-      if (isElectrumDisconnectError(e)) {
-        walletLog(LogLevel.warn, 'post-broadcast sync skipped: connection lost');
-      } else {
-        rethrow;
-      }
+      // The transaction is already recorded and classified; a post-broadcast sync
+      // failure (a disconnect, a timeout, anything) must not turn an accepted
+      // broadcast into a thrown failure that reads as "not sent" and invites a
+      // double-send. Swallow it and let the next sync settle the record.
+      walletLog(LogLevel.warn, 'post-broadcast sync failed: ${e.runtimeType}');
     }
 
     // Reported last, deliberately, so the record and the UTXO invalidation above
@@ -2061,6 +2112,16 @@ class BitcoinChainWallet extends CryptoWallet {
     return maxH;
   }
 
+  /// Decodes a scriptPubKey to an address, or '' when it has none (OP_RETURN,
+  /// anchors, non-standard scripts) or `bitcoin_base` cannot classify it.
+  String _addressFromScript(String scriptHex) {
+    try {
+      return Script.fromRaw(hexData: scriptHex).toAddress(network: _network);
+    } catch (_) {
+      return '';
+    }
+  }
+
   static bool _isNullPreviousOutpoint(String txIdHex) {
     if (txIdHex.length != 64) return false;
     for (var k = 0; k < txIdHex.length; k++) {
@@ -2070,11 +2131,11 @@ class BitcoinChainWallet extends CryptoWallet {
   }
 
   /// Pulls every missing parent referenced by [tx]'s inputs in one frame.
-  Future<void> _ensureParentRaws(BtcTransaction tx, Map<String, String> rawHexByTxid) async {
+  Future<void> _ensureParentRaws(ParsedBtcTx tx, Map<String, String> rawHexByTxid) async {
     final missing = <String>{};
     for (final i in tx.inputs) {
-      if (_isNullPreviousOutpoint(i.txId)) continue;
-      if (!rawHexByTxid.containsKey(i.txId)) missing.add(i.txId);
+      if (_isNullPreviousOutpoint(i.prevTxid)) continue;
+      if (!rawHexByTxid.containsKey(i.prevTxid)) missing.add(i.prevTxid);
     }
     await _fetchParentRawsByTxid(missing, rawHexByTxid);
   }
@@ -2084,11 +2145,22 @@ class BitcoinChainWallet extends CryptoWallet {
   Future<void> _prefetchAllParents(Map<String, String> rawHexByTxid) async {
     final missing = <String>{};
     final knownTxids = rawHexByTxid.keys.toSet();
-    for (final hex in rawHexByTxid.values.toList(growable: false)) {
-      final tx = BtcTransaction.fromRaw(hex);
+    for (final entry in rawHexByTxid.entries.toList(growable: false)) {
+      final ParsedBtcTx tx;
+      try {
+        tx = parseBtcTx(entry.value);
+      } catch (e) {
+        // A genuinely malformed raw must not abandon the whole pass (and with it
+        // all history); skip it and let the per-tx hydrate step drop it too.
+        walletLog(
+          LogLevel.warn,
+          'parent prefetch parse failed ${Redact.id(entry.key)}: ${e.runtimeType}',
+        );
+        continue;
+      }
       for (final i in tx.inputs) {
-        if (_isNullPreviousOutpoint(i.txId)) continue;
-        if (!knownTxids.contains(i.txId)) missing.add(i.txId);
+        if (_isNullPreviousOutpoint(i.prevTxid)) continue;
+        if (!knownTxids.contains(i.prevTxid)) missing.add(i.prevTxid);
       }
     }
     await _fetchParentRawsByTxid(missing, rawHexByTxid);
@@ -2112,7 +2184,7 @@ class BitcoinChainWallet extends CryptoWallet {
         );
         continue;
       }
-      if (r.result is String) rawHexByTxid[txid] = r.result as String;
+      if (r.result is String) _storeRawIfTxidMatches(txid, r.result as String, rawHexByTxid);
     }
   }
 
@@ -2125,49 +2197,41 @@ class BitcoinChainWallet extends CryptoWallet {
     Map<String, String> rawHexByTxid, {
     int blockHeight = 0,
   }) async {
-    final tx = BtcTransaction.fromRaw(rawHex);
+    final tx = parseBtcTx(rawHex);
     await _ensureParentRaws(tx, rawHexByTxid);
 
     final vout = <Map<String, dynamic>>[];
     for (final o in tx.outputs) {
-      var addr = '';
-      try {
-        addr = o.scriptPubKey.toAddress(network: _network);
-      } catch (_) {}
       vout.add({
         // BTC, matching what a verbose server sends; see [_btcToSats] for why
         // the round-trip through a double is exact at Bitcoin's scale.
-        'value': o.amount.toInt() / _satsPerBtc,
-        'scriptPubKey': {'address': addr},
+        'value': o.valueSats / _satsPerBtc,
+        'scriptPubKey': {'address': _addressFromScript(o.scriptHex)},
       });
     }
 
     final vin = <Map<String, dynamic>>[];
     for (final i in tx.inputs) {
-      if (_isNullPreviousOutpoint(i.txId)) {
+      if (_isNullPreviousOutpoint(i.prevTxid)) {
         vin.add({});
         continue;
       }
-      final parentHex = rawHexByTxid[i.txId];
+      final parentHex = rawHexByTxid[i.prevTxid];
       if (parentHex == null) {
         vin.add({});
         continue;
       }
       try {
-        final parent = BtcTransaction.fromRaw(parentHex);
-        if (i.txIndex < 0 || i.txIndex >= parent.outputs.length) {
+        final parent = parseBtcTx(parentHex);
+        if (i.prevIndex < 0 || i.prevIndex >= parent.outputs.length) {
           vin.add({});
           continue;
         }
-        final po = parent.outputs[i.txIndex];
-        var paddr = '';
-        try {
-          paddr = po.scriptPubKey.toAddress(network: _network);
-        } catch (_) {}
+        final po = parent.outputs[i.prevIndex];
         vin.add({
           'prevout': {
-            'value': po.amount.toInt() / _satsPerBtc,
-            'scriptPubKey': {'address': paddr},
+            'value': po.valueSats / _satsPerBtc,
+            'scriptPubKey': {'address': _addressFromScript(po.scriptHex)},
           },
         });
       } catch (_) {

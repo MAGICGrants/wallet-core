@@ -4,17 +4,31 @@ import 'package:flutter_zxing/flutter_zxing.dart';
 
 import '../design/brand.dart';
 import '../design/brand_screen_header.dart';
+import '../design/toast.dart';
 
 /// Full-bleed QR camera scanner with a floating brand header and a reliable
 /// torch toggle. Presentational only — it owns the camera/torch UI and calls
 /// [onResult] once with the first non-empty scan; the app decides what to do
 /// with the result (e.g. `Navigator.pop`).
+///
+/// [accept], when given, gates the scan: a code it rejects is ignored and the
+/// camera keeps scanning instead of returning it, so an unexpected QR never pops
+/// the caller. [invalidMessage], when given, is shown (throttled) on a reject.
 class ScanQrView extends StatefulWidget {
   final String title;
   final ValueChanged<String> onResult;
   final VoidCallback onBack;
+  final bool Function(String text)? accept;
+  final String? invalidMessage;
 
-  const ScanQrView({super.key, required this.title, required this.onResult, required this.onBack});
+  const ScanQrView({
+    super.key,
+    required this.title,
+    required this.onResult,
+    required this.onBack,
+    this.accept,
+    this.invalidMessage,
+  });
 
   @override
   State<ScanQrView> createState() => _ScanQrViewState();
@@ -27,14 +41,35 @@ class _ScanQrViewState extends State<ScanQrView> {
   bool _torchAvailable = false;
   bool _torchBusy = false;
 
+  DateTime? _lastInvalidAt;
+
   void _onScan(Code result) {
     if (_hasScanned) return;
 
     final text = result.text;
     if (text == null || text.isEmpty) return;
 
+    // An unexpected code is ignored so the camera keeps scanning — it must not
+    // pop the caller with something it can't use.
+    if (widget.accept != null && !widget.accept!(text)) {
+      _notifyInvalid();
+      return;
+    }
+
     _hasScanned = true;
     widget.onResult(text);
+  }
+
+  // Throttled: the scanner fires per frame, so a bad code in view would spam.
+  void _notifyInvalid() {
+    final message = widget.invalidMessage;
+    if (message == null) return;
+    final now = DateTime.now();
+    if (_lastInvalidAt != null && now.difference(_lastInvalidAt!) < const Duration(seconds: 2)) {
+      return;
+    }
+    _lastInvalidAt = now;
+    showBrandToast(context, message);
   }
 
   void _onControllerCreated(CameraController? controller, Exception? error) {

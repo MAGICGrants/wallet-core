@@ -141,6 +141,15 @@ Future<void> stopForegroundSync() async {
   }
 }
 
+/// Restarts the service so its isolate re-reads a changed connection. No-op when
+/// it isn't running. The new connection must already be persisted before this.
+Future<void> restartForegroundSyncIfRunning() async {
+  if (!Platform.isAndroid) return;
+  if (!await FlutterForegroundTask.isRunningService) return;
+  await stopForegroundSync();
+  await startForegroundSync();
+}
+
 /// Starts the service on launch if the user enabled it, so backgrounding keeps
 /// syncing.
 Future<void> startForegroundSyncIfEnabled() async {

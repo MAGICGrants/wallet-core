@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -626,13 +627,123 @@ void main() {
       expect(rpc.countOf('getTransactionCount'), before + 1);
     });
 
-    test('a rejected broadcast surfaces rather than looking sent', () async {
+    test('a node rejection surfaces as rejected, records nothing, and keeps the nonce', () async {
+      // The node answered with an error, so it saw and refused the tx: nothing
+      // moved, the inputs and nonce are untouched.
       await funded();
       final tx = await wallet.createTx(_theirs, BigInt.parse('1000000000000000000'), false);
-      rpc.failing['sendRawTransaction'] = StateError('nonce too low');
+      rpc.failing['sendRawTransaction'] = EthereumRpcException(
+        'insufficient funds',
+        fromNode: true,
+      );
 
-      await expectLater(wallet.commitTx(tx, _theirs), throwsA(isA<StateError>()));
-      expect(wallet.txHistory, isEmpty);
+      await expectLater(
+        wallet.commitTx(tx, _theirs),
+        throwsA(
+          isA<BroadcastFailure>().having((e) => e.outcome, 'outcome', BroadcastOutcome.rejected),
+        ),
+      );
+      expect(wallet.txHistory, isEmpty, reason: 'nothing moved, so nothing is recorded');
+
+      final before = rpc.countOf('getTransactionCount');
+      await wallet.createTx(_theirs, BigInt.parse('1000000000000000000'), false);
+      expect(
+        rpc.countOf('getTransactionCount'),
+        before,
+        reason: 'a refusal does not consume the nonce',
+      );
+    });
+
+    test('a lost broadcast reply is recorded unresolved and keeps the nonce', () async {
+      // A transport failure (Tor circuit collapse, timeout): the bytes may or may
+      // not be in the network. Must not look sent, must not vanish, and must not
+      // advance the nonce — else a retry pays a second time.
+      await funded();
+      final tx = await wallet.createTx(_theirs, BigInt.parse('1000000000000000000'), false);
+      rpc.failing['sendRawTransaction'] = const SocketException('Tor circuit collapsed');
+
+      await expectLater(
+        wallet.commitTx(tx, _theirs),
+        throwsA(
+          isA<BroadcastFailure>().having((e) => e.outcome, 'outcome', BroadcastOutcome.unknown),
+        ),
+      );
+
+      final entry = wallet.txHistory.single;
+      expect(entry.hash, (tx as EthereumPendingTx).txHash);
+      expect(entry.status, TxStatus.unknown);
+
+      // The retry reuses this transaction's slot (cached nonce) rather than
+      // queueing a second, separate payment behind it.
+      final before = rpc.countOf('getTransactionCount');
+      await wallet.createTx(_theirs, BigInt.parse('1000000000000000000'), false);
+      expect(
+        rpc.countOf('getTransactionCount'),
+        before,
+        reason: 'cached nonce reused, not re-fetched',
+      );
+    });
+
+    test('a send that never left the device records nothing and stays retryable', () async {
+      // The connect/Tor-circuit failed before any bytes went out (airplane mode):
+      // nothing was transmitted, so there must be no phantom pending and the nonce
+      // is untouched.
+      await funded();
+      final tx = await wallet.createTx(_theirs, BigInt.parse('1000000000000000000'), false);
+      rpc.failing['sendRawTransaction'] = const RequestNotSentException();
+
+      await expectLater(wallet.commitTx(tx, _theirs), throwsA(isA<RequestNotSentException>()));
+      expect(wallet.txHistory, isEmpty, reason: 'never sent, so nothing is recorded');
+
+      final before = rpc.countOf('getTransactionCount');
+      await wallet.createTx(_theirs, BigInt.parse('1000000000000000000'), false);
+      expect(rpc.countOf('getTransactionCount'), before, reason: 'nonce untouched; a free retry');
+    });
+
+    test('a retry the node already has is treated as sent, not failed', () async {
+      // The exact bytes are already in the pool (a retry after a lost first
+      // reply): the transaction is in the network, so the send stands.
+      await funded();
+      final tx = await wallet.createTx(_theirs, BigInt.parse('1000000000000000000'), false);
+      rpc.failing['sendRawTransaction'] = EthereumRpcException('already known', fromNode: true);
+
+      await wallet.commitTx(tx, _theirs); // no throw
+      final entry = wallet.txHistory.single;
+      expect(entry.hash, (tx as EthereumPendingTx).txHash);
+      expect(entry.status, TxStatus.ok);
+    });
+
+    test('an unresolved send is removed once its nonce is mined by another tx', () async {
+      // The lost-reply send never actually landed; a later tx took its nonce. It
+      // must stop showing rather than linger forever.
+      await funded();
+      rpc.nonceValue = 5;
+      final tx = await wallet.createTx(_theirs, BigInt.parse('1000000000000000000'), false);
+      rpc.failing['sendRawTransaction'] = const SocketException('reply lost');
+      await expectLater(wallet.commitTx(tx, _theirs), throwsA(isA<BroadcastFailure>()));
+      expect(wallet.txHistory.single.status, TxStatus.unknown, reason: 'unresolved at first');
+
+      // Nonce 5 is now mined by a different tx, and this one has no receipt.
+      rpc.failing.remove('sendRawTransaction');
+      rpc.minedNonceValue = 6;
+      await wallet.refresh();
+      await wallet.loadTxHistory();
+      expect(wallet.txHistory, isEmpty, reason: 'superseded and never sent, so dropped');
+    });
+
+    test('an unresolved send is kept while its nonce is not yet mined', () async {
+      // Still genuinely unknown: the nonce could yet be ours, so do not guess.
+      await funded();
+      rpc.nonceValue = 5;
+      final tx = await wallet.createTx(_theirs, BigInt.parse('1000000000000000000'), false);
+      rpc.failing['sendRawTransaction'] = const SocketException('reply lost');
+      await expectLater(wallet.commitTx(tx, _theirs), throwsA(isA<BroadcastFailure>()));
+
+      rpc.failing.remove('sendRawTransaction');
+      rpc.minedNonceValue = 5; // nonce 5 not mined yet
+      await wallet.refresh();
+      await wallet.loadTxHistory();
+      expect(wallet.txHistory.single.status, TxStatus.unknown);
     });
 
     test('committing something built by another coin is refused', () async {
@@ -776,6 +887,26 @@ void main() {
       // nothing about what was written.
       await wallet.loadTxHistory(persistCount: false);
       expect(wallet.txHistory.single.status, TxStatus.failed);
+    });
+
+    test('a failed record with no block is invalid and dropped on load', () async {
+      // "failed" is a receipt verdict, so it always has a block. A failed record
+      // with block 0 is impossible state (it only came from the superseded
+      // mark-failed reconcile) and must not reload; a real revert (with a block)
+      // stays.
+      final w = _CacheSeedWallet(rpc: FakeEthereumRpc());
+      addTearDown(w.dispose);
+      w.seedEthTxs(
+        jsonEncode({
+          'txs': [
+            {'hash': '0xphantom', 'block': 0, 'status': 0},
+            {'hash': '0xrevert', 'block': 21000000, 'status': 0},
+          ],
+        }),
+      );
+
+      await w.loadPersistedSnapshot();
+      expect(w.readTxHistory().map((t) => t.hash), ['0xrevert']);
     });
   });
 
@@ -1032,4 +1163,11 @@ class _NotAnEthTx implements PendingTransaction {
 
   @override
   BigInt get feeBaseUnits => BigInt.one;
+}
+
+/// Exposes the protected cache so a test can seed persisted tx records directly.
+class _CacheSeedWallet extends EthereumWallet {
+  _CacheSeedWallet({super.rpc});
+
+  void seedEthTxs(String json) => cachePut('cachedEthTxs', json);
 }

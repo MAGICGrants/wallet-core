@@ -13,6 +13,7 @@ export 'src/contacts/contact.dart';
 export 'src/contacts/contact_model.dart';
 export 'src/contacts/contacts_store.dart';
 export 'src/crypto_wallet.dart';
+export 'src/payment_uri.dart';
 export 'src/seed/restore_qr.dart';
 export 'src/seed/seed.dart';
 export 'src/seed/seed_policy.dart';
