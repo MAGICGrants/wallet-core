@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/widgets.dart';
 import 'package:screen_protector/screen_protector.dart';
 
+import 'host_platform.dart';
+
 /// Blocks screenshots and screen recording (Android `FLAG_SECURE`, iOS) and
 /// covers the app with a blur when it is backgrounded (iOS resign-active),
 /// for as long as the screen is mounted.
@@ -11,10 +13,14 @@ import 'package:screen_protector/screen_protector.dart';
 /// The display-side counterpart to `Redact`; the same value
 /// that must not reach a log should not reach the app switcher's screenshot.
 mixin SecureScreenMixin<T extends StatefulWidget> on State<T> {
-  // screen_protector is a mobile-only plugin (no desktop implementation), so the
-  // FLAG_SECURE / blur is a no-op on Linux/Windows/macOS. The mount counter is
-  // kept on every platform so the ref-count (and its tests) stay valid.
-  static final bool _supported = Platform.isAndroid || Platform.isIOS;
+  // Mobile-only plugin, and not enforced for the iOS build on a Mac. The mount
+  // counter is still kept everywhere so the ref-count stays valid.
+  @visibleForTesting
+  static bool? debugForceProtectablePlatform;
+
+  static bool get _supported =>
+      (debugForceProtectablePlatform ?? (Platform.isAndroid || Platform.isIOS)) &&
+      !HostPlatform.isIosAppOnMac;
 
   /// Ref-count across the seed-then-keys onboarding routes this mixin guards.
   static int _mounted = 0;
