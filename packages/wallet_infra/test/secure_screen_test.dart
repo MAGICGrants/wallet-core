@@ -68,18 +68,22 @@ void main() {
     setUp(() {
       calls = <String>[];
       SecureScreenMixin.debugForceProtectablePlatform = true;
-      TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call.method);
-        return null;
-      });
+      TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        (call) async {
+          calls.add(call.method);
+          return null;
+        },
+      );
     });
 
     tearDown(() {
       SecureScreenMixin.debugForceProtectablePlatform = null;
       HostPlatform.iosAppOnMacForTesting = false;
-      TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, null);
+      TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      );
     });
 
     testWidgets('arms the plugin on a supported mobile platform', (tester) async {
