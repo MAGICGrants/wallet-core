@@ -847,6 +847,15 @@ class BitcoinChainWallet extends CryptoWallet {
     final useSsl = requiresSecureTransport(host);
     final socksPort = (proxyPort != null && proxyPort.isNotEmpty) ? int.tryParse(proxyPort) : null;
 
+    // Fail closed: Tor on but no proxy resolved must not fall through to a
+    // clearnet probe the UI would then report as "reached over Tor".
+    if (useTor && socksPort == null) {
+      throw Exception('Could not resolve a Tor proxy.');
+    }
+    if (isUnroutedOnion(address, viaProxy: useTor || socksPort != null)) {
+      throw Exception('An onion address needs Tor. Please go back and enable it.');
+    }
+
     walletLog(LogLevel.info, 'Probing $host:$port (ssl=$useSsl, socks=$socksPort)');
     await probeElectrumServer(host: host, port: port, useSsl: useSsl, socksPort: socksPort);
   }

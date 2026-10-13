@@ -225,6 +225,29 @@ void main() {
       expect(explorer.probes.single, 'eth.blockscout.example');
     });
 
+    test('a probe with Tor on but no proxy fails closed, never clearnet', () async {
+      await restore();
+      final torNoProxy = isA<Exception>().having(
+        (e) => e.toString(),
+        'message',
+        contains('Could not resolve a Tor proxy'),
+      );
+      await expectLater(wallet.testConnection(address: 'rpc.example.com', useTor: true), throwsA(torNoProxy));
+      await expectLater(
+        wallet.testExplorerConnection(address: 'eth.blockscout.example', useTor: true),
+        throwsA(torNoProxy),
+      );
+    });
+
+    test('an onion address with Tor off is refused, not probed clearnet', () async {
+      await restore();
+      const onion = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567.onion';
+      await expectLater(
+        wallet.testConnection(address: onion, useTor: false),
+        throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('onion address needs Tor'))),
+      );
+    });
+
     test('sync state follows the block number', () async {
       await restore();
       await connectAndRefresh();
