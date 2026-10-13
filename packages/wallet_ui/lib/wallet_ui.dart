@@ -39,5 +39,6 @@ export 'src/wallet/lws_keys_view.dart';
 export 'src/wallet/reauth_gate.dart';
 export 'src/wallet/receive_view.dart';
 export 'src/wallet/send_view.dart';
+export 'src/wallet/tor_status_pill.dart';
 export 'src/wallet/tx_activity_row.dart';
 export 'src/wallet/tx_details_sheet.dart';

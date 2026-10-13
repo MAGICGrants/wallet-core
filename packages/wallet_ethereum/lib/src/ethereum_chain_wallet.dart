@@ -326,11 +326,20 @@ class EthereumChainWallet extends CryptoWallet {
     if (isLocalHostRoutedThroughTor(Uri.parse('http://$address').host, viaTor: useTor)) {
       throw Exception(localHostOverTorMessage);
     }
+    final socksPort = _socksPortFrom(proxyPort);
+    // Fail closed: Tor on but no proxy resolved must not fall through to a
+    // clearnet probe the UI would then report as "reached over Tor".
+    if (useTor && socksPort == null) {
+      throw Exception('Could not resolve a Tor proxy.');
+    }
+    if (isUnroutedOnion(address, viaProxy: useTor || socksPort != null)) {
+      throw Exception('An onion address needs Tor. Please go back and enable it.');
+    }
     // A separate client, because a probe must not mutate live connection state;
     // configuring `_rpc` here would repoint the open wallet at whatever the user
     // happened to be typing.
     final probe = EthereumRpcClient(coinSymbol: coinSymbol)
-      ..configure(url: address, socksPort: _socksPortFrom(proxyPort));
+      ..configure(url: address, socksPort: socksPort);
     final cid = await probe.chainId();
     if (cid != _chainId) {
       throw Exception('This RPC is chain id $cid, not $_chainId ($blockchainName).');
@@ -343,7 +352,14 @@ class EthereumChainWallet extends CryptoWallet {
     String? proxyPort,
     required bool useTor,
   }) async {
-    await _explorer.probe(address, socksPort: _socksPortFrom(proxyPort));
+    final socksPort = _socksPortFrom(proxyPort);
+    if (useTor && socksPort == null) {
+      throw Exception('Could not resolve a Tor proxy.');
+    }
+    if (isUnroutedOnion(address, viaProxy: useTor || socksPort != null)) {
+      throw Exception('An onion address needs Tor. Please go back and enable it.');
+    }
+    await _explorer.probe(address, socksPort: socksPort);
   }
 
   /// Resolves the explorer's own SOCKS port (its Tor proxy, or a custom one).

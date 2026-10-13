@@ -359,6 +359,37 @@ void main() {
         expect(fake.connections.single.useSsl, isFalse);
       });
     });
+
+    group('testConnection fails closed rather than probing clearnet', () {
+      test('Tor on but no proxy resolved throws', () async {
+        await restore();
+        await expectLater(
+          wallet.testConnection(address: 'electrum.example.com:50002', useTor: true),
+          throwsA(
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              contains('Could not resolve a Tor proxy'),
+            ),
+          ),
+        );
+      });
+
+      test('an onion address with Tor off is refused', () async {
+        await restore();
+        const v3 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567';
+        await expectLater(
+          wallet.testConnection(address: '$v3.onion:50002', useTor: false),
+          throwsA(
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              contains('onion address needs Tor'),
+            ),
+          ),
+        );
+      });
+    });
   });
 
   group('refresh and balances', () {
