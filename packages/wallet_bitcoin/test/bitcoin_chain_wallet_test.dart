@@ -366,7 +366,11 @@ void main() {
         await expectLater(
           wallet.testConnection(address: 'electrum.example.com:50002', useTor: true),
           throwsA(
-            isA<Exception>().having((e) => e.toString(), 'message', contains('Could not resolve a Tor proxy')),
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              contains('Could not resolve a Tor proxy'),
+            ),
           ),
         );
       });
@@ -377,7 +381,11 @@ void main() {
         await expectLater(
           wallet.testConnection(address: '$v3.onion:50002', useTor: false),
           throwsA(
-            isA<Exception>().having((e) => e.toString(), 'message', contains('onion address needs Tor')),
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              contains('onion address needs Tor'),
+            ),
           ),
         );
       });

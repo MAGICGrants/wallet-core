@@ -232,7 +232,10 @@ void main() {
         'message',
         contains('Could not resolve a Tor proxy'),
       );
-      await expectLater(wallet.testConnection(address: 'rpc.example.com', useTor: true), throwsA(torNoProxy));
+      await expectLater(
+        wallet.testConnection(address: 'rpc.example.com', useTor: true),
+        throwsA(torNoProxy),
+      );
       await expectLater(
         wallet.testExplorerConnection(address: 'eth.blockscout.example', useTor: true),
         throwsA(torNoProxy),
@@ -244,7 +247,13 @@ void main() {
       const onion = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa234567.onion';
       await expectLater(
         wallet.testConnection(address: onion, useTor: false),
-        throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('onion address needs Tor'))),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('onion address needs Tor'),
+          ),
+        ),
       );
     });
 

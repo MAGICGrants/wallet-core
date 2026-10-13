@@ -99,7 +99,11 @@ class _TorStatusPillState extends State<TorStatusPill> {
     try {
       final proxy = await TorSettingsService.sharedInstance.getProxy();
       if (proxy == null) return false;
-      final socket = await Socket.connect(proxy.host, proxy.port, timeout: const Duration(seconds: 3));
+      final socket = await Socket.connect(
+        proxy.host,
+        proxy.port,
+        timeout: const Duration(seconds: 3),
+      );
       socket.destroy();
       return true;
     } catch (_) {
@@ -143,7 +147,12 @@ class _TorStatusPillState extends State<TorStatusPill> {
           const SizedBox(width: 9),
           Text(
             text,
-            style: TextStyle(fontFamily: 'Ubuntu', fontSize: 12, height: 1, color: BrandColors.inkMuted),
+            style: TextStyle(
+              fontFamily: 'Ubuntu',
+              fontSize: 12,
+              height: 1,
+              color: BrandColors.inkMuted,
+            ),
           ),
         ],
       ),
