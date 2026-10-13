@@ -229,7 +229,11 @@ void main() {
 
   group('a local address is refused over Tor', () {
     // Tor is made available so the refusal is the local rule, not "no Tor proxy".
-    Future<FakeWallet> localWallet(String address, {bool useTor = false, String proxyPort = ''}) async {
+    Future<FakeWallet> localWallet(
+      String address, {
+      bool useTor = false,
+      String proxyPort = '',
+    }) async {
       final wallet = FakeWallet('XMR');
       addTearDown(wallet.dispose);
       await wallet.openExisting(password: 'pw');
@@ -272,7 +276,8 @@ void main() {
       await wallet.connectToDaemon();
 
       expect(
-        wallet.connectCalls, hasLength(1),
+        wallet.connectCalls,
+        hasLength(1),
         reason: 'a user proxy can reach their LAN; only Tor is refused',
       );
       expect(wallet.torRequirementBroken, isFalse);

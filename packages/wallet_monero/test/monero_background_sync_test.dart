@@ -208,23 +208,26 @@ void main() {
       );
     });
 
-    test('a library that ignores the off type keeps the cache secret instead of a false success', () async {
-      await enableBackgroundSync();
-      await openMain('node');
-      expect(await WalletSecrets.store.read(wallet.backgroundCachePasswordKey), isNotNull);
+    test(
+      'a library that ignores the off type keeps the cache secret instead of a false success',
+      () async {
+        await enableBackgroundSync();
+        await openMain('node');
+        expect(await WalletSecrets.store.read(wallet.backgroundCachePasswordKey), isNotNull);
 
-      // Unfixed wrapper: `off` is dropped, the cache stays configured.
-      backend.ignoreOffType = true;
-      await enableBackgroundSync(enabled: false);
-      await wallet.applyBackgroundSyncSetting(password: _password);
+        // Unfixed wrapper: `off` is dropped, the cache stays configured.
+        backend.ignoreOffType = true;
+        await enableBackgroundSync(enabled: false);
+        await wallet.applyBackgroundSyncSetting(password: _password);
 
-      // The gate keeps the secret rather than dropping it under a false "removed".
-      expect(
-        await WalletSecrets.store.read(wallet.backgroundCachePasswordKey),
-        isNotNull,
-        reason: 'the secret must outlive a teardown that did not actually happen',
-      );
-    });
+        // The gate keeps the secret rather than dropping it under a false "removed".
+        expect(
+          await WalletSecrets.store.read(wallet.backgroundCachePasswordKey),
+          isNotNull,
+          reason: 'the secret must outlive a teardown that did not actually happen',
+        );
+      },
+    );
 
     test('flipping the setting on takes effect without a reopen', () async {
       // The gap this hook closes. The setting has two effects and only one is

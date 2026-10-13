@@ -270,7 +270,10 @@ void main() {
 
       await expectLater(
         get(wrong, host: TestPki.routableHost, proxy: wrongProxy),
-        throwsA(isA<HandshakeException>()),
+        // Over SOCKS the handshake failure is a never-sent: nothing left the client.
+        throwsA(
+          isA<RequestNotSentException>().having((e) => e.cause, 'cause', isA<HandshakeException>()),
+        ),
       );
       expect(wrong.requests, isEmpty);
     });

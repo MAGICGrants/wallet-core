@@ -37,7 +37,10 @@ void main() {
 
   group('EIP-681 ERC-20 transfer', () {
     test('token contract routes to DAI with uint256 as exact decimal', () {
-      final r = parsePaymentUri('ethereum:$dai/transfer?address=$to&uint256=5000000000000000000', wallets)!;
+      final r = parsePaymentUri(
+        'ethereum:$dai/transfer?address=$to&uint256=5000000000000000000',
+        wallets,
+      )!;
       expect(r.coinSymbol, 'DAI');
       expect(r.address, to);
       expect(r.amount, '5');
@@ -52,7 +55,10 @@ void main() {
     });
 
     test('a transfer with a mismatched chainId returns null', () {
-      expect(parsePaymentUri('ethereum:$dai@11155111/transfer?address=$to&uint256=1', wallets), isNull);
+      expect(
+        parsePaymentUri('ethereum:$dai@11155111/transfer?address=$to&uint256=1', wallets),
+        isNull,
+      );
     });
   });
 }

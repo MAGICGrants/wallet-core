@@ -2152,7 +2152,10 @@ class BitcoinChainWallet extends CryptoWallet {
       } catch (e) {
         // A genuinely malformed raw must not abandon the whole pass (and with it
         // all history); skip it and let the per-tx hydrate step drop it too.
-        walletLog(LogLevel.warn, 'parent prefetch parse failed ${Redact.id(entry.key)}: ${e.runtimeType}');
+        walletLog(
+          LogLevel.warn,
+          'parent prefetch parse failed ${Redact.id(entry.key)}: ${e.runtimeType}',
+        );
         continue;
       }
       for (final i in tx.inputs) {

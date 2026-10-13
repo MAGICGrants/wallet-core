@@ -519,7 +519,10 @@ class MoneroWallet extends CryptoWallet {
 
     // Only drop the secret and claim success once the wallet actually reports off.
     if (await _backend.getBackgroundSyncType(wallet) != MoneroBackgroundSyncType.off) {
-      walletLog(LogLevel.error, 'background sync still configured after teardown; keeping the cache secret');
+      walletLog(
+        LogLevel.error,
+        'background sync still configured after teardown; keeping the cache secret',
+      );
       return;
     }
 

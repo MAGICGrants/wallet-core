@@ -64,83 +64,112 @@ void main() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
-  test('turning background sync off deletes the view-only cache and leaves nothing readable without a secret', () {
-    final wm = _ensureAvailable();
-    if (wm == null) return;
+  test(
+    'turning background sync off deletes the view-only cache and leaves nothing readable without a secret',
+    () {
+      final wm = _ensureAvailable();
+      if (wm == null) return;
 
-    final path = '${tmp.path}/w';
-    final backgroundPath = '$path.background';
-    final backgroundKeys = File('$backgroundPath.keys');
+      final path = '${tmp.path}/w';
+      final backgroundPath = '$path.background';
+      final backgroundKeys = File('$backgroundPath.keys');
 
-    final wallet = monero.WalletManager_createWalletFromPolyseed(
-      wm,
-      path: path,
-      password: _walletPassword,
-      networkType: 0,
-      mnemonic: _freshPolyseed(),
-      seedOffset: '',
-      newWallet: true,
-      restoreHeight: 0,
-      kdfRounds: 1,
-    );
-    expect(monero.Wallet_errorString(wallet), isEmpty, reason: 'create main wallet');
-    monero.Wallet_store(wallet);
-    final mainViewKey = monero.Wallet_secretViewKey(wallet);
+      final wallet = monero.WalletManager_createWalletFromPolyseed(
+        wm,
+        path: path,
+        password: _walletPassword,
+        networkType: 0,
+        mnemonic: _freshPolyseed(),
+        seedOffset: '',
+        newWallet: true,
+        restoreHeight: 0,
+        kdfRounds: 1,
+      );
+      expect(monero.Wallet_errorString(wallet), isEmpty, reason: 'create main wallet');
+      monero.Wallet_store(wallet);
+      final mainViewKey = monero.Wallet_secretViewKey(wallet);
 
-    // Enable with a strong cache password.
-    final enabled = monero.Wallet_setupBackgroundSync(
-      wallet,
-      backgroundSyncType: _syncCustomPassword,
-      walletPassword: _walletPassword,
-      backgroundCachePassword: _cachePassword,
-    );
-    expect(enabled, isTrue, reason: 'enable background sync: ${monero.Wallet_errorString(wallet)}');
-    expect(monero.Wallet_getBackgroundSyncType(wallet), _syncCustomPassword, reason: 'configured after enable');
-    expect(backgroundKeys.existsSync(), isTrue, reason: 'view-only cache written on enable');
+      // Enable with a strong cache password.
+      final enabled = monero.Wallet_setupBackgroundSync(
+        wallet,
+        backgroundSyncType: _syncCustomPassword,
+        walletPassword: _walletPassword,
+        backgroundCachePassword: _cachePassword,
+      );
+      expect(
+        enabled,
+        isTrue,
+        reason: 'enable background sync: ${monero.Wallet_errorString(wallet)}',
+      );
+      expect(
+        monero.Wallet_getBackgroundSyncType(wallet),
+        _syncCustomPassword,
+        reason: 'configured after enable',
+      );
+      expect(backgroundKeys.existsSync(), isTrue, reason: 'view-only cache written on enable');
 
-    // Teardown as the pre-fix Dart did: off + empty cache password.
-    final tornDown = monero.Wallet_setupBackgroundSync(
-      wallet,
-      backgroundSyncType: _syncOff,
-      walletPassword: _walletPassword,
-      backgroundCachePassword: '',
-    );
-    expect(tornDown, isTrue, reason: 'teardown call returns true: ${monero.Wallet_errorString(wallet)}');
+      // Teardown as the pre-fix Dart did: off + empty cache password.
+      final tornDown = monero.Wallet_setupBackgroundSync(
+        wallet,
+        backgroundSyncType: _syncOff,
+        walletPassword: _walletPassword,
+        backgroundCachePassword: '',
+      );
+      expect(
+        tornDown,
+        isTrue,
+        reason: 'teardown call returns true: ${monero.Wallet_errorString(wallet)}',
+      );
 
-    final typeAfterTeardown = monero.Wallet_getBackgroundSyncType(wallet);
+      final typeAfterTeardown = monero.Wallet_getBackgroundSyncType(wallet);
 
-    // Close the main wallet to release the keys-file lock, then try an empty open.
-    monero.WalletManager_closeWallet(wm, wallet, false);
+      // Close the main wallet to release the keys-file lock, then try an empty open.
+      monero.WalletManager_closeWallet(wm, wallet, false);
 
-    var openedWithEmptyPassword = false;
-    var exposedViewKeyMatches = false;
-    if (backgroundKeys.existsSync()) {
-      final bg = monero.WalletManager_openWallet(wm, path: backgroundPath, password: '', networkType: 0);
-      if (monero.Wallet_errorString(bg).isEmpty) {
-        openedWithEmptyPassword = true;
-        final viewKey = monero.Wallet_secretViewKey(bg);
-        exposedViewKeyMatches = viewKey.isNotEmpty && viewKey == mainViewKey;
+      var openedWithEmptyPassword = false;
+      var exposedViewKeyMatches = false;
+      if (backgroundKeys.existsSync()) {
+        final bg = monero.WalletManager_openWallet(
+          wm,
+          path: backgroundPath,
+          password: '',
+          networkType: 0,
+        );
+        if (monero.Wallet_errorString(bg).isEmpty) {
+          openedWithEmptyPassword = true;
+          final viewKey = monero.Wallet_secretViewKey(bg);
+          exposedViewKeyMatches = viewKey.isNotEmpty && viewKey == mainViewKey;
+        }
+        monero.WalletManager_closeWallet(wm, bg, false);
       }
-      monero.WalletManager_closeWallet(wm, bg, false);
-    }
 
-    // Summary — never prints key material, only whether it leaked.
-    // ignore: avoid_print
-    print(
-      '[bg-sync teardown] keysFilePresent=${backgroundKeys.existsSync()} '
-      'type=$typeAfterTeardown(0=off,2=custom) '
-      'openedWithEmptyPassword=$openedWithEmptyPassword '
-      'viewKeyExposed=$exposedViewKeyMatches',
-    );
+      // Summary — never prints key material, only whether it leaked.
+      // ignore: avoid_print
+      print(
+        '[bg-sync teardown] keysFilePresent=${backgroundKeys.existsSync()} '
+        'type=$typeAfterTeardown(0=off,2=custom) '
+        'openedWithEmptyPassword=$openedWithEmptyPassword '
+        'viewKeyExposed=$exposedViewKeyMatches',
+      );
 
-    // Fixed postconditions: red on an unfixed wrapper, green once it honours off.
-    expect(typeAfterTeardown, _syncOff, reason: 'background sync should report off after teardown');
-    expect(backgroundKeys.existsSync(), isFalse, reason: 'the view-only cache file should be deleted on teardown');
-    expect(
-      openedWithEmptyPassword,
-      isFalse,
-      reason: 'the view-only wallet opened with an empty password — the private '
-          'view key is on disk with no secret',
-    );
-  });
+      // Fixed postconditions: red on an unfixed wrapper, green once it honours off.
+      expect(
+        typeAfterTeardown,
+        _syncOff,
+        reason: 'background sync should report off after teardown',
+      );
+      expect(
+        backgroundKeys.existsSync(),
+        isFalse,
+        reason: 'the view-only cache file should be deleted on teardown',
+      );
+      expect(
+        openedWithEmptyPassword,
+        isFalse,
+        reason:
+            'the view-only wallet opened with an empty password — the private '
+            'view key is on disk with no secret',
+      );
+    },
+  );
 }

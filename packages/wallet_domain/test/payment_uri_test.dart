@@ -6,7 +6,12 @@ import 'fake_wallet.dart';
 /// A coin that answers a scheme and accepts a fixed set of addresses, so the
 /// BIP-21 default parse and the resolver can be tested without a chain.
 class _UriWallet extends FakeWallet {
-  _UriWallet(super.symbol, {required this.scheme, this.amountParam = 'amount', required this.valid});
+  _UriWallet(
+    super.symbol, {
+    required this.scheme,
+    this.amountParam = 'amount',
+    required this.valid,
+  });
 
   final String scheme;
   final String amountParam;

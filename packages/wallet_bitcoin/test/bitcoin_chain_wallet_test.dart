@@ -731,14 +731,15 @@ void main() {
           '0000000000000000' // 0 sats
           '036a0100' // scriptPubKey: OP_RETURN, push 1 byte
           '00000000'; // locktime
-      expect(() => BtcTransaction.fromRaw(opReturnRaw), throwsA(anything),
-          reason: 'premise: bitcoin_base cannot parse this standard shape');
+      expect(
+        () => BtcTransaction.fromRaw(opReturnRaw),
+        throwsA(anything),
+        reason: 'premise: bitcoin_base cannot parse this standard shape',
+      );
       final opReturnTxid = computeTxid(opReturnRaw);
 
       await restore();
-      scriptUsed({
-        _sh(_receive0): (valueSats: 0, height: 800000, txHash: opReturnTxid, vout: 0),
-      });
+      scriptUsed({_sh(_receive0): (valueSats: 0, height: 800000, txHash: opReturnTxid, vout: 0)});
       fake.failing.remove('blockchain.transaction.get');
       fake.handlers['blockchain.transaction.get'] = (params) {
         final txid = params[0] as String;
@@ -786,8 +787,11 @@ void main() {
 
       final hashes = wallet.readTxHistory().map((t) => t.hash);
       expect(hashes, contains(honestTxid));
-      expect(hashes, isNot(contains(impostorTxid)),
-          reason: 'bytes that hash to a different txid must not be trusted');
+      expect(
+        hashes,
+        isNot(contains(impostorTxid)),
+        reason: 'bytes that hash to a different txid must not be trusted',
+      );
     });
   });
 
