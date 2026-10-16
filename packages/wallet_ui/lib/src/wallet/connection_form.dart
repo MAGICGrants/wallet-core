@@ -87,8 +87,7 @@ class ConnectionFormView extends StatelessWidget {
   final VoidCallback? onScan;
   final String? errorMessage;
 
-  /// Amber callout shown above the Save button (e.g. the saved connection used
-  /// Tor, which is now disabled). Null hides it.
+  /// Amber callout above the Save button; null hides it.
   final String? warning;
 
   // Proxy port field.
@@ -478,6 +477,7 @@ class _CheckRow extends StatelessWidget {
           Tappable(
             behavior: HitTestBehavior.opaque,
             onTap: onTap,
+            cursor: enabled ? null : SystemMouseCursors.forbidden,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 7),
               child: Row(

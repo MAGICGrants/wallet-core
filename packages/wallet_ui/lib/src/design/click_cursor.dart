@@ -20,6 +20,7 @@ class Tappable extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final HitTestBehavior behavior;
+  final MouseCursor? cursor;
   final Widget child;
 
   const Tappable({
@@ -27,6 +28,7 @@ class Tappable extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.behavior = HitTestBehavior.opaque,
+    this.cursor,
     required this.child,
   });
 
@@ -34,7 +36,7 @@ class Tappable extends StatelessWidget {
   Widget build(BuildContext context) {
     final clickable = onTap != null || onLongPress != null;
     return MouseRegion(
-      cursor: clickable ? SystemMouseCursors.click : MouseCursor.defer,
+      cursor: cursor ?? (clickable ? SystemMouseCursors.click : MouseCursor.defer),
       child: GestureDetector(
         behavior: behavior,
         onTap: onTap,
