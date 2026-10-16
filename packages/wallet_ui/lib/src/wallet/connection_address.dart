@@ -65,9 +65,8 @@ bool addressUsesSsl(String value) {
   return domainAddressRegex.hasMatch(value);
 }
 
-/// The transport a bare (scheme-stripped) address implies — for the "removing
-/// protocol" notice shown when a user pastes one with an `http(s)://` scheme.
-/// Onion is checked first: it is HTTP (over Tor), not "local", and not HTTPS.
+/// The transport a scheme-stripped address implies, for the "removing protocol"
+/// notice. Onion is HTTP over Tor — checked first so it isn't mislabelled local.
 enum AddressProtocolHint { onion, secure, plain }
 
 AddressProtocolHint addressProtocolHint(String value) {
@@ -76,22 +75,12 @@ AddressProtocolHint addressProtocolHint(String value) {
   return AddressProtocolHint.plain;
 }
 
-/// Pure analysis of a raw connection-address input, shared by both apps' forms
-/// so the protocol/onion/remote-IP handling can't drift between them.
+/// Pure analysis of a raw connection-address input, shared by both apps' forms.
 class AddressInput {
-  /// [raw] with any `http(s)://` scheme and surrounding whitespace stripped.
   final String cleaned;
-
-  /// [raw] carried an `http(s)://` scheme (now stripped) — show the notice.
   final bool hadProtocol;
-
-  /// An onion address — the connection must use Tor.
   final bool isOnion;
-
-  /// A public IP literal, which isn't an allowed connection target.
   final bool isRemoteIp;
-
-  /// Which transport [cleaned] implies, for the stripped-protocol notice.
   final AddressProtocolHint protocolHint;
 
   const AddressInput({
@@ -114,14 +103,12 @@ AddressInput analyzeAddressInput(String raw) {
   );
 }
 
-/// Why a connection address is rejected before a test or save. Each app maps
-/// this to its own localized message. Null means the address passes these
-/// pre-checks (the live test still has to reach the server).
+/// Why a connection address is rejected before a test/save; each app maps it to
+/// its own message.
 enum ConnectionAddressError { remoteIp, localOverTor, onionNeedsTor }
 
-/// The pre-test/pre-save address rules shared by both apps: no public IP
-/// literal, no local host over Tor, and no onion without a Tor/proxy route.
-/// [hasProxy] is whether a custom SOCKS/HTTP proxy port is set.
+/// Shared pre-test/pre-save address rules: no public IP, no local host over Tor,
+/// no onion without a Tor/proxy route.
 ConnectionAddressError? validateConnectionAddress({
   required String address,
   required bool useTor,
