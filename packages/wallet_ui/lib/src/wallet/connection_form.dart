@@ -87,6 +87,10 @@ class ConnectionFormView extends StatelessWidget {
   final VoidCallback? onScan;
   final String? errorMessage;
 
+  /// Amber callout shown above the Save button (e.g. the saved connection used
+  /// Tor, which is now disabled). Null hides it.
+  final String? warning;
+
   // Proxy port field.
   final TextEditingController proxyController;
   final ValueChanged<String> onProxyChanged;
@@ -136,6 +140,7 @@ class ConnectionFormView extends StatelessWidget {
     required this.addressController,
     required this.onAddressChanged,
     required this.errorMessage,
+    this.warning,
     required this.proxyController,
     required this.onProxyChanged,
     required this.proxyEnabled,
@@ -269,6 +274,8 @@ class ConnectionFormView extends StatelessWidget {
 
     final saveButton = BrandButton(label: saveButtonLabel, onPressed: canSave ? onSave : null);
 
+    final warningCallout = warning != null ? _ConnectionWarningCallout(warning!) : null;
+
     if (pinnedSave) {
       return Column(
         children: [
@@ -282,8 +289,17 @@ class ConnectionFormView extends StatelessWidget {
               ),
             ),
           ),
-          if (showSave)
-            Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 8), child: saveButton),
+          if (warningCallout != null || showSave)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (warningCallout != null) ...[warningCallout, const SizedBox(height: 12)],
+                  if (showSave) saveButton,
+                ],
+              ),
+            ),
         ],
       );
     }
@@ -293,8 +309,40 @@ class ConnectionFormView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ...content,
+        if (warningCallout != null) ...[const SizedBox(height: 16), warningCallout],
         if (showSave) ...[const SizedBox(height: 16), saveButton],
       ],
+    );
+  }
+}
+
+/// Amber warning callout shown above the Save button.
+class _ConnectionWarningCallout extends StatelessWidget {
+  final String message;
+
+  const _ConnectionWarningCallout(this.message);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: BrandColors.warningBg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_rounded, size: 18, color: BrandColors.warning),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: BrandText.caption.copyWith(color: BrandColors.warning, height: 1.4),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
