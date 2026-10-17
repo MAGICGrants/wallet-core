@@ -2,6 +2,8 @@
 // transport it implies — shared by the connection form and the asset screen so
 // both label a connection the same way.
 
+import 'package:wallet_infra/wallet_infra.dart' show isUnroutedOnion;
+
 final ipAddressRegex = RegExp(
   r'(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}(?::\d{1,5})?$',
 );
@@ -61,6 +63,63 @@ bool addressUsesSsl(String value) {
   if (ipAddressRegex.hasMatch(value)) return false;
   if (host.endsWith('.local')) return false;
   return domainAddressRegex.hasMatch(value);
+}
+
+/// The transport a scheme-stripped address implies, for the "removing protocol"
+/// notice. Onion is HTTP over Tor — checked first so it isn't mislabelled local.
+enum AddressProtocolHint { onion, secure, plain }
+
+AddressProtocolHint addressProtocolHint(String value) {
+  if (onionAddressRegex.hasMatch(value)) return AddressProtocolHint.onion;
+  if (addressUsesSsl(value)) return AddressProtocolHint.secure;
+  return AddressProtocolHint.plain;
+}
+
+/// Pure analysis of a raw connection-address input, shared by both apps' forms.
+class AddressInput {
+  final String cleaned;
+  final bool hadProtocol;
+  final bool isOnion;
+  final bool isRemoteIp;
+  final AddressProtocolHint protocolHint;
+
+  const AddressInput({
+    required this.cleaned,
+    required this.hadProtocol,
+    required this.isOnion,
+    required this.isRemoteIp,
+    required this.protocolHint,
+  });
+}
+
+AddressInput analyzeAddressInput(String raw) {
+  final cleaned = cleanConnectionAddress(raw);
+  return AddressInput(
+    cleaned: cleaned,
+    hadProtocol: RegExp(r'https?:\/\/').hasMatch(raw),
+    isOnion: onionAddressRegex.hasMatch(cleaned),
+    isRemoteIp: isRemoteIp(cleaned),
+    protocolHint: addressProtocolHint(cleaned),
+  );
+}
+
+/// Why a connection address is rejected before a test/save; each app maps it to
+/// its own message.
+enum ConnectionAddressError { remoteIp, localOverTor, onionNeedsTor }
+
+/// Shared pre-test/pre-save address rules: no public IP, no local host over Tor,
+/// no onion without a Tor/proxy route.
+ConnectionAddressError? validateConnectionAddress({
+  required String address,
+  required bool useTor,
+  required bool hasProxy,
+}) {
+  if (isRemoteIp(address)) return ConnectionAddressError.remoteIp;
+  if (useTor && addressIsLocal(address)) return ConnectionAddressError.localOverTor;
+  if (isUnroutedOnion(address, viaProxy: useTor || hasProxy)) {
+    return ConnectionAddressError.onionNeedsTor;
+  }
+  return null;
 }
 
 /// True for a LAN address — a private IP or a `.local` host.
