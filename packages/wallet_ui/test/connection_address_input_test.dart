@@ -76,7 +76,11 @@ void main() {
 
     test('clearnet domain passes', () {
       expect(
-        validateConnectionAddress(address: 'node.example.com:18089', useTor: false, hasProxy: false),
+        validateConnectionAddress(
+          address: 'node.example.com:18089',
+          useTor: false,
+          hasProxy: false,
+        ),
         isNull,
       );
     });

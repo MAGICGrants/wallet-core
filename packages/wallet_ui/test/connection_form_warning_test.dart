@@ -47,7 +47,9 @@ ConnectionFormView _form({String? warning}) => ConnectionFormView(
 void main() {
   testWidgets('renders the warning callout when warning is set', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: _form(warning: 'Tor was disabled for this connection'))),
+      MaterialApp(
+        home: Scaffold(body: _form(warning: 'Tor was disabled for this connection')),
+      ),
     );
     expect(find.text('Tor was disabled for this connection'), findsOneWidget);
     expect(find.byIcon(Icons.warning_rounded), findsOneWidget);
