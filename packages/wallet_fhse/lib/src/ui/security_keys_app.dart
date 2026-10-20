@@ -404,9 +404,12 @@ Future<bool> desktopAutoLockApplies(BuildContext context) async {
 /// [AppLockPreferences.desktopIdleLimit]: the app covers itself with App Lock
 /// and keeps the wallet open and syncing.
 ///
-/// "Without use" means no pointer or key input reached the app: a window that
-/// is hidden, minimised or behind others gets none, so this covers leaving the
-/// app as well as leaving the computer. The time is measured as for "Fully
+/// "Without use" means no pointer or key input reached the app while it was
+/// unlocked: a window that is hidden, minimised or behind others gets none, so
+/// this covers leaving the app as well as leaving the computer. Input at App
+/// Lock's cover or the unlock screen is not use of the wallet, or typing
+/// password guesses there would keep the wallet open behind the cover with no
+/// end; an unlock is, and starts the time again. The time is measured as for "Fully
 /// lock after" ([fullLockDue]): on the wall clock and on a clock the user
 /// cannot set, either one deciding, so setting the date back does not skip it.
 ///
@@ -443,14 +446,33 @@ class DesktopAutoLock {
     _onDue = onDue;
     _ticker?.cancel();
     _ticker = Timer.periodic(tick, (_) => unawaited(check()));
+    AppSession.unlocked.removeListener(_onSessionChanged);
+    AppSession.unlocked.addListener(_onSessionChanged);
   }
 
-  /// Input reached the app. Cheap enough for every pointer move: it reads the
-  /// clocks at most once a second.
+  void _onSessionChanged() {
+    if (AppSession.isUnlocked) _restart();
+  }
+
+  void _restart() {
+    _lastUse = SecurityKeyFullLock.wallClock();
+    _lastUseBootNs = SecurityKeyFullLock.bootClock();
+  }
+
+  /// Input reached the app. It counts only while [AppSession] is unlocked, and
+  /// once the time has run out it locks instead: a computer that slept past the
+  /// time gets input before the next [check], and that must not cancel the
+  /// lock. Cheap enough for every pointer move: it reads the clocks at most
+  /// once a second.
   void recordUse() {
+    if (!AppSession.isUnlocked) return;
     final now = SecurityKeyFullLock.wallClock();
     final sinceLast = now.difference(_lastUse);
     if (!sinceLast.isNegative && sinceLast < const Duration(seconds: 1)) return;
+    if (isDue) {
+      unawaited(check());
+      return;
+    }
     _lastUse = now;
     _lastUseBootNs = SecurityKeyFullLock.bootClock();
   }
@@ -474,8 +496,7 @@ class DesktopAutoLock {
       _limit = await _readLimit();
       if (!isDue) return;
       await onDue();
-      _lastUse = SecurityKeyFullLock.wallClock();
-      _lastUseBootNs = SecurityKeyFullLock.bootClock();
+      _restart();
     } finally {
       _checking = false;
     }
@@ -488,6 +509,7 @@ class DesktopAutoLock {
   void dispose() {
     _ticker?.cancel();
     _ticker = null;
+    AppSession.unlocked.removeListener(_onSessionChanged);
   }
 }
 
