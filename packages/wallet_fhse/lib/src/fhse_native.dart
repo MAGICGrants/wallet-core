@@ -81,8 +81,14 @@ typedef WfhseAddKeyN = Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Point
 typedef WfhseAddKeyD = int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint8>, int);
 typedef WfhseRootN = Int32 Function(Pointer<Void>, Pointer<Utf8>, Size);
 typedef WfhseRootD = int Function(Pointer<Void>, Pointer<Utf8>, int);
-typedef WfhseHashN =
-    Int32 Function(Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Uint8>, Size);
+typedef WfhseHashN = Int32 Function(
+  Pointer<Uint8>,
+  Size,
+  Pointer<Uint8>,
+  Size,
+  Pointer<Uint8>,
+  Size,
+);
 typedef WfhseHashD = int Function(Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int);
 typedef WfhseRandomN = Int32 Function(Pointer<Uint8>, Size);
 typedef WfhseRandomD = int Function(Pointer<Uint8>, int);

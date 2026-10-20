@@ -43,29 +43,25 @@ void main() {
     expect((await getAppDir()).path, tmp.path);
   });
 
-  test(
-    'desktop derives the app dir from the environment, not from path_provider',
-    () async {
-      // Regression guard: getAppDir() used to await applicationDocuments()
-      // unconditionally and discard it on desktop, taking a platform-channel
-      // dependency the desktop path does not need.
-      WalletPaths.install(
-        linuxDirName: '.test_wallet',
-        windowsAppDataDir: 'MAGIC Grants/Test Wallet',
-        // A provider that would throw if consulted.
-        directories: const _ExplodingDirectories(),
-      );
-      final dir = await getAppDir();
-      // The real folder now exists (and on Linux carries the backup markers).
-      addTearDown(() {
-        if (dir.existsSync()) dir.deleteSync(recursive: true);
-      });
-      expect(dir.path, isNot(tmp.path));
-      expect(dir.path, contains(Platform.isLinux ? 'test_wallet' : 'Test Wallet'));
-      if (Platform.isWindows) expect(dir.path, endsWith(iosAppDirName));
-    },
-    skip: (Platform.isLinux || Platform.isWindows) ? false : 'desktop-only path',
-  );
+  test('desktop derives the app dir from the environment, not from path_provider', () async {
+    // Regression guard: getAppDir() used to await applicationDocuments()
+    // unconditionally and discard it on desktop, taking a platform-channel
+    // dependency the desktop path does not need.
+    WalletPaths.install(
+      linuxDirName: '.test_wallet',
+      windowsAppDataDir: 'MAGIC Grants/Test Wallet',
+      // A provider that would throw if consulted.
+      directories: const _ExplodingDirectories(),
+    );
+    final dir = await getAppDir();
+    // The real folder now exists (and on Linux carries the backup markers).
+    addTearDown(() {
+      if (dir.existsSync()) dir.deleteSync(recursive: true);
+    });
+    expect(dir.path, isNot(tmp.path));
+    expect(dir.path, contains(Platform.isLinux ? 'test_wallet' : 'Test Wallet'));
+    if (Platform.isWindows) expect(dir.path, endsWith(iosAppDirName));
+  }, skip: (Platform.isLinux || Platform.isWindows) ? false : 'desktop-only path');
 
   test('createAppDir is idempotent', () async {
     await createAppDir();
@@ -106,28 +102,24 @@ void main() {
   // With no injected root, macOS takes its own branch: an excluded directory
   // under Application Support, and nothing moved out of Documents, which
   // outside the sandbox is the user's own folder.
-  test(
-    'macOS keeps the app dir under Application Support, out of Time Machine',
-    () async {
-      final support = Directory('${tmp.path}/Support')..createSync();
-      final docs = Directory('${tmp.path}/Documents')..createSync();
-      File('${docs.path}/mine').writeAsStringSync('mine');
-      WalletPaths.install(
-        linuxDirName: '.test_wallet',
-        windowsAppDataDir: 'MAGIC Grants/Test Wallet',
-        directories: _NoRoot(support: support, documents: docs),
-      );
+  test('macOS keeps the app dir under Application Support, out of Time Machine', () async {
+    final support = Directory('${tmp.path}/Support')..createSync();
+    final docs = Directory('${tmp.path}/Documents')..createSync();
+    File('${docs.path}/mine').writeAsStringSync('mine');
+    WalletPaths.install(
+      linuxDirName: '.test_wallet',
+      windowsAppDataDir: 'MAGIC Grants/Test Wallet',
+      directories: _NoRoot(support: support, documents: docs),
+    );
 
-      final dir = await getAppDir();
-      expect(dir.path, '${support.path}/$iosAppDirName');
-      expect(dir.existsSync(), isTrue);
-      expect(File('${docs.path}/mine').readAsStringSync(), 'mine');
-      // Reads the flag getAppDir set, through the system's own tool.
-      final excluded = Process.runSync('tmutil', ['isexcluded', dir.path]);
-      expect(excluded.stdout as String, contains('[Excluded]'));
-    },
-    skip: Platform.isMacOS ? false : 'macOS-only branch',
-  );
+    final dir = await getAppDir();
+    expect(dir.path, '${support.path}/$iosAppDirName');
+    expect(dir.existsSync(), isTrue);
+    expect(File('${docs.path}/mine').readAsStringSync(), 'mine');
+    // Reads the flag getAppDir set, through the system's own tool.
+    final excluded = Process.runSync('tmutil', ['isexcluded', dir.path]);
+    expect(excluded.stdout as String, contains('[Excluded]'));
+  }, skip: Platform.isMacOS ? false : 'macOS-only branch');
 
   // The one-time move of the iOS app directory out of Documents (which iOS
   // backs up). Runs before any wallet is opened, from whichever isolate starts

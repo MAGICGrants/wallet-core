@@ -60,9 +60,9 @@ class ICloudLocation extends BackupLocation {
   /// Keeps [path] (a directory) out of the iPhone's own iCloud and Finder
   /// backups. Used for the backup's device state, so a phone restored from a
   /// backup starts a new device id rather than writing as the old phone.
-  static Future<void> excludeFromBackup(String container, String path) => ICloudLocation(
-    container,
-  )._call<void>('excludeFromBackup', {'container': container, 'path': path});
+  static Future<void> excludeFromBackup(String container, String path) =>
+      ICloudLocation(container)
+          ._call<void>('excludeFromBackup', {'container': container, 'path': path});
 
   @override
   Future<bool?> isUploaded(String folder, String name) =>

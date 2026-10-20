@@ -226,7 +226,7 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
       _info = info;
       _known = known;
       _fingerprintOff = false;
-      if (_canUseFingerprint) return _confirm(const KeyVerification.builtIn());
+      if (_canUseFingerprint) return await _confirm(const KeyVerification.builtIn());
       _pin.clear();
       _newPin.clear();
       _confirmPin.clear();

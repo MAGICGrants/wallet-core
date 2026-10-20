@@ -326,7 +326,7 @@ Future<bool> showAppLockRecoveryPhrase(BuildContext context) async {
   var keysRecovered = false;
   final opened = await showRecoveryPhraseSheet(
     context,
-    body: i18n.appLockUseRecoveryPhraseBody(SecurityKeysUi.config.appName),
+    body: i18n.appLockUseRecoveryPhraseBody,
     unlock: (sheetContext, phrase) async {
       keysRecovered = await unlockAppLockWithRecoveryPhrase(sheetContext, phrase);
     },

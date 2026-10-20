@@ -227,72 +227,51 @@ printf '%s\\n' '$cdh' 'fhse:encryption' "\$STUB_AUTHDATA" 'c2ln' "\$STUB_HMAC"
     List<String> recorded(String name) =>
         File('${stubs.path}/$name').readAsStringSync().trimRight().split('\n');
 
-    test(
-      'enroll: creates as FHSE does, then reads over the parity salt',
-      () {
-        final r = run(['enroll']);
-        expect(r.exitCode, 0, reason: '${r.stderr}');
+    test('enroll: creates as FHSE does, then reads over the parity salt', () {
+      final r = run(['enroll']);
+      expect(r.exitCode, 0, reason: '${r.stderr}');
 
-        // No -v: it would ask for built-in UV before the PIN, which a key without
-        // a fingerprint reader refuses.
-        expect(recorded('cred.args').single, '-M -h -c 3 /dev/hidraw7 es256');
-        expect(recorded('cred-verify.args').single, '-V -h -c 3 es256');
-        final credIn = recorded('cred.in');
-        expect(credIn.sublist(0, 3), [cdh, 'fhse:encryption', 'FHSE Encryption']);
-        expect(base64Decode(credIn[3]), hasLength(64));
+      // No -v: it would ask for built-in UV before the PIN, which a key without
+      // a fingerprint reader refuses.
+      expect(recorded('cred.args').single, '-M -h -c 3 /dev/hidraw7 es256');
+      expect(recorded('cred-verify.args').single, '-V -h -c 3 es256');
+      final credIn = recorded('cred.in');
+      expect(credIn.sublist(0, 3), [cdh, 'fhse:encryption', 'FHSE Encryption']);
+      expect(base64Decode(credIn[3]), hasLength(64));
 
-        expect(recorded('assert.args').single, '-G -h -v /dev/hidraw7');
-        expect(recorded('assert.in'), [
-          cdh,
-          'fhse:encryption',
-          credentialId,
-          HmacParity.saltBase64,
-        ]);
+      expect(recorded('assert.args').single, '-G -h -v /dev/hidraw7');
+      expect(recorded('assert.in'), [cdh, 'fhse:encryption', credentialId, HmacParity.saltBase64]);
 
-        expect((r.stdout as String).trimRight().split('\n'), [
-          'backend: libfido2 (fido2-assert)',
-          'rp: fhse:encryption',
-          'salt: ${HmacParity.saltBase64}',
-          'credential: $credentialId',
-          'hmac-secret: $hmac',
-        ]);
-      },
-      skip: Platform.isWindows ? 'needs a POSIX shell' : null,
-    );
+      expect((r.stdout as String).trimRight().split('\n'), [
+        'backend: libfido2 (fido2-assert)',
+        'rp: fhse:encryption',
+        'salt: ${HmacParity.saltBase64}',
+        'credential: $credentialId',
+        'hmac-secret: $hmac',
+      ]);
+    }, skip: Platform.isWindows ? 'needs a POSIX shell' : null);
 
-    test(
-      'assert: takes the app\'s credential in any base64 form, and a device',
-      () {
-        final urlSafe = credentialId.replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-        final r = run(['assert', urlSafe, '/dev/hidraw3']);
-        expect(r.exitCode, 0, reason: '${r.stderr}');
-        expect(recorded('assert.args').single, '-G -h -v /dev/hidraw3');
-        expect(recorded('assert.in')[2], credentialId);
-        expect(r.stdout, contains('hmac-secret: $hmac'));
-      },
-      skip: Platform.isWindows ? 'needs a POSIX shell' : null,
-    );
+    test('assert: takes the app\'s credential in any base64 form, and a device', () {
+      final urlSafe = credentialId.replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+      final r = run(['assert', urlSafe, '/dev/hidraw3']);
+      expect(r.exitCode, 0, reason: '${r.stderr}');
+      expect(recorded('assert.args').single, '-G -h -v /dev/hidraw3');
+      expect(recorded('assert.in')[2], credentialId);
+      expect(r.stdout, contains('hmac-secret: $hmac'));
+    }, skip: Platform.isWindows ? 'needs a POSIX shell' : null);
 
-    test(
-      'refuses an answer the key gave without verifying the user',
-      () {
-        final r = run(['assert', credentialId], flags: 0x01);
-        expect(r.exitCode, 1);
-        expect(r.stderr, contains('did not verify the user'));
-        expect(r.stdout, isNot(contains('hmac-secret:')));
-      },
-      skip: Platform.isWindows ? 'needs a POSIX shell' : null,
-    );
+    test('refuses an answer the key gave without verifying the user', () {
+      final r = run(['assert', credentialId], flags: 0x01);
+      expect(r.exitCode, 1);
+      expect(r.stderr, contains('did not verify the user'));
+      expect(r.stdout, isNot(contains('hmac-secret:')));
+    }, skip: Platform.isWindows ? 'needs a POSIX shell' : null);
 
-    test(
-      'refuses an hmac-secret that is not 32 bytes',
-      () {
-        final r = run(['assert', credentialId], hmacOut: base64Encode(List.filled(64, 1)));
-        expect(r.exitCode, 1);
-        expect(r.stderr, contains('not 32 bytes'));
-      },
-      skip: Platform.isWindows ? 'needs a POSIX shell' : null,
-    );
+    test('refuses an hmac-secret that is not 32 bytes', () {
+      final r = run(['assert', credentialId], hmacOut: base64Encode(List.filled(64, 1)));
+      expect(r.exitCode, 1);
+      expect(r.stderr, contains('not 32 bytes'));
+    }, skip: Platform.isWindows ? 'needs a POSIX shell' : null);
 
     test('prints usage on bad arguments', () {
       expect(run([]).exitCode, 2);

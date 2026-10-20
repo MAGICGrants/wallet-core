@@ -34,21 +34,15 @@ import 'fees.dart';
 ///    clear. Use `Redact`.
 class BitcoinChainWallet extends CryptoWallet {
   BitcoinChainWallet({
-    required BitcoinNetwork network,
-    required String bip84AccountPath,
+    required this._network,
+    required this._bip84AccountPath,
     required String coinSymbol,
-    required String blockchainName,
-    required String iconAsset,
-    required String connectionAddressExample,
-    required bool isTestnet,
+    required this._blockchainName,
+    required this._iconAsset,
+    required this._connectionAddressExample,
+    required this._isTestnet,
     ElectrumApi? client,
-  }) : _network = network,
-       _bip84AccountPath = bip84AccountPath,
-       _coinSymbol = coinSymbol,
-       _blockchainName = blockchainName,
-       _iconAsset = iconAsset,
-       _connectionAddressExample = connectionAddressExample,
-       _isTestnet = isTestnet,
+  }) : _coinSymbol = coinSymbol,
        _client = client ?? ElectrumClient(coinSymbol: coinSymbol) {
     _client.onConnectionChanged = (connected) {
       if (!connected) {

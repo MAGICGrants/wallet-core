@@ -88,9 +88,8 @@ class BackgroundSyncTaskHandler extends TaskHandler {
         // Closed first, then said: the app opens only once nothing here
         // holds the files.
         unawaited(
-          _change(
-            _release,
-          ).whenComplete(() => FlutterForegroundTask.sendDataToMain(SyncMessage.released)),
+          _change(_release)
+              .whenComplete(() => FlutterForegroundTask.sendDataToMain(SyncMessage.released)),
         );
     }
   }

@@ -38,20 +38,15 @@ part 'erc20_chain_wallet.dart';
 ///    `Redact`.
 class EthereumChainWallet extends CryptoWallet {
   EthereumChainWallet({
-    required int chainId,
+    required this._chainId,
     required String coinSymbol,
-    required String blockchainName,
-    required String iconAsset,
-    required String connectionAddressExample,
-    required bool isTestnet,
+    required this._blockchainName,
+    required this._iconAsset,
+    required this._connectionAddressExample,
+    required this._isTestnet,
     EthereumRpcApi? rpc,
     EthereumExplorerApi? explorer,
-  }) : _chainId = chainId,
-       _coinSymbol = coinSymbol,
-       _blockchainName = blockchainName,
-       _iconAsset = iconAsset,
-       _connectionAddressExample = connectionAddressExample,
-       _isTestnet = isTestnet,
+  }) : _coinSymbol = coinSymbol,
        _rpc = rpc ?? EthereumRpcClient(coinSymbol: coinSymbol),
        _explorer = explorer ?? EthereumExplorerClient();
 

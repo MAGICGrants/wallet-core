@@ -65,9 +65,9 @@ class SeedStore {
     String password,
     Pbkdf2Kdf kdf,
   ) async {
-    final body =
-        jsonDecode(await WalletFileCrypto.decryptFromBase64(blob, password, kdf: kdf))
-            as Map<String, dynamic>;
+    final body = jsonDecode(
+      await WalletFileCrypto.decryptFromBase64(blob, password, kdf: kdf),
+    ) as Map<String, dynamic>;
 
     final mnemonic = body['mnemonic'] as String;
     final passphrase = body['passphrase'] as String? ?? '';

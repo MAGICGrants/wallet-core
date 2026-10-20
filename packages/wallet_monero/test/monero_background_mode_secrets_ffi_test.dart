@@ -51,79 +51,72 @@ void main() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
-  test(
-    'background mode holds no spend key, seed or wallet password; leaving it takes the password back',
-    () {
-      final wm = _ensureAvailable();
-      if (wm == null) return;
+  test('background mode holds no spend key, seed or wallet password; leaving it takes the password back', () {
+    final wm = _ensureAvailable();
+    if (wm == null) return;
 
-      final path = '${tmp.path}/w';
-      final created = monero.WalletManager_createWalletFromPolyseed(
-        wm,
-        path: path,
-        password: _walletPassword,
-        networkType: 0,
-        mnemonic: Polyseed.create().encode(
-          PolyseedLang.getByEnglishName('English'),
-          PolyseedCoin.POLYSEED_MONERO,
-        ),
-        seedOffset: '',
-        newWallet: true,
-        restoreHeight: 0,
-        kdfRounds: 1,
-      );
-      expect(monero.Wallet_errorString(created), isEmpty, reason: 'create the wallet');
-      monero.WalletManager_closeWallet(wm, created, true);
-      // Opened as the app opens it: with the password, which monero_c keeps.
-      final wallet = monero.WalletManager_openWallet(wm, path: path, password: _walletPassword);
-      addTearDown(() => monero.WalletManager_closeWallet(wm, wallet, false));
-      expect(monero.Wallet_errorString(wallet), isEmpty, reason: 'open the wallet');
-      expect(
-        monero.Wallet_setupBackgroundSync(
-          wallet,
-          backgroundSyncType: _syncCustomPassword,
-          walletPassword: _walletPassword,
-          backgroundCachePassword: _cachePassword,
-        ),
-        isTrue,
-        reason: 'set up the view-only cache: ${monero.Wallet_errorString(wallet)}',
-      );
-      expect(monero.Wallet_getPassword(wallet) == _walletPassword, isTrue);
-      final spendKey = monero.Wallet_secretSpendKey(wallet);
-      expect(spendKey, hasLength(64));
+    final path = '${tmp.path}/w';
+    final created = monero.WalletManager_createWalletFromPolyseed(
+      wm,
+      path: path,
+      password: _walletPassword,
+      networkType: 0,
+      mnemonic: Polyseed.create().encode(
+        PolyseedLang.getByEnglishName('English'),
+        PolyseedCoin.POLYSEED_MONERO,
+      ),
+      seedOffset: '',
+      newWallet: true,
+      restoreHeight: 0,
+      kdfRounds: 1,
+    );
+    expect(monero.Wallet_errorString(created), isEmpty, reason: 'create the wallet');
+    monero.WalletManager_closeWallet(wm, created, true);
+    // Opened as the app opens it: with the password, which monero_c keeps.
+    final wallet = monero.WalletManager_openWallet(wm, path: path, password: _walletPassword);
+    addTearDown(() => monero.WalletManager_closeWallet(wm, wallet, false));
+    expect(monero.Wallet_errorString(wallet), isEmpty, reason: 'open the wallet');
+    expect(
+      monero.Wallet_setupBackgroundSync(
+        wallet,
+        backgroundSyncType: _syncCustomPassword,
+        walletPassword: _walletPassword,
+        backgroundCachePassword: _cachePassword,
+      ),
+      isTrue,
+      reason: 'set up the view-only cache: ${monero.Wallet_errorString(wallet)}',
+    );
+    expect(monero.Wallet_getPassword(wallet) == _walletPassword, isTrue);
+    final spendKey = monero.Wallet_secretSpendKey(wallet);
+    expect(spendKey, hasLength(64));
 
-      expect(
-        monero.Wallet_startBackgroundSync(wallet),
-        isTrue,
-        reason: 'enter background mode: ${monero.Wallet_errorString(wallet)}',
-      );
-      expect(
-        monero.Wallet_getPassword(wallet),
-        isEmpty,
-        reason: 'the password opens the keys file',
-      );
-      expect(monero.Wallet_secretSpendKey(wallet), isEmpty, reason: 'no key of zeros either');
-      expect(monero.Wallet_seed(wallet, seedOffset: ''), isEmpty);
-      expect(monero.Wallet_getPolyseed(wallet, passphrase: ''), isEmpty);
-      expect(
-        monero.Wallet_store(wallet, path: '${tmp.path}/copy'),
-        isFalse,
-        reason: 'new files would need the password',
-      );
-      expect(File('${tmp.path}/copy.keys').existsSync(), isFalse);
-      expect(monero.Wallet_store(wallet), isTrue, reason: 'the background cache still saves');
+    expect(
+      monero.Wallet_startBackgroundSync(wallet),
+      isTrue,
+      reason: 'enter background mode: ${monero.Wallet_errorString(wallet)}',
+    );
+    expect(monero.Wallet_getPassword(wallet), isEmpty, reason: 'the password opens the keys file');
+    expect(monero.Wallet_secretSpendKey(wallet), isEmpty, reason: 'no key of zeros either');
+    expect(monero.Wallet_seed(wallet, seedOffset: ''), isEmpty);
+    expect(monero.Wallet_getPolyseed(wallet, passphrase: ''), isEmpty);
+    expect(
+      monero.Wallet_store(wallet, path: '${tmp.path}/copy'),
+      isFalse,
+      reason: 'new files would need the password',
+    );
+    expect(File('${tmp.path}/copy.keys').existsSync(), isFalse);
+    expect(monero.Wallet_store(wallet), isTrue, reason: 'the background cache still saves');
 
-      expect(monero.Wallet_stopBackgroundSync(wallet, 'not-the-password'), isFalse);
-      expect(monero.Wallet_getPassword(wallet), isEmpty, reason: 'a wrong password is not kept');
+    expect(monero.Wallet_stopBackgroundSync(wallet, 'not-the-password'), isFalse);
+    expect(monero.Wallet_getPassword(wallet), isEmpty, reason: 'a wrong password is not kept');
 
-      expect(
-        monero.Wallet_stopBackgroundSync(wallet, _walletPassword),
-        isTrue,
-        reason: 'leave background mode: ${monero.Wallet_errorString(wallet)}',
-      );
-      expect(monero.Wallet_getPassword(wallet) == _walletPassword, isTrue);
-      expect(monero.Wallet_secretSpendKey(wallet) == spendKey, isTrue);
-      expect(monero.Wallet_store(wallet), isTrue);
-    },
-  );
+    expect(
+      monero.Wallet_stopBackgroundSync(wallet, _walletPassword),
+      isTrue,
+      reason: 'leave background mode: ${monero.Wallet_errorString(wallet)}',
+    );
+    expect(monero.Wallet_getPassword(wallet) == _walletPassword, isTrue);
+    expect(monero.Wallet_secretSpendKey(wallet) == spendKey, isTrue);
+    expect(monero.Wallet_store(wallet), isTrue);
+  });
 }

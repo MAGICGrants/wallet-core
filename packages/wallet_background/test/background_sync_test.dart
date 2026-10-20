@@ -520,31 +520,27 @@ void main() {
       expect(r.connects('BTC'), 1);
     });
 
-    test(
-      'a wallet whose Tor never came up is skipped rather than tried anyway',
-      () async {
-        // KNOWN GAP. `runTxNotifier` awaits
-        // `ensureTorConnected()` and discards the bool, so a wallet configured
-        // for Tor is connected anyway when Tor failed to start. The transport
-        // itself fails closed (pinned in wallet_monero), so this is a wasted
-        // window rather than a leak, but the run reports success having synced
-        // nothing, and the next window repeats it.
-        //
-        // Written now and skipped until the fix, so the finding is executable
-        // rather than prose in a report.
-        var asked = 0;
-        BackgroundSync.ensureTorConnected = () async {
-          asked++;
-          return false; // Tor did not come up
-        };
+    test('a wallet whose Tor never came up is skipped rather than tried anyway', () async {
+      // KNOWN GAP. `runTxNotifier` awaits
+      // `ensureTorConnected()` and discards the bool, so a wallet configured
+      // for Tor is connected anyway when Tor failed to start. The transport
+      // itself fails closed (pinned in wallet_monero), so this is a wasted
+      // window rather than a leak, but the run reports success having synced
+      // nothing, and the next window repeats it.
+      //
+      // Written now and skipped until the fix, so the gap is pinned by a test
+      // rather than only described.
+      var asked = 0;
+      BackgroundSync.ensureTorConnected = () async {
+        asked++;
+        return false; // Tor did not come up
+      };
 
-        final r = await runPass([const WalletSpec('BTC', tor: true)]);
+      final r = await runPass([const WalletSpec('BTC', tor: true)]);
 
-        expect(asked, 1);
-        expect(r.connects('BTC'), 0, reason: 'no Tor means no sync for a Tor wallet');
-      },
-      skip: 'M-14/L-15: the answer from ensureTorConnected is discarded',
-    );
+      expect(asked, 1);
+      expect(r.connects('BTC'), 0, reason: 'no Tor means no sync for a Tor wallet');
+    }, skip: 'known gap: the answer from ensureTorConnected is discarded');
   });
 
   group('dispatchBackgroundTask routes each window', () {

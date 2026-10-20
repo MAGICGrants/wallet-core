@@ -412,42 +412,38 @@ final class WebAuthnAssertion extends Struct {
   external Pointer<Uint8> pbAuthenticationResponseJSON;
 }
 
-typedef MakeCredentialNative =
-    Int32 Function(
-      IntPtr hWnd,
-      Pointer<WebAuthnRpEntityInformation>,
-      Pointer<WebAuthnUserEntityInformation>,
-      Pointer<WebAuthnCoseCredentialParameters>,
-      Pointer<WebAuthnClientData>,
-      Pointer<WebAuthnMakeCredentialOptions>,
-      Pointer<Pointer<WebAuthnCredentialAttestation>>,
-    );
-typedef MakeCredentialDart =
-    int Function(
-      int hWnd,
-      Pointer<WebAuthnRpEntityInformation>,
-      Pointer<WebAuthnUserEntityInformation>,
-      Pointer<WebAuthnCoseCredentialParameters>,
-      Pointer<WebAuthnClientData>,
-      Pointer<WebAuthnMakeCredentialOptions>,
-      Pointer<Pointer<WebAuthnCredentialAttestation>>,
-    );
-typedef GetAssertionNative =
-    Int32 Function(
-      IntPtr hWnd,
-      Pointer<Utf16> rpId,
-      Pointer<WebAuthnClientData>,
-      Pointer<WebAuthnGetAssertionOptions>,
-      Pointer<Pointer<WebAuthnAssertion>>,
-    );
-typedef GetAssertionDart =
-    int Function(
-      int hWnd,
-      Pointer<Utf16> rpId,
-      Pointer<WebAuthnClientData>,
-      Pointer<WebAuthnGetAssertionOptions>,
-      Pointer<Pointer<WebAuthnAssertion>>,
-    );
+typedef MakeCredentialNative = Int32 Function(
+  IntPtr hWnd,
+  Pointer<WebAuthnRpEntityInformation>,
+  Pointer<WebAuthnUserEntityInformation>,
+  Pointer<WebAuthnCoseCredentialParameters>,
+  Pointer<WebAuthnClientData>,
+  Pointer<WebAuthnMakeCredentialOptions>,
+  Pointer<Pointer<WebAuthnCredentialAttestation>>,
+);
+typedef MakeCredentialDart = int Function(
+  int hWnd,
+  Pointer<WebAuthnRpEntityInformation>,
+  Pointer<WebAuthnUserEntityInformation>,
+  Pointer<WebAuthnCoseCredentialParameters>,
+  Pointer<WebAuthnClientData>,
+  Pointer<WebAuthnMakeCredentialOptions>,
+  Pointer<Pointer<WebAuthnCredentialAttestation>>,
+);
+typedef GetAssertionNative = Int32 Function(
+  IntPtr hWnd,
+  Pointer<Utf16> rpId,
+  Pointer<WebAuthnClientData>,
+  Pointer<WebAuthnGetAssertionOptions>,
+  Pointer<Pointer<WebAuthnAssertion>>,
+);
+typedef GetAssertionDart = int Function(
+  int hWnd,
+  Pointer<Utf16> rpId,
+  Pointer<WebAuthnClientData>,
+  Pointer<WebAuthnGetAssertionOptions>,
+  Pointer<Pointer<WebAuthnAssertion>>,
+);
 
 /// webauthn.dll. Every function looked up here exists since API version 1.
 final class WebAuthnApi {

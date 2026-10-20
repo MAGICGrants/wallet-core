@@ -50,7 +50,7 @@ an order of magnitude. `Redact` in `wallet_infra` is the toolkit.
 
 ## Getting started
 
-Requires Flutter 3.41.7. The packages form a Dart pub workspace, so one command
+Requires Flutter 3.47.7. The packages form a Dart pub workspace, so one command
 at the root resolves all of them.
 
 ```bash
@@ -146,7 +146,7 @@ Everything is pinned to a commit to make builds verifiable.
 
 - `monero_c`: `magicgrants/monero_c@757bf8e`, a fork carrying
   `Wallet_estimateTransactionFee`.
-- `tor_ffi_plugin`: `cypherstack/tor@c2706ee`.
+- `tor_ffi_plugin`: `cypherstack/tor@e30ed0d` (tag `native-0.2.0`).
 - `bip39`: `cypherstack/stack-bip39@0cd6d54`, which fixes an entropy bug
   upstream still has.
 
@@ -159,7 +159,11 @@ Two of the scripts look odd:
 - `pin-tor-rust-toolchain.sh` patches cargokit after it is fetched. cargokit
   hardcodes `rustup run stable`, a channel that moves over time, and its config
   accepts only a channel name rather than an exact version, so patching the
-  fetched package is the only way to fix the compiler version.
+  fetched package is the only way to fix the compiler version. Since
+  `native-0.2.0` Tor no longer uses cargokit: its native-assets build hook
+  builds with the toolchain pinned in the package's own `rust-toolchain.toml`
+  (Rust 1.99.1) and `cargo --locked`, so the script now matters only for
+  `wallet_openalias`, whose cargokit copy it patches the same way.
 - `fix-linux-moneroc-execstack.sh` clears the executable-stack flag on the Linux
   monero_c library. Without it, hardened kernels refuse to load the library.
 

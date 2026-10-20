@@ -3,8 +3,8 @@ description: "Shared wallet packages for Skylight Wallet and Spice Wallet."
 publish_to: "none"
 
 environment:
-  sdk: 3.11.5
-  flutter: 3.41.7
+  sdk: 3.13.5
+  flutter: 3.47.7
 
 # Dart pub workspaces (Dart >=3.6). One shared lockfile, one `flutter pub get`
 # at the root, packages resolve each other by name without path deps.

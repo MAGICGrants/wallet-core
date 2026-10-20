@@ -309,9 +309,8 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
               if (lastSync != null)
                 Text(
                   i18n.backupLastChecked(
-                    MaterialLocalizations.of(
-                      context,
-                    ).formatTimeOfDay(TimeOfDay.fromDateTime(lastSync)),
+                    MaterialLocalizations.of(context)
+                        .formatTimeOfDay(TimeOfDay.fromDateTime(lastSync)),
                   ),
                   style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
                 ),

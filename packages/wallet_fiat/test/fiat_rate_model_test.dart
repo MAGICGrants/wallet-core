@@ -44,9 +44,8 @@ void main() {
   /// arms in `startService` cannot be cancelled by disposing the model; the
   /// only thing that stops it is re-entering `startService` with the API mode
   /// set to disabled, which is what this does. Worth knowing outside the tests:
-  /// in the background isolate that timer is the "permanent, unattended
-  /// consumer" the audit's M-A describes, and nothing can switch it off short of
-  /// the user changing the setting.
+  /// in the background isolate that timer is a permanent, unattended consumer,
+  /// and nothing can switch it off short of the user changing the setting.
   Future<void> stopPolling(FiatRateModel model) async {
     await FiatRateModel.saveFiatApiMode(FiatApiMode.disabled);
     await model.startService();
@@ -137,7 +136,7 @@ void main() {
 
   group('Tor-only fails closed', () {
     test('with no Tor proxy the fetch fails rather than going clearnet', () async {
-      // The property the audit checked by hand and cleared. Locked in here so a
+      // Checked by hand once and found to hold. Locked in here so a
       // future "helpful" fallback to clearnet has to delete a test that says why
       // it must not exist.
       FiatRates.getTorProxy = () async => null;

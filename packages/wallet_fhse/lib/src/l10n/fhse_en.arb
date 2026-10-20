@@ -355,13 +355,8 @@
       }
     }
   },
-  "appLockUseRecoveryPhraseBody": "If this device can't confirm it's you, your recovery phrase opens {appName} instead.",
+  "appLockUseRecoveryPhraseBody": "You can access your wallet with your recovery phrase. This is only recommended as a recovery mechanism. It is not supposed to be the normal way to access your wallet.",
   "@appLockUseRecoveryPhraseBody": {
-    "placeholders": {
-      "appName": {
-        "type": "String",
-        "example": "Skylight"
-      }
-    }
+    "description": "App Lock's recovery phrase sheet, under its title: the phrase opens the wallet, but only as a fallback."
   }
 }

@@ -122,11 +122,9 @@ void main() {
       expect(wallet.isAddressValid('8${'A' * 94}'), isFalse, reason: 'subaddress shape only');
       expect(wallet.isAddressValid('4${'A' * 105}'), isFalse, reason: 'integrated shape only');
 
-      expect(
-        backend.addressValidCalls.map((c) => c.networkType).toSet(),
-        {0},
-        reason: 'checked against mainnet, the network the wallet is built for',
-      );
+      expect(backend.addressValidCalls.map((c) => c.networkType).toSet(), {
+        0,
+      }, reason: 'checked against mainnet, the network the wallet is built for');
     });
 
     test('an address monero_c accepts is payable, whatever its shape', () {

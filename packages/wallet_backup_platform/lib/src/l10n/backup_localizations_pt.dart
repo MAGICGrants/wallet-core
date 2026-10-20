@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'backup_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -149,8 +150,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
       locale: localeName,
       other:
           '$count pagamentos enviados não têm registro no backup: foram enviados de outra carteira ou antes de o backup existir.',
-      one:
-          '1 pagamento enviado não tem registro no backup: foi enviado de outra carteira ou antes de o backup existir.',
+      one: '1 pagamento enviado não tem registro no backup: foi enviado de outra carteira ou antes de o backup existir.',
     );
     return '$_temp0';
   }

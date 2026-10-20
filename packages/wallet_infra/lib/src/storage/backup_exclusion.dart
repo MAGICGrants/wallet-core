@@ -38,15 +38,31 @@ _CoreFoundation? _coreFoundation;
 typedef _CreateUrlN = Pointer<Void> Function(Pointer<Void>, Pointer<Uint8>, IntPtr, Uint8);
 typedef _CreateUrlD = Pointer<Void> Function(Pointer<Void>, Pointer<Uint8>, int, int);
 // Boolean CFURLSetResourcePropertyForKey(CFURLRef, CFStringRef, CFTypeRef, CFErrorRef*)
-typedef _SetPropN =
-    Uint8 Function(Pointer<Void>, Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>);
-typedef _SetPropD =
-    int Function(Pointer<Void>, Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>);
+typedef _SetPropN = Uint8 Function(
+  Pointer<Void>,
+  Pointer<Void>,
+  Pointer<Void>,
+  Pointer<Pointer<Void>>,
+);
+typedef _SetPropD = int Function(
+  Pointer<Void>,
+  Pointer<Void>,
+  Pointer<Void>,
+  Pointer<Pointer<Void>>,
+);
 // Boolean CFURLCopyResourcePropertyForKey(CFURLRef, CFStringRef, void* (CFTypeRef*), CFErrorRef*)
-typedef _CopyPropN =
-    Uint8 Function(Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>, Pointer<Pointer<Void>>);
-typedef _CopyPropD =
-    int Function(Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>, Pointer<Pointer<Void>>);
+typedef _CopyPropN = Uint8 Function(
+  Pointer<Void>,
+  Pointer<Void>,
+  Pointer<Pointer<Void>>,
+  Pointer<Pointer<Void>>,
+);
+typedef _CopyPropD = int Function(
+  Pointer<Void>,
+  Pointer<Void>,
+  Pointer<Pointer<Void>>,
+  Pointer<Pointer<Void>>,
+);
 // void CFRelease(CFTypeRef)
 typedef _ReleaseN = Void Function(Pointer<Void>);
 typedef _ReleaseD = void Function(Pointer<Void>);

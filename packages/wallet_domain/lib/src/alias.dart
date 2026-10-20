@@ -206,11 +206,10 @@ enum OpenAliasMode {
 /// [NotAnAliasException] for a raw address, and any other exception when
 /// resolution fails, including when Tor is unavailable, which must never
 /// degrade to an unproxied lookup.
-typedef AliasResolver =
-    Future<ResolvedAlias?> Function({
-      required String alias,
-      required String network,
-      required String asset,
-      required int? socksPort,
-      String? nativeAsset,
-    });
+typedef AliasResolver = Future<ResolvedAlias?> Function({
+  required String alias,
+  required String network,
+  required String asset,
+  required int? socksPort,
+  String? nativeAsset,
+});

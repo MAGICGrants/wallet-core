@@ -1011,11 +1011,11 @@ abstract class FhseLocalizations {
   /// **'A longer time leaves {appName} open for longer. Enter the password you unlock it with.'**
   String lockLaterPasswordBody(String appName);
 
-  /// No description provided for @appLockUseRecoveryPhraseBody.
+  /// App Lock's recovery phrase sheet, under its title: the phrase opens the wallet, but only as a fallback.
   ///
   /// In en, this message translates to:
-  /// **'If this device can\'t confirm it\'s you, your recovery phrase opens {appName} instead.'**
-  String appLockUseRecoveryPhraseBody(String appName);
+  /// **'You can access your wallet with your recovery phrase. This is only recommended as a recovery mechanism. It is not supposed to be the normal way to access your wallet.'**
+  String get appLockUseRecoveryPhraseBody;
 }
 
 class _FhseLocalizationsDelegate extends LocalizationsDelegate<FhseLocalizations> {

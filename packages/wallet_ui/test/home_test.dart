@@ -16,9 +16,9 @@ class _Coin implements CryptoWallet {
     this.requiredConfirmations = 10,
     this.averageBlockTime = const Duration(minutes: 2),
     this.canSpendPendingBalance = false,
-    String? feeCoinSymbol,
+    this._feeCoinSymbol,
     this.isTestnet = false,
-  }) : _feeCoinSymbol = feeCoinSymbol;
+  });
 
   @override
   final String coinSymbol;

@@ -67,36 +67,28 @@ void main() {
 
   // Tests run as a debug build. That a release build never falls back rests on
   // the kDebugMode check alone, which a test cannot switch off.
-  test(
-    'a debug build refused the data-protection keychain moves to the login keychain',
-    () async {
-      final keychain = install(_FakeKeychain());
+  test('a debug build refused the data-protection keychain moves to the login keychain', () async {
+    final keychain = install(_FakeKeychain());
 
-      await secureStorage.write(key: 'k', value: 'v');
-      expect(await secureStorage.read(key: 'k'), 'v');
-      expect(await secureStorage.containsKey(key: 'k'), isTrue);
-      await secureStorage.delete(key: 'k');
-      expect(await secureStorage.readAll(), isEmpty);
+    await secureStorage.write(key: 'k', value: 'v');
+    expect(await secureStorage.read(key: 'k'), 'v');
+    expect(await secureStorage.containsKey(key: 'k'), isTrue);
+    await secureStorage.delete(key: 'k');
+    expect(await secureStorage.readAll(), isEmpty);
 
-      // Refused once, then every call goes straight to the login keychain.
-      expect(keychain.asked, ['data-protection', 'login', 'login', 'login', 'login', 'login']);
-    },
-    skip: Platform.isMacOS ? false : 'the fallback exists on macOS only',
-  );
+    // Refused once, then every call goes straight to the login keychain.
+    expect(keychain.asked, ['data-protection', 'login', 'login', 'login', 'login', 'login']);
+  }, skip: Platform.isMacOS ? false : 'the fallback exists on macOS only');
 
-  test(
-    'any other keychain error is thrown, not a reason to fall back',
-    () async {
-      // errSecInteractionNotAllowed: a locked keychain, not a missing entitlement.
-      final keychain = install(_FakeKeychain(refusal: -25308));
+  test('any other keychain error is thrown, not a reason to fall back', () async {
+    // errSecInteractionNotAllowed: a locked keychain, not a missing entitlement.
+    final keychain = install(_FakeKeychain(refusal: -25308));
 
-      await expectLater(
-        secureStorage.write(key: 'k', value: 'v'),
-        throwsA(isA<PlatformException>().having((e) => e.details, 'details', -25308)),
-      );
-      expect(keychain.asked, ['data-protection']);
-      expect(keychain.login, isEmpty);
-    },
-    skip: Platform.isMacOS ? false : 'the fallback exists on macOS only',
-  );
+    await expectLater(
+      secureStorage.write(key: 'k', value: 'v'),
+      throwsA(isA<PlatformException>().having((e) => e.details, 'details', -25308)),
+    );
+    expect(keychain.asked, ['data-protection']);
+    expect(keychain.login, isEmpty);
+  }, skip: Platform.isMacOS ? false : 'the fallback exists on macOS only');
 }

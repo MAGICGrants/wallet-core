@@ -241,9 +241,8 @@ abstract class CryptoWallet with ChangeNotifier {
   /// it again. Callers at once share one attempt.
   Future<bool> leaveViewOnly(String password) {
     if (!_viewOnly) return Future.value(true);
-    return _leavingViewOnly ??= _leaveViewOnly(
-      password,
-    ).whenComplete(() => _leavingViewOnly = null);
+    return _leavingViewOnly ??= _leaveViewOnly(password)
+        .whenComplete(() => _leavingViewOnly = null);
   }
 
   Future<bool> _leaveViewOnly(String password) async {

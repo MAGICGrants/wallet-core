@@ -153,5 +153,5 @@
   "appLockNoDeviceLock": "Este dispositivo não tem bloqueio de tela, então qualquer pessoa com ele em mãos pode abrir a {appName}. Defina um código ou bloqueio de tela nos ajustes do dispositivo.",
   "lockLaterAuthReason": "Confirme sua identidade para bloquear a {appName} com menos frequência",
   "lockLaterPasswordBody": "Um tempo maior deixa a {appName} aberta por mais tempo. Digite a senha que você usa para desbloqueá-la.",
-  "appLockUseRecoveryPhraseBody": "Se este dispositivo não conseguir confirmar sua identidade, sua frase de recuperação abre a {appName}."
+  "appLockUseRecoveryPhraseBody": "Você pode acessar sua carteira com sua frase de recuperação. Isso só é recomendado como mecanismo de recuperação. Não deve ser a forma normal de acessar sua carteira."
 }

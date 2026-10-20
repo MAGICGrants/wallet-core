@@ -239,7 +239,7 @@ class PcPasswords {
 
 /// A file about to be written ([PcBinding.forWrite]).
 class PcWrite {
-  PcWrite._(this.password, {required this.bound, _Binding? made}) : _made = made;
+  PcWrite._(this.password, {required this.bound, this._made});
 
   /// What to encrypt the file with.
   final String password;

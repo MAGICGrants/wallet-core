@@ -1,6 +1,9 @@
 // monero.dart marks almost its whole surface `@Deprecated("TODO")`, the
 // generator's marker for "not yet exercised"; there is no replacement API.
 // ignore_for_file: deprecated_member_use
+// Test support, exported through package:wallet_monero/testing.dart: resetting
+// @visibleForTesting state between checks is the point of this file.
+// ignore_for_file: invalid_use_of_visible_for_testing_member
 
 import 'dart:io';
 import 'dart:isolate';

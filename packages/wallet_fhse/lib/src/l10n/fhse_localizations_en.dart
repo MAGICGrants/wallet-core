@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'fhse_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -580,7 +581,6 @@ class FhseLocalizationsEn extends FhseLocalizations {
   }
 
   @override
-  String appLockUseRecoveryPhraseBody(String appName) {
-    return 'If this device can\'t confirm it\'s you, your recovery phrase opens $appName instead.';
-  }
+  String get appLockUseRecoveryPhraseBody =>
+      'You can access your wallet with your recovery phrase. This is only recommended as a recovery mechanism. It is not supposed to be the normal way to access your wallet.';
 }

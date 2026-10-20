@@ -124,35 +124,39 @@ typedef _OpenProviderN = Int32 Function(Pointer<IntPtr>, Pointer<Utf16>, Uint32)
 typedef _OpenProviderD = int Function(Pointer<IntPtr>, Pointer<Utf16>, int);
 typedef _OpenKeyN = Int32 Function(IntPtr, Pointer<IntPtr>, Pointer<Utf16>, Uint32, Uint32);
 typedef _OpenKeyD = int Function(int, Pointer<IntPtr>, Pointer<Utf16>, int, int);
-typedef _CreateKeyN =
-    Int32 Function(IntPtr, Pointer<IntPtr>, Pointer<Utf16>, Pointer<Utf16>, Uint32, Uint32);
+typedef _CreateKeyN = Int32 Function(
+  IntPtr,
+  Pointer<IntPtr>,
+  Pointer<Utf16>,
+  Pointer<Utf16>,
+  Uint32,
+  Uint32,
+);
 typedef _CreateKeyD = int Function(int, Pointer<IntPtr>, Pointer<Utf16>, Pointer<Utf16>, int, int);
 typedef _SetPropertyN = Int32 Function(IntPtr, Pointer<Utf16>, Pointer<Uint8>, Uint32, Uint32);
 typedef _SetPropertyD = int Function(int, Pointer<Utf16>, Pointer<Uint8>, int, int);
 typedef _FinalizeN = Int32 Function(IntPtr, Uint32);
 typedef _FinalizeD = int Function(int, int);
-typedef _SignHashN =
-    Int32 Function(
-      IntPtr,
-      Pointer<Void>,
-      Pointer<Uint8>,
-      Uint32,
-      Pointer<Uint8>,
-      Uint32,
-      Pointer<Uint32>,
-      Uint32,
-    );
-typedef _SignHashD =
-    int Function(
-      int,
-      Pointer<Void>,
-      Pointer<Uint8>,
-      int,
-      Pointer<Uint8>,
-      int,
-      Pointer<Uint32>,
-      int,
-    );
+typedef _SignHashN = Int32 Function(
+  IntPtr,
+  Pointer<Void>,
+  Pointer<Uint8>,
+  Uint32,
+  Pointer<Uint8>,
+  Uint32,
+  Pointer<Uint32>,
+  Uint32,
+);
+typedef _SignHashD = int Function(
+  int,
+  Pointer<Void>,
+  Pointer<Uint8>,
+  int,
+  Pointer<Uint8>,
+  int,
+  Pointer<Uint32>,
+  int,
+);
 typedef _FreeN = Int32 Function(IntPtr);
 typedef _FreeD = int Function(int);
 

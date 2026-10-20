@@ -46,14 +46,13 @@ class _PluginTransport extends SyncLinkTransport {
 class ForegroundSyncLink {
   ForegroundSyncLink({
     required this.manager,
-    SyncLinkTransport transport = const _PluginTransport(),
+    this._transport = const _PluginTransport(),
     this.claimTimeout = const Duration(seconds: 10),
     @visibleForTesting DateTime Function()? clock,
     @visibleForTesting
     Future<Object?> Function(String name, Map<String, Object> message, Duration timeout)? ask,
     @visibleForTesting Future<void> Function({String? exceptToken})? closeOrphans,
-  }) : _transport = transport,
-       _clock = clock ?? DateTime.now,
+  }) : _clock = clock ?? DateTime.now,
        _closeOrphans =
            closeOrphans ??
            (({exceptToken}) async =>

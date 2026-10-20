@@ -81,7 +81,10 @@ void main() {
 
   testWidgets('another phrase is refused and nothing opens', (tester) async {
     await open(tester);
-    expect(find.textContaining('your recovery phrase opens Test Wallet'), findsOneWidget);
+    expect(
+      find.textContaining('You can access your wallet with your recovery phrase'),
+      findsOneWidget,
+    );
 
     await tester.enterText(find.byType(TextField), 'legal winner thank year');
     await tester.tap(find.text('Unlock'));

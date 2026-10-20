@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'backup_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -149,8 +150,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
       locale: localeName,
       other:
           '$count sent payments have no backup record: they were sent from another wallet, or before backup was available.',
-      one:
-          '1 sent payment has no backup record: it was sent from another wallet, or before backup was available.',
+      one: '1 sent payment has no backup record: it was sent from another wallet, or before backup was available.',
     );
     return '$_temp0';
   }

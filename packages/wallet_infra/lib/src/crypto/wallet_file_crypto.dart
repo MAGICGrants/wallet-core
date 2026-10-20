@@ -139,9 +139,8 @@ class WalletFileCrypto {
       throw FormatException('Unsupported wallet blob version: $version');
     }
 
-    final iterations = ByteData.sublistView(
-      Uint8List.fromList(blob.sublist(offset, offset + 4)),
-    ).getUint32(0, Endian.big);
+    final iterations = ByteData.sublistView(Uint8List.fromList(blob.sublist(offset, offset + 4)))
+        .getUint32(0, Endian.big);
     offset += 4;
 
     if (iterations < minAcceptedIterations || iterations > maxAcceptedIterations) {

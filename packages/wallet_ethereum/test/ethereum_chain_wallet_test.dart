@@ -607,9 +607,11 @@ void main() {
 
     test('a type-2 transaction carries its EIP-2718 type byte', () async {
       await funded();
-      final tx =
-          await wallet.createTx(_theirs, BigInt.parse('1000000000000000000'), false)
-              as EthereumPendingTx;
+      final tx = await wallet.createTx(
+        _theirs,
+        BigInt.parse('1000000000000000000'),
+        false,
+      ) as EthereumPendingTx;
       // Without the byte a node decodes the payload as a legacy transaction,
       // which is a different transaction with a different hash.
       expect(tx.rawHex, startsWith('0x02'));

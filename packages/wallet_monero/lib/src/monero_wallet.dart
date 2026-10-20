@@ -45,9 +45,8 @@ class MoneroPendingTransaction implements PendingTransaction {
 /// something went wrong in production, and the comment at the site says what.
 /// Removing one reintroduces the bug it was written for.
 class MoneroWallet extends CryptoWallet {
-  MoneroWallet({MoneroBackend? backend, @visibleForTesting int? networkTypeOverride})
-    : _backend = backend ?? const FfiMoneroBackend(),
-      _networkTypeOverride = networkTypeOverride;
+  MoneroWallet({MoneroBackend? backend, @visibleForTesting this._networkTypeOverride})
+    : _backend = backend ?? const FfiMoneroBackend();
 
   final MoneroBackend _backend;
 
@@ -1481,7 +1480,7 @@ class MoneroWallet extends CryptoWallet {
             : await client.postUrl(Uri.parse(url));
         final response = await request.close().timeout(const Duration(seconds: 10));
         statusCode = response.statusCode;
-        // Bounded and given a deadline of its own: the audit found this read had
+        // Bounded and given a deadline of its own; this read used to have
         // neither. It is a connection *probe* against an address the user has
         // just typed and has no reason to trust yet; the one read most likely
         // to be pointed at something hostile, and the one that had no limit.

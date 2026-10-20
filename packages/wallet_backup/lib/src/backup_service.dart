@@ -238,7 +238,7 @@ class MetadataBackupService extends ChangeNotifier
   MetadataBackupService({
     required Future<Directory> Function() localRoot,
     Future<Directory> Function()? stateRoot,
-    List<BackupLocationConfig> locations = const [],
+    this._locations = const [],
     this.paymentUploadDelay = const Duration(minutes: 10),
     this.pollInterval = const Duration(minutes: 5),
     this.observeLifecycle = true,
@@ -248,7 +248,6 @@ class MetadataBackupService extends ChangeNotifier
     Random? random,
   }) : _localRoot = localRoot,
        _stateRoot = stateRoot ?? localRoot,
-       _locations = locations,
        _readContacts = readContacts ?? readEncodedContacts,
        _applyContacts = applyContactChanges ?? ContactsSync.applyRemote,
        _clock = clock ?? DateTime.now,
