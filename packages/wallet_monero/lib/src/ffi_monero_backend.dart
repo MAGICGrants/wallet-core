@@ -263,6 +263,20 @@ class FfiMoneroBackend extends MoneroBackend {
   }
 
   @override
+  Future<bool> startBackgroundSync(NativeHandle wallet) {
+    final w = wallet.id;
+    return Isolate.run(() => monero.Wallet_startBackgroundSync(Pointer.fromAddress(w)));
+  }
+
+  @override
+  Future<bool> stopBackgroundSync(NativeHandle wallet, {required String walletPassword}) {
+    final w = wallet.id;
+    return Isolate.run(
+      () => monero.Wallet_stopBackgroundSync(Pointer.fromAddress(w), walletPassword),
+    );
+  }
+
+  @override
   Future<bool> refresh(NativeHandle wallet) {
     final w = wallet.id;
     return Isolate.run(() => monero.Wallet_refresh(Pointer.fromAddress(w)));
@@ -534,6 +548,24 @@ class FfiMoneroBackend extends MoneroBackend {
   Future<String> pendingTxErrorString(NativeHandle tx) {
     final t = tx.id;
     return Isolate.run(() => monero.PendingTransaction_errorString(Pointer.fromAddress(t)));
+  }
+
+  @override
+  Future<List<String>> pendingTxIds(NativeHandle tx) async {
+    final t = tx.id;
+    final joined = await Isolate.run(
+      () => monero.PendingTransaction_txid(Pointer.fromAddress(t), ','),
+    );
+    return [
+      for (final id in joined.split(','))
+        if (id.trim().isNotEmpty) id.trim(),
+    ];
+  }
+
+  @override
+  Future<String> txKey(NativeHandle wallet, String txid) {
+    final w = wallet.id;
+    return Isolate.run(() => monero.Wallet_getTxKey(Pointer.fromAddress(w), txid: txid));
   }
 
   @override

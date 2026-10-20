@@ -44,10 +44,12 @@ void main() {
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('ethereum_wallet');
     SharedPreferencesService.store = MemoryPreferenceStore();
+    // deleteFiles also clears the view-only address from secure storage.
+    WalletSecrets.store = MemorySecretStore();
     WalletAppConfig.install(WalletAppConfig.spice, directories: FixedDirectories(tmp));
     logs = MemoryLogSink();
     WalletLog.sink = logs;
-    WalletLog.isVerbose = () async => true;
+    WalletLog.isLoggingOn = () async => true;
     rpc = FakeEthereumRpc();
     explorer = FakeEthereumExplorer();
     wallet = EthereumWallet(rpc: rpc, explorer: explorer);
@@ -57,6 +59,7 @@ void main() {
     wallet.dispose();
     WalletAppConfig.resetForTesting();
     SharedPreferencesService.resetForTesting();
+    WalletSecrets.resetForTesting();
     TorSettingsService.sharedInstance.resetForTesting();
     WalletLog.resetForTesting();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
@@ -64,7 +67,7 @@ void main() {
 
   /// Everything written to the log sink so far.
   ///
-  /// `walletLog` does not await `log()`, and `log()` awaits the verbose check
+  /// `walletLog` does not await `log()`, and `log()` awaits the logging-on check
   /// before writing; so a line emitted immediately before a `throw` has not
   /// reached the sink yet when the test resumes. Yielding to the event loop
   /// drains the pending microtasks.
@@ -194,6 +197,95 @@ void main() {
       await wallet.deleteFiles();
       expect(await wallet.hasExistingWallet(), isFalse);
       expect(wallet.getPrimaryAddress(), isEmpty);
+    });
+  });
+
+  // The spend wallet locked: the same wallet keeps watching with the address,
+  // in place, and takes its keys back with the password.
+  group('view-only while the spend wallet is locked', () {
+    test('keeps its address, cannot send or store, and comes back', () async {
+      await restore();
+      await wallet.enterViewOnly();
+      expect((wallet.isViewOnly, wallet.isLoaded), (true, true));
+      expect(wallet.getPrimaryAddress(), _me);
+      expect(await wallet.store(), isFalse);
+      await expectLater(wallet.createTx(_theirs, BigInt.one, false), throwsA(anything));
+
+      expect(await wallet.leaveViewOnly(_password), isTrue);
+      expect(wallet.isViewOnly, isFalse);
+      expect(await wallet.store(), isTrue);
+    });
+
+    test('the wrong password leaves it view-only', () async {
+      await restore();
+      await wallet.enterViewOnly();
+      expect(await wallet.leaveViewOnly('wrong'), isFalse);
+      expect(wallet.isViewOnly, isTrue);
+    });
+  });
+
+  group('view-only (an unattended run behind a password guard)', () {
+    MemorySecretStore secrets() => WalletSecrets.store as MemorySecretStore;
+
+    test('keeps the address, not the mnemonic', () async {
+      await restore();
+      await wallet.prepareViewOnly();
+      expect(secrets().values.values.single, _me);
+    });
+
+    test('sees the balance with the address alone, and cannot send', () async {
+      await restore();
+      await wallet.prepareViewOnly();
+
+      final viewRpc = FakeEthereumRpc()..balanceValue = _twoEth;
+      final viewOnly = EthereumWallet(rpc: viewRpc, explorer: FakeEthereumExplorer())
+        ..markUnattended();
+      addTearDown(viewOnly.dispose);
+      expect(await viewOnly.openViewOnly(), isTrue);
+      expect(viewOnly.getPrimaryAddress(), _me);
+
+      await connectAndRefresh(viewOnly);
+      await viewOnly.loadTotalBalance();
+      expect(viewOnly.totalBalanceBaseUnits, _twoEth);
+      expect(await viewOnly.store(), isFalse);
+      expect(viewOnly.createTx(_theirs, BigInt.one, false), throwsA(anything));
+    });
+
+    test('a token sees its balance through the shared address', () async {
+      final dai = DaiWallet(rpc: FakeEthereumRpc(), explorer: FakeEthereumExplorer());
+      addTearDown(dai.dispose);
+      await restore(dai);
+      await dai.prepareViewOnly();
+
+      final fiveDai = BigInt.parse('5000000000000000000');
+      final viewRpc = FakeEthereumRpc()..ethCallValue = _hex(fiveDai);
+      final viewOnly = DaiWallet(rpc: viewRpc, explorer: FakeEthereumExplorer())..markUnattended();
+      addTearDown(viewOnly.dispose);
+      expect(await viewOnly.openViewOnly(), isTrue);
+      await connectAndRefresh(viewOnly);
+      await viewOnly.loadTotalBalance();
+      expect(viewOnly.totalBalanceBaseUnits, fiveDai);
+    });
+
+    test('opens nothing outside an unattended run, or with nothing kept', () async {
+      await restore();
+      await wallet.prepareViewOnly();
+      final attended = EthereumWallet(rpc: FakeEthereumRpc(), explorer: FakeEthereumExplorer());
+      addTearDown(attended.dispose);
+      expect(await attended.openViewOnly(), isFalse);
+
+      await wallet.forgetViewOnly();
+      final unattended = EthereumWallet(rpc: FakeEthereumRpc(), explorer: FakeEthereumExplorer())
+        ..markUnattended();
+      addTearDown(unattended.dispose);
+      expect(await unattended.openViewOnly(), isFalse);
+    });
+
+    test('deleting the wallet forgets the address', () async {
+      await restore();
+      await wallet.prepareViewOnly();
+      await wallet.deleteFiles();
+      expect(secrets().values, isEmpty);
     });
   });
 

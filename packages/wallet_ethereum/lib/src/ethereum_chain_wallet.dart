@@ -119,6 +119,8 @@ class EthereumChainWallet extends CryptoWallet {
   @override
   int get requiredConfirmations => _isTestnet ? 6 : 12;
   @override
+  Duration get averageBlockTime => const Duration(seconds: 12);
+  @override
   bool get isTestnet => _isTestnet;
   @override
   bool get canSpendPendingBalance => false;
@@ -254,7 +256,7 @@ class EthereumChainWallet extends CryptoWallet {
       'address': _address,
       'restore_date_iso': _restoreDate?.toIso8601String(),
     });
-    await file.writeAsString(await WalletFileCrypto.encryptToBase64(json, password));
+    await writeStringAtomic(file, await WalletFileCrypto.encryptToBase64(json, password));
   }
 
   /// This wallet's file holds a mnemonic, an address and a restore date, and
@@ -283,10 +285,62 @@ class EthereumChainWallet extends CryptoWallet {
     }
   }
 
+  // ----- View-only (unattended runs behind a password guard) -----
+
+  /// Where [prepareViewOnly] keeps the address: secure storage, per coin. The
+  /// address is public; an unattended run needs nothing else to check balance
+  /// and history.
+  String get _viewOnlyAddressKey => prefKey('viewOnlyAddress');
+
+  @override
+  Future<void> prepareViewOnly() async {
+    final address = _address;
+    if (address == null || address.isEmpty) return;
+    await WalletSecrets.store.write(_viewOnlyAddressKey, address);
+    walletLog(LogLevel.info, 'Kept the address for unattended checks.');
+  }
+
+  @override
+  Future<void> forgetViewOnly() => WalletSecrets.store.delete(_viewOnlyAddressKey);
+
+  /// The spend wallet locked: keep watching with the address, in place. The
+  /// mnemonic, the derived private key and the password the file re-seals with
+  /// leave memory. [store] then writes nothing, and a send fails as "not
+  /// loaded".
+  @override
+  Future<bool> enterViewOnlyMode() => runWithSyncSuspended(() async {
+    if (_mnemonic == null || _address == null) return false;
+    _mnemonic = null;
+    _privateKeyHex = null;
+    _lastPassword = null;
+    return true;
+  });
+
+  /// Back with the password: the file opens as usual, keys and all.
+  @override
+  Future<bool> leaveViewOnlyMode(String password) => runWithSyncSuspended(() async {
+    await openExisting(password: password);
+    return _mnemonic != null;
+  });
+
+  /// Loads the address only: refresh and history work, and with no mnemonic
+  /// [store] writes nothing and any send fails as "not loaded".
+  @override
+  Future<bool> openViewOnly() async {
+    if (!unattended) return false;
+    final address = await WalletSecrets.store.read(_viewOnlyAddressKey);
+    if (address == null || address.isEmpty) return false;
+    _address = address;
+    setIsLoaded(true);
+    walletLog(LogLevel.info, 'Unattended run: checking with the address only.');
+    return true;
+  }
+
   @override
   Future<void> deleteFiles() async {
     final file = await _walletFile();
     if (await file.exists()) await file.delete();
+    await WalletSecrets.store.delete(_viewOnlyAddressKey);
     _mnemonic = null;
     _address = null;
     _privateKeyHex = null;
@@ -757,6 +811,7 @@ class EthereumChainWallet extends CryptoWallet {
     bool isSweepAll, {
     int priority = 0,
   }) async {
+    await waitForSpendKeys();
     // Order of magnitude only. It still distinguishes dust from a sweep, which
     // is what send bugs turn on.
     walletLog(

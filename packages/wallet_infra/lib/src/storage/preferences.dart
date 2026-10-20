@@ -17,14 +17,19 @@ class SettingsKeys {
   // Marks that the fiat API was turned off *by* disabling global Tor (not by the
   // user), so re-enabling Tor can restore it.
   static const String fiatAutoDisabledByTor = 'fiatAutoDisabledByTor';
+
+  /// How OpenAlias names are looked up: an `OpenAliasMode` name.
+  static const String openAliasMode = 'openAliasMode';
   // The unit the send screen's amount was last typed in: `coin` or `fiat`.
   static const String sendAmountUnit = 'sendAmountUnit';
   static const String notificationsEnabled = 'notificationsEnabled';
   static const String backgroundSyncEnabled = 'backgroundSyncEnabled';
   static const String foregroundSyncEnabled = 'foregroundSyncEnabled';
   static const String backgroundSyncIntervalMinutes = 'backgroundSyncIntervalMinutes';
-  static const String appLockEnabled = 'appLockEnabled';
-  static const String verboseLoggingEnabled = 'verboseLoggingEnabled';
+
+  /// The logging setting ("Diagnostic Logs"): logging on or off. Stored
+  /// under its old name, so the setting survives the rename.
+  static const String loggingEnabled = 'verboseLoggingEnabled';
   static const String contacts = 'contacts';
   static const String torMode = 'torMode';
   static const String torSocksPort = 'torSocksPort';
@@ -128,3 +133,22 @@ class SharedPreferencesService {
 
   static Future<void> remove(String key) => store.remove(key);
 }
+
+/// Whether a sync that runs without the user is on: the periodic "Background
+/// sync" ([SettingsKeys.backgroundSyncEnabled]) or Android's always-on
+/// "Continuous sync" ([SettingsKeys.foregroundSyncEnabled]).
+///
+/// Both run with view-only material only (Monero's view-only background copy,
+/// the LWS view key, a Bitcoin xpub, an Ethereum address), so while either is
+/// on that material is kept ready, whether or not security keys are.
+Future<bool> unattendedSyncEnabled() async =>
+    (await SharedPreferencesService.get<bool>(SettingsKeys.backgroundSyncEnabled) ?? false) ||
+    (await SharedPreferencesService.get<bool>(SettingsKeys.foregroundSyncEnabled) ?? false);
+
+/// Whether anything runs without the user at all: either sync above, or the
+/// incoming-payment notifications ([SettingsKeys.notificationsEnabled]), whose
+/// periodic check opens every light coin (Monero LWS, Bitcoin, Ethereum)
+/// view-only. Those coins' view-only material is kept ready while this is on.
+Future<bool> unattendedRunsEnabled() async =>
+    await unattendedSyncEnabled() ||
+    (await SharedPreferencesService.get<bool>(SettingsKeys.notificationsEnabled) ?? false);

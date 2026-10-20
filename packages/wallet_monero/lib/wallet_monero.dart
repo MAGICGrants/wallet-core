@@ -12,4 +12,5 @@ export 'src/ffi_monero_backend.dart';
 export 'src/height_by_date.dart';
 export 'src/monero_backend.dart';
 export 'src/monero_wallet.dart';
+export 'src/native_wallet_registry.dart';
 export 'src/seed/bip39_legacy.dart';

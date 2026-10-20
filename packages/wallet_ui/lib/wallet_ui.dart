@@ -10,7 +10,20 @@ library;
 export 'design.dart';
 export 'src/export_logs_dialog.dart';
 
+// The mobile home both apps share: layout, cards and the data behind them.
+export 'src/home/balance_chart_card.dart';
+export 'src/home/balance_hero.dart';
+export 'src/home/desktop_home_layout.dart';
+export 'src/home/home_activity.dart';
+export 'src/home/home_card.dart';
+export 'src/home/home_sections.dart';
+export 'src/home/incoming_card.dart';
+export 'src/home/security_checklist.dart';
+export 'src/home/security_checklist_card.dart';
+export 'src/home/wallet_home_view.dart';
+
 // Onboarding views — presentational (injected labels + callbacks).
+export 'src/onboarding/app_lock_cover.dart';
 export 'src/onboarding/create_password_view.dart';
 export 'src/onboarding/create_wallet_view.dart';
 export 'src/onboarding/desktop_generate_seed_view.dart';
@@ -20,9 +33,12 @@ export 'src/onboarding/onboarding_scaffold.dart';
 export 'src/onboarding/restore_wallet_view.dart';
 export 'src/onboarding/scan_from_card.dart';
 export 'src/onboarding/scan_qr_view.dart';
+export 'src/onboarding/seed_word_slot.dart';
 export 'src/onboarding/tor_choice_view.dart';
 export 'src/onboarding/unlock_view.dart';
 export 'src/onboarding/welcome_view.dart';
+export 'src/routing/payment_links.dart';
+export 'src/routing/route_policy.dart';
 
 // Wallet-coupled widgets (depend on wallet_domain / wallet_fiat).
 export 'src/wallet/amount_entry_controller.dart';
@@ -36,10 +52,13 @@ export 'src/wallet/connection_pills.dart';
 export 'src/wallet/format.dart';
 export 'src/wallet/key_reveal_view.dart';
 export 'src/wallet/lws_keys_view.dart';
+export 'src/wallet/open_alias_settings_sheet.dart';
 export 'src/wallet/reauth_gate.dart';
 export 'src/wallet/receive_view.dart';
+export 'src/wallet/seed_verify_view.dart';
 export 'src/wallet/send_view.dart';
 export 'src/wallet/tor_status_pill.dart';
 export 'src/wallet/tx_activity_row.dart';
 export 'src/wallet/tx_details_sheet.dart';
+export 'src/wallet/tx_csv.dart';
 export 'src/wallet/tx_timeline.dart';

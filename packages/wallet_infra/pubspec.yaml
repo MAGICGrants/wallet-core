@@ -24,12 +24,16 @@ dependencies:
   shared_preferences: 2.5.3
   flutter_secure_storage: 9.2.4
   share_plus: 11.1.0
+  # storage/export_file.dart: the save dialog on a desktop OS (a phone shares).
+  file_selector: 1.1.0
   screen_protector: 1.5.2
   # ui/biometric_auth.dart — app-lock device authentication.
   local_auth: 2.3.0
   # ui/notification_service.dart — local incoming-tx notifications.
   flutter_local_notifications: 19.5.0
   path: 1.9.1
+  # storage/backup_exclusion.dart — CoreFoundation through dart:ffi (iOS).
+  ffi: 2.1.4
 
   # WalletFileCrypto: AES-256-GCM (pointycastle) keyed by PBKDF2-HMAC-SHA256
   # (webcrypto -> BoringSSL via FFI, ~10-50x faster than pure Dart).

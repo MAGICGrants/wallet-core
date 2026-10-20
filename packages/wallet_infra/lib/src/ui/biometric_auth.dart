@@ -1,15 +1,13 @@
 import 'package:local_auth/local_auth.dart';
 
 import '../logging.dart';
-import '../storage/preferences.dart';
 
 /// Outcome of a [BiometricAuth.authenticate] prompt.
 ///
 /// [failed] and [error] are kept distinct because callers treat them
 /// differently: an auto-prompt with a password fallback (the unlock screen)
-/// stays silent on [failed] (the user chose to type a password) but surfaces
-/// [error] (something is misconfigured), while an explicit opt-in (the app-lock
-/// toggle) reports both.
+/// stays silent on [failed] (the user declined, and can try again) but surfaces
+/// [error] (a lockout, something misconfigured).
 enum BiometricAuthResult { authenticated, failed, error }
 
 /// Device biometric / passcode authentication, via `local_auth`.
@@ -33,22 +31,34 @@ class BiometricAuth {
     }
   }
 
-  /// [authenticate], but only when the user has app lock on; with it off this
-  /// reports [authenticated] without prompting.
+  /// Whether this device can authenticate its owner at all: biometrics, or a
+  /// passcode or screen lock. False on a device with no lock set up, where
+  /// [authenticate] can only fail.
   ///
-  /// For the re-authentication gates in front of already-unlocked screens (the
-  /// seed and secret keys). Turning app lock off is the user saying this app
-  /// does not ask the device who is holding the phone -- so a prompt that
-  /// appears anyway reads as the setting being ignored. The gates that
-  /// *establish* the lock (the toggle, the unlock screen) still prompt
-  /// unconditionally; they are the setting, not a consequence of it.
+  /// True when the device cannot say: false lets the caller skip a prompt, so
+  /// a check that fails must never be read as "no lock".
+  static Future<bool> isAvailable() async {
+    try {
+      return await LocalAuthentication().isDeviceSupported();
+    } catch (error) {
+      log(LogLevel.warn, 'Could not tell whether device authentication is set up: $error');
+      return true;
+    }
+  }
+
+  /// [authenticate], for App Lock and the checks behind it (the unlock
+  /// screen, the seed, secret keys): always asks, except on a device with no
+  /// lock at all (no passcode, no biometrics), where there is nothing to ask and
+  /// this reports [authenticated]. The app warns about that in Settings.
   ///
-  /// Shared rather than reimplemented per app so the two cannot drift, as with
-  /// `WalletManager.armAppLockRelock`.
-  static Future<BiometricAuthResult> authenticateIfAppLockEnabled({required String reason}) async {
-    final appLockEnabled =
-        await SharedPreferencesService.get<bool>(SettingsKeys.appLockEnabled) ?? false;
-    if (!appLockEnabled) return BiometricAuthResult.authenticated;
-    return authenticate(reason: reason);
+  /// No downgrade: the lock cannot be taken off the device without passing it,
+  /// and a device that has one but cannot use it right now (a lockout) gets
+  /// [error], not a way in. Shared so the apps and their gates cannot drift.
+  static Future<BiometricAuthResult> confirmOwner({required String reason}) async {
+    final result = await authenticate(reason: reason);
+    if (result == BiometricAuthResult.error && !await isAvailable()) {
+      return BiometricAuthResult.authenticated;
+    }
+    return result;
   }
 }

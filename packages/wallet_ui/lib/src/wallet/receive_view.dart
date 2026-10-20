@@ -113,6 +113,26 @@ class ReceiveView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final name = coinName;
+    final Widget? coinCard = name == null
+        ? null
+        : (assetOptions.length > 1 && onSelectAsset != null)
+        ? ReceiveAssetSelectorCard(
+            coinSymbol: coinSymbol,
+            iconAsset: iconAsset,
+            coinName: name,
+            blockchainSubtitle: blockchainSubtitle,
+            options: assetOptions,
+            onSelect: onSelectAsset!,
+          )
+        : _CoinCard(
+            coinSymbol: coinSymbol,
+            iconAsset: iconAsset,
+            coinName: name,
+            blockchainSubtitle: blockchainSubtitle,
+          );
+    final spinner = Center(child: CircularProgressIndicator(color: BrandColors.primary));
+
     return Scaffold(
       backgroundColor: BrandColors.paper,
       body: SafeArea(
@@ -141,30 +161,22 @@ class ReceiveView extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: !ready
-                      ? Center(child: CircularProgressIndicator(color: BrandColors.primary))
+                  child: !ready && coinCard == null
+                      ? spinner
+                      // The asset card stays while the address loads, so a
+                      // chain whose address is not ready can still be switched
+                      // away from.
+                      : !ready
+                      ? ListView(
+                          padding: const EdgeInsets.fromLTRB(16, 22, 16, 24),
+                          children: [coinCard!, const SizedBox(height: 64), spinner],
+                        )
                       // The viewport's height caps how far the QR may grow.
                       : LayoutBuilder(
                           builder: (context, viewport) => ListView(
                             padding: const EdgeInsets.fromLTRB(16, 22, 16, 24),
                             children: [
-                              if (coinName != null)
-                                if (assetOptions.length > 1 && onSelectAsset != null)
-                                  ReceiveAssetSelectorCard(
-                                    coinSymbol: coinSymbol,
-                                    iconAsset: iconAsset,
-                                    coinName: coinName!,
-                                    blockchainSubtitle: blockchainSubtitle,
-                                    options: assetOptions,
-                                    onSelect: onSelectAsset!,
-                                  )
-                                else
-                                  _CoinCard(
-                                    coinSymbol: coinSymbol,
-                                    iconAsset: iconAsset,
-                                    coinName: coinName!,
-                                    blockchainSubtitle: blockchainSubtitle,
-                                  ),
+                              ?coinCard,
                               if (tabLabels != null) ...[
                                 const SizedBox(height: 14),
                                 BrandSegmented(

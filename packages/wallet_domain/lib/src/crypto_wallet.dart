@@ -9,6 +9,7 @@ import 'alias.dart';
 import 'amounts.dart';
 import 'app_config.dart';
 import 'background_sync_mode.dart';
+import 'metadata_backup.dart';
 import 'payment_uri.dart';
 import 'seed/seed.dart';
 import 'stores/tx_notification_store.dart';
@@ -139,6 +140,10 @@ abstract class CryptoWallet with ChangeNotifier {
 
   bool get canSpendPendingBalance => false;
 
+  /// The chain's usual time between blocks, for "unlocks in about…" estimates.
+  /// Null where no estimate is worth showing.
+  Duration? get averageBlockTime => null;
+
   bool isTxConfirmed(TxDetails tx) => tx.height != -1 && tx.confirmations >= requiredConfirmations;
 
   // ----- Unattended runs -----
@@ -187,19 +192,99 @@ abstract class CryptoWallet with ChangeNotifier {
     _unattended = true;
   }
 
+  // ----- View-only while the spend wallet is locked -----
+
+  bool _viewOnly = false;
+  Future<bool>? _leavingViewOnly;
+
+  /// True while the spend wallet is locked and this wallet holds no spending
+  /// key and not the wallet password, only what it needs to keep watching
+  /// ([enterViewOnly]). Sends fail, and a scan's approximate balance is not
+  /// written to the display snapshot.
+  bool get isViewOnly => _viewOnly;
+
+  /// The spend wallet locked ([WalletManager.lockSpend]): every spending key
+  /// and the wallet password leave memory. A coin that can keep watching
+  /// without them ([enterViewOnlyMode]) stays loaded and syncing; any other
+  /// closes. The cache is sealed with the wallet password, so it is written out
+  /// first and its password dropped. Nothing to do for a wallet that is not
+  /// loaded, already view-only, or part of an unattended run (view-only from
+  /// the start).
+  Future<void> enterViewOnly() async {
+    if (!_isLoaded || _viewOnly || _unattended) return;
+    await persistCache();
+    var kept = false;
+    try {
+      kept = await enterViewOnlyMode();
+    } catch (e) {
+      walletLog(LogLevel.warn, 'Could not stay open view-only; closing: $e');
+    }
+    if (!kept) return close();
+    _cachePassword = null;
+    _viewOnly = true;
+    notifyListeners();
+  }
+
+  /// Back from [enterViewOnly] with [password]: true once this wallet holds
+  /// its keys again. False leaves it view-only; the caller closes it and opens
+  /// it again. Callers at once share one attempt.
+  Future<bool> leaveViewOnly(String password) {
+    if (!_viewOnly) return Future.value(true);
+    return _leavingViewOnly ??= _leaveViewOnly(
+      password,
+    ).whenComplete(() => _leavingViewOnly = null);
+  }
+
+  Future<bool> _leaveViewOnly(String password) async {
+    var ok = false;
+    try {
+      ok = await leaveViewOnlyMode(password);
+    } catch (e) {
+      walletLog(LogLevel.warn, 'Could not take the keys back: $e');
+    }
+    if (!ok) return false;
+    _cachePassword = password;
+    _viewOnly = false;
+    notifyListeners();
+    return true;
+  }
+
+  /// Waits for a [leaveViewOnly] under way. A coin's [createTx] starts with
+  /// it, so a send made just after an unlock signs with the keys rather than
+  /// failing for want of them.
+  @protected
+  Future<void> waitForSpendKeys() async {
+    try {
+      await _leavingViewOnly;
+    } catch (_) {}
+  }
+
+  /// A coin's half of [enterViewOnly]: drop every spending key and keep
+  /// watching, returning true, or return false to be closed instead (the
+  /// default).
+  @protected
+  Future<bool> enterViewOnlyMode() async => false;
+
+  /// A coin's half of [leaveViewOnly]: take the keys back with [password].
+  @protected
+  Future<bool> leaveViewOnlyMode(String password) async => false;
+
   @protected
   void walletLog(LogLevel level, String message, {Map<String, dynamic>? meta}) {
     log(level, message, meta: meta, coin: coinSymbol);
   }
 
   /// Resolves [alias] to a payable record for this coin, DNSSEC-validated and
-  /// routed over Tor.
+  /// routed over Tor, or directly if the user chose clearnet lookups
+  /// ([OpenAliasMode]).
   ///
   /// Returns null when this coin has no alias support, no resolver is
   /// installed, or the alias publishes nothing this wallet can pay. Throws
-  /// [NotAnAliasException] when the input is a raw address, and throws when Tor
-  /// is unavailable; a lookup that names who the user is about to pay must
-  /// never fall back to an unproxied query.
+  /// [AliasLookupDisabledException] when the user turned lookups off (checked
+  /// first), [NotAnAliasException] when the input is a raw address, and
+  /// throws when Tor-only lookups find Tor unavailable; a lookup that names
+  /// who the user is about to pay never falls back to an unproxied query the
+  /// user did not choose.
   Future<ResolvedAlias?> resolveAlias(String alias) async {
     final resolver = aliasResolver;
     if (aliasNetwork.isEmpty || resolver == null) return null;
@@ -207,10 +292,21 @@ abstract class CryptoWallet with ChangeNotifier {
     // The alias identifies a counterparty: fingerprint, never plaintext.
     walletLog(LogLevel.info, 'alias: resolving ${Redact.id(alias)}');
 
-    final proxy = await TorSettingsService.sharedInstance.getProxy();
-    if (proxy == null) {
-      walletLog(LogLevel.warn, 'alias: Tor proxy unavailable');
-      throw Exception('Tor is required to resolve an alias.');
+    final int? socksPort;
+    switch (await OpenAliasMode.load()) {
+      case OpenAliasMode.disabled:
+        walletLog(LogLevel.info, 'alias: lookups are turned off');
+        throw const AliasLookupDisabledException();
+      case OpenAliasMode.clearnet:
+        walletLog(LogLevel.info, 'alias: resolving without Tor (clearnet chosen)');
+        socksPort = null;
+      case OpenAliasMode.torOnly:
+        final proxy = await TorSettingsService.sharedInstance.getProxy();
+        if (proxy == null) {
+          walletLog(LogLevel.warn, 'alias: Tor proxy unavailable');
+          throw Exception('Tor is required to resolve an alias.');
+        }
+        socksPort = proxy.port;
     }
 
     final ResolvedAlias? resolved;
@@ -220,7 +316,7 @@ abstract class CryptoWallet with ChangeNotifier {
         network: aliasNetwork,
         asset: aliasAsset,
         nativeAsset: aliasNativeAsset,
-        socksPort: proxy.port,
+        socksPort: socksPort,
       );
     } catch (e) {
       // The resolver decides *why* a lookup failed -- an unsigned or broken
@@ -321,6 +417,9 @@ abstract class CryptoWallet with ChangeNotifier {
   BigInt? _totalBalanceBaseUnits;
 
   List<TxDetails> _txHistory = [];
+
+  /// Bumped every time [_txHistory] is replaced; see [txHistoryRevision].
+  int _txHistoryRevision = 0;
   bool _isLoaded = false;
 
   Timer? _connectionTimer;
@@ -421,6 +520,15 @@ abstract class CryptoWallet with ChangeNotifier {
       units == null ? null : units.toDouble() / BigInt.from(10).pow(baseUnitDecimals).toDouble();
 
   List<TxDetails> get txHistory => List.unmodifiable(_txHistory);
+
+  /// Changes whenever [txHistory] does. [txHistory] copies the list on every
+  /// read, so a screen that derives something from it (a chart, a summary)
+  /// keys a cache on this and reads the history only when it moved.
+  int get txHistoryRevision => _txHistoryRevision;
+
+  /// The newest transaction, without copying the history. Every coin keeps its
+  /// history newest first.
+  TxDetails? get newestTx => _txHistory.isEmpty ? null : _txHistory.first;
   bool get isLoaded => _isLoaded;
 
   /// Opened or restored, enabled, and with a server configured.
@@ -463,6 +571,23 @@ abstract class CryptoWallet with ChangeNotifier {
   Future<bool> hasExistingWallet();
 
   Future<void> openExisting({required String password});
+
+  /// Opens whatever this coin can open without the wallet password, for an
+  /// unattended run behind an engaged `WalletPasswordGuard`; false when there
+  /// is nothing. The default has nothing: the whole wallet is behind the
+  /// password.
+  ///
+  /// Only for an unattended run ([markUnattended] first), never in place of
+  /// [openExisting] in the foreground. What it opens holds no spend key.
+  Future<bool> openViewOnly() async => false;
+
+  /// Persists, while the wallet is open, what [openViewOnly] needs later: the
+  /// moment a `WalletPasswordGuard` engages and the keystore stops holding the
+  /// password. The default keeps nothing.
+  Future<void> prepareViewOnly() async {}
+
+  /// Removes what [prepareViewOnly] kept, when the guard is released.
+  Future<void> forgetViewOnly() async {}
 
   /// Restores from [seed], starting the scan at [from].
   ///
@@ -933,7 +1058,7 @@ abstract class CryptoWallet with ChangeNotifier {
     if (txJson != null && txJson.isNotEmpty) {
       // parseCachedTxHistory never throws; the guard is for compute() itself.
       try {
-        _txHistory = await compute(parseCachedTxHistory, txJson);
+        _setTxHistory(await compute(parseCachedTxHistory, txJson));
       } catch (e) {
         walletLog(LogLevel.warn, 'Failed to load cached tx history: $e');
       }
@@ -946,9 +1071,10 @@ abstract class CryptoWallet with ChangeNotifier {
     if (!isActive || _unlockedBalanceBaseUnits == null) return;
 
     // An unattended run may be holding a view-only wallet whose balance is
-    // approximate; see [unattended]. The snapshot is what the next cold start
-    // shows before any sync, so it must only ever come from the real wallet.
-    if (_unattended && backgroundSyncMode == BackgroundSyncMode.scan) return;
+    // approximate; see [unattended]. So may a locked spend wallet
+    // ([isViewOnly]). The snapshot is what the next cold start shows before any
+    // sync, so it must only ever come from the real wallet.
+    if ((_unattended || _viewOnly) && backgroundSyncMode == BackgroundSyncMode.scan) return;
 
     cachePut('cachedUnlockedBalanceUnits', _unlockedBalanceBaseUnits.toString());
     cachePut(
@@ -990,6 +1116,11 @@ abstract class CryptoWallet with ChangeNotifier {
 
   // ----- Tx history -----
 
+  void _setTxHistory(List<TxDetails> history) {
+    _txHistory = history;
+    _txHistoryRevision++;
+  }
+
   /// Re-reads the transaction list.
   ///
   /// Note what this deliberately does *not* do: touch notification state. Every
@@ -1014,11 +1145,13 @@ abstract class CryptoWallet with ChangeNotifier {
   /// not values that can legitimately become empty. A wallet that has the
   /// fields always wins; nothing here can overwrite a fresh reading.
   ///
-  /// This recovers only what this install saw while in the other mode. A wallet
-  /// restored straight onto a node has nothing to carry, and still shows no
-  /// destinations for transactions it did not send.
+  /// What this install saw while in the other mode is the first source. The
+  /// second is the metadata backup ([MetadataBackup]), which is what gives a
+  /// wallet restored from its seed the destinations and keys of payments it
+  /// sent before.
   List<TxDetails> _withCarriedFields(List<TxDetails> fresh) {
-    if (_txHistory.isEmpty || fresh.isEmpty) return fresh;
+    final backup = MetadataBackup.instance;
+    if (fresh.isEmpty || (_txHistory.isEmpty && backup == null)) return fresh;
 
     Map<String, TxDetails>? previous;
     var out = fresh;
@@ -1031,10 +1164,22 @@ abstract class CryptoWallet with ChangeNotifier {
 
       previous ??= {for (final old in _txHistory) old.hash: old};
       final old = previous[tx.hash];
-      if (old == null) continue;
 
-      final recipients = wantsRecipients && old.recipients.isNotEmpty ? old.recipients : null;
-      final key = wantsKey && old.key.isNotEmpty ? old.key : null;
+      var recipients = wantsRecipients && old != null && old.recipients.isNotEmpty
+          ? old.recipients
+          : null;
+      var key = wantsKey && old != null && old.key.isNotEmpty ? old.key : null;
+
+      if (tx.direction == txDirectionOutgoing &&
+          ((wantsRecipients && recipients == null) || (wantsKey && key == null))) {
+        final saved = backup?.outgoingPayment(this, tx.hash);
+        if (saved != null) {
+          if (wantsRecipients && recipients == null && saved.recipients.isNotEmpty) {
+            recipients = saved.recipients;
+          }
+          if (wantsKey && key == null && saved.txKey.isNotEmpty) key = saved.txKey;
+        }
+      }
       if (recipients == null && key == null) continue;
 
       // Copied only once something is actually carried, so the common refresh
@@ -1066,7 +1211,8 @@ abstract class CryptoWallet with ChangeNotifier {
     // unless this coin's history is a local record set, where an empty read is
     // authoritative (a tx was removed) rather than a failed fetch.
     if (newHistory.isNotEmpty || previousLength == 0 || emptyTxHistoryIsAuthoritative) {
-      _txHistory = newHistory;
+      _setTxHistory(newHistory);
+      if (newHistory.isNotEmpty) MetadataBackup.instance?.historyChanged(this);
     }
 
     if ((hadGrowth || hasPendingTx) && persistCount) {
@@ -1412,6 +1558,42 @@ abstract class CryptoWallet with ChangeNotifier {
     setIsLoaded(false);
   }
 
+  /// Checkpoints and closes the open wallet, then forgets the cache password
+  /// and everything decrypted with it. Files and settings stay; the next
+  /// [openExisting] needs the password again. [WalletManager.fullyLock] calls
+  /// this on every wallet.
+  ///
+  /// Under [runWithSyncSuspended] for the reason [delete] is: the close frees
+  /// the native handle, and a timer tick inside a native call at that moment
+  /// is a use-after-free. For the same reason two callers at once share one
+  /// close: a second concurrent store and close of the same handle would be one
+  /// too.
+  Future<void> close() => _closing ??= _close().whenComplete(() => _closing = null);
+
+  Future<void>? _closing;
+
+  Future<void> _close() async {
+    await runWithSyncSuspended(() async {
+      if (_isLoaded) {
+        await pauseSyncAndStore();
+        await persistCache();
+      }
+      await closeFiles();
+    });
+    _cachePassword = null;
+    _cache = {};
+    _cacheLoaded = false;
+    _cacheDirty = false;
+    _cacheRevisions.clear();
+    _viewOnly = false;
+    setIsLoaded(false);
+  }
+
+  /// Closes the native wallet, deleting nothing. A coin with no native wallet
+  /// has nothing to close.
+  @protected
+  Future<void> closeFiles() async {}
+
   Future<void> clearPersistedState() async {
     for (final k in ['walletRestoreHeight', 'txHistoryCount']) {
       await SharedPreferencesService.remove(prefKey(k));
@@ -1451,6 +1633,21 @@ abstract class CryptoWallet with ChangeNotifier {
   @protected
   Future<void> pauseSync() async {}
 
+  /// Records a zero balance for a wallet just created from a freshly generated
+  /// seed, which cannot have received anything yet.
+  ///
+  /// Without it the balance stays unknown until the first sync loads stats,
+  /// and a coin that defers stats until synced (Monero in node mode) leaves
+  /// the home screen on a skeleton, fiat included, for the whole initial scan.
+  /// The first [loadAllStats] replaces it with real figures. Only for a seed
+  /// generated this session; on a restored one zero would be a lie.
+  void markFreshlyGenerated() {
+    if (!_isLoaded) return;
+    _unlockedBalanceBaseUnits ??= BigInt.zero;
+    _totalBalanceBaseUnits ??= BigInt.zero;
+    notifyListeners();
+  }
+
   // ----- Protected state mutators -----
 
   @protected
@@ -1463,7 +1660,7 @@ abstract class CryptoWallet with ChangeNotifier {
       _syncedHeight = null;
       _unlockedBalanceBaseUnits = null;
       _totalBalanceBaseUnits = null;
-      _txHistory = [];
+      _setTxHistory([]);
     }
     notifyListeners();
   }

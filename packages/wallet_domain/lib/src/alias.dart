@@ -13,6 +13,8 @@
 /// `wallet_openalias`; the app installs it.
 library;
 
+import 'package:wallet_infra/wallet_infra.dart' show SettingsKeys, SharedPreferencesService;
+
 /// A payable record resolved from an alias.
 ///
 /// Carries more than an address on purpose. OA2 records can name the recipient
@@ -152,6 +154,41 @@ class NotAnAliasException implements Exception {
   String toString() => 'NotAnAliasException: "$input" is an address, not an alias';
 }
 
+/// Thrown when the user turned OpenAlias lookups off ([OpenAliasMode.disabled]).
+/// Distinct from a failed lookup, so a send screen can say so.
+class AliasLookupDisabledException implements Exception {
+  const AliasLookupDisabledException();
+
+  @override
+  String toString() => 'AliasLookupDisabledException: OpenAlias lookups are turned off';
+}
+
+/// How OpenAlias names are looked up: the user's choice in Settings > Security
+/// and privacy, like the price source. Tor-only unless they choose otherwise.
+enum OpenAliasMode {
+  /// Over Tor: the DNS resolvers never see this device's IP address.
+  torOnly,
+
+  /// Directly: the DNS resolvers see this device's IP address and the name
+  /// looked up. The answer is still DNSSEC-validated.
+  clearnet,
+
+  /// No lookups; payments go to addresses only.
+  disabled;
+
+  static Future<OpenAliasMode> load() async {
+    final saved = await SharedPreferencesService.get<String>(SettingsKeys.openAliasMode);
+    for (final mode in values) {
+      if (mode.name == saved) return mode;
+    }
+    return torOnly;
+  }
+
+  Future<void> save() async {
+    await SharedPreferencesService.set<String>(SettingsKeys.openAliasMode, name);
+  }
+}
+
 /// Resolves [alias], an FQDN or an email-style `name@domain`, to a payable
 /// record, over Tor, requiring a DNSSEC-secure answer.
 ///
@@ -160,6 +197,10 @@ class NotAnAliasException implements Exception {
 /// omitting `asset` denotes. All three are separate because OA2 separates them;
 /// collapsing them into one "asset" string is a v1 assumption that does not
 /// survive contact with the spec.
+///
+/// [socksPort] is the Tor SOCKS port, or null when the user chose clearnet
+/// lookups ([OpenAliasMode.clearnet]); only then may the resolver query
+/// directly.
 ///
 /// Returns null when the alias publishes nothing this wallet can pay. Throws
 /// [NotAnAliasException] for a raw address, and any other exception when
@@ -170,6 +211,6 @@ typedef AliasResolver =
       required String alias,
       required String network,
       required String asset,
-      required int socksPort,
+      required int? socksPort,
       String? nativeAsset,
     });

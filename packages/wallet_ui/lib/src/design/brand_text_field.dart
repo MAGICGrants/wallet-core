@@ -18,6 +18,10 @@ class BrandTextField extends StatelessWidget {
   final Widget? suffix;
   final int? maxLines;
 
+  /// A secret is typed here (a recovery phrase): no autocorrect, no
+  /// suggestions, and nothing for the keyboard to learn or remember.
+  final bool sensitive;
+
   const BrandTextField({
     super.key,
     this.controller,
@@ -30,6 +34,7 @@ class BrandTextField extends StatelessWidget {
     this.onSubmitted,
     this.suffix,
     this.maxLines = 1,
+    this.sensitive = false,
   });
 
   @override
@@ -41,6 +46,11 @@ class BrandTextField extends StatelessWidget {
       onChanged: onChanged,
       onSubmitted: onSubmitted,
       maxLines: obscureText ? 1 : maxLines,
+      autocorrect: !sensitive,
+      enableSuggestions: !sensitive,
+      enableIMEPersonalizedLearning: !sensitive,
+      smartDashesType: sensitive ? SmartDashesType.disabled : null,
+      smartQuotesType: sensitive ? SmartQuotesType.disabled : null,
       style: BrandText.body,
       decoration: InputDecoration(
         labelText: label,

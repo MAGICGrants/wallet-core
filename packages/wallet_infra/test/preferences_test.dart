@@ -79,23 +79,48 @@ void main() {
     expect(SharedPreferencesService.store, isA<SharedPreferencesStore>());
   });
 
-  test('verbose logging can be wired to preferences', () async {
+  test('the logging setting can be wired to preferences', () async {
     // The concrete reason this boundary is injectable: log() consults the
-    // user's verbose setting on every info record, so a plugin-backed store
+    // user's logging setting on every info record, so a plugin-backed store
     // would make every logging test need a device.
-    await SharedPreferencesService.set<bool>('verboseLoggingEnabled', true);
-    WalletLog.isVerbose = () async =>
-        await SharedPreferencesService.get<bool>('verboseLoggingEnabled') ?? false;
+    await SharedPreferencesService.set<bool>(SettingsKeys.loggingEnabled, true);
+    WalletLog.isLoggingOn = () async =>
+        await SharedPreferencesService.get<bool>(SettingsKeys.loggingEnabled) ?? false;
     final sink = MemoryLogSink();
     WalletLog.sink = sink;
 
     await log(LogLevel.info, 'visible');
     expect(sink.records, hasLength(1));
 
-    await SharedPreferencesService.set<bool>('verboseLoggingEnabled', false);
+    await SharedPreferencesService.set<bool>(SettingsKeys.loggingEnabled, false);
     await log(LogLevel.info, 'hidden');
     expect(sink.records, hasLength(1));
 
     WalletLog.resetForTesting();
+  });
+
+  group('what runs without the user', () {
+    setUp(() => SharedPreferencesService.store = MemoryPreferenceStore());
+    tearDown(SharedPreferencesService.resetForTesting);
+
+    test('nothing by default', () async {
+      expect(await unattendedSyncEnabled(), isFalse);
+      expect(await unattendedRunsEnabled(), isFalse);
+    });
+
+    test('either sync toggle: a sync, and so a run', () async {
+      for (final key in [SettingsKeys.backgroundSyncEnabled, SettingsKeys.foregroundSyncEnabled]) {
+        SharedPreferencesService.store = MemoryPreferenceStore();
+        await SharedPreferencesService.set<bool>(key, true);
+        expect(await unattendedSyncEnabled(), isTrue, reason: key);
+        expect(await unattendedRunsEnabled(), isTrue, reason: key);
+      }
+    });
+
+    test('notifications alone: a run that checks, not a sync that scans', () async {
+      await SharedPreferencesService.set<bool>(SettingsKeys.notificationsEnabled, true);
+      expect(await unattendedSyncEnabled(), isFalse);
+      expect(await unattendedRunsEnabled(), isTrue);
+    });
   });
 }

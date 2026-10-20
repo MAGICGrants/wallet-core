@@ -122,6 +122,7 @@ class Erc20ChainWallet extends EthereumChainWallet {
     bool isSweepAll, {
     int priority = 0,
   }) async {
+    await waitForSpendKeys();
     if (_mnemonic == null || _address == null) throw Exception('Wallet is not loaded.');
     if (!_rpc.isConfigured) throw Exception('Not connected to an RPC endpoint.');
     if (!isAddressValid(destinationAddress)) throw Exception('Invalid Ethereum address.');

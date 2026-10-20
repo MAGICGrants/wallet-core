@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:ui' show IsolateNameServer;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_background/wallet_background.dart';
@@ -28,6 +30,7 @@ class WalletSpec {
     this.historyThrows,
     this.synced = true,
     this.heightScript,
+    this.viewOnly = true,
   });
 
   final String symbol;
@@ -45,6 +48,9 @@ class WalletSpec {
   /// [FakeBackgroundWallet.heightScript].
   final List<int>? heightScript;
 
+  /// False: the coin's view-only material is not set up yet.
+  final bool viewOnly;
+
   FakeBackgroundWallet build() =>
       FakeBackgroundWallet(
           symbol,
@@ -56,6 +62,7 @@ class WalletSpec {
           historyThrows: historyThrows,
         )
         ..synced = synced
+        ..hasViewOnly = viewOnly
         ..heightScript = heightScript == null ? null : [...heightScript!];
 }
 
@@ -106,13 +113,13 @@ void main() {
     WalletSecrets.store = MemorySecretStore();
     WalletAppConfig.install(WalletAppConfig.spice, directories: FixedDirectories(tmp));
     WalletLog.sink = MemoryLogSink();
-    WalletLog.isVerbose = () async => true;
-    // `runTxNotifier` opens with no password argument, so it depends on the
-    // mobile password already being in the keystore, which is the real shape: a
-    // background isolate has no user to ask. Pinned to the mobile model, since
-    // the test host is a desktop OS, which keeps no password there.
+    WalletLog.isLoggingOn = () async => true;
+    // A kept password is in the keystore, as on a phone with security keys
+    // off, so the tests also show a background run never reads it: every run
+    // opens view-only. Pinned to the mobile model, since the default follows
+    // the test host, and Linux keeps no password there.
     WalletSecrets.holdsWalletPassword = true;
-    await storeMobileWalletPassword('background-test-password');
+    await storeKeystoreWalletPassword('background-test-password');
     // Tor resolvable and instant. The default mode is `builtIn`, whose
     // `getProxy()` waits on a Tor daemon that never starts under `flutter test`
     //; every Tor case then failed on a 30-second timeout rather than on
@@ -154,6 +161,172 @@ void main() {
     BackgroundSync.coins = registry.build;
     return registry;
   }
+
+  // Every run without the user is view-only, keys or not: the kept password
+  // stays in the keystore, unread.
+  // One holder at a time: in one Android process a periodic run and the app
+  // would be two writers on the same files.
+  group('the periodic run and the app take turns', () {
+    test('a run skips while the app holds the wallets', () async {
+      final r = _Registry([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+      BackgroundSync.coins = r.build;
+      expect(
+        await runTxNotifier(budget: Duration.zero, anotherHolderHasWallets: () async => true),
+        isTrue,
+      );
+      expect(r.opens('BTC'), 0);
+      expect(r.opens('XMR'), 0);
+      expect(IsolateNameServer.lookupPortByName(WalletHolders.periodicRunName), isNull);
+    });
+
+    test('a run that holds them lets go when the app claims them', () async {
+      final r = _Registry([
+        WalletSpec(
+          'XMR',
+          type: 'node',
+          synced: false,
+          heightScript: [for (var h = 1; h < 100000; h++) h],
+        ),
+      ]);
+      BackgroundSync.coins = r.build;
+      final run = runTxNotifier(
+        budget: const Duration(seconds: 30),
+        pollInterval: const Duration(milliseconds: 5),
+        anotherHolderHasWallets: () async => false,
+      );
+      // The run registers itself and is scanning.
+      while (r.opens('XMR') == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+
+      final answer = await WalletHolders.ask(
+        WalletHolders.periodicRunName,
+        SyncMessage.hello,
+        timeout: const Duration(seconds: 10),
+      );
+      expect(answer, SyncMessage.released);
+      expect(r.last('XMR').isLoaded, isFalse, reason: 'closed before the answer');
+      expect(r.last('XMR').calls, contains('store'));
+      expect(await run, isTrue);
+      expect(IsolateNameServer.lookupPortByName(WalletHolders.periodicRunName), isNull);
+    });
+
+    test('every run closes its wallets at the end: none outlives it in the process', () async {
+      final r = await runPass([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+      expect(r.last('BTC').isLoaded, isFalse);
+      expect(r.last('XMR').isLoaded, isFalse);
+    });
+
+    group('in a shared process (Android)', () {
+      final ports = <ReceivePort>[];
+
+      setUp(() => holdersShareProcess = true);
+
+      tearDown(() {
+        holdersShareProcess = Platform.isAndroid;
+        WalletManager.closeOrphanedWallets = null;
+        for (final name in [WalletHolders.appName, WalletHolders.serviceName]) {
+          IsolateNameServer.removePortNameMapping(name);
+        }
+        for (final p in ports) {
+          p.close();
+        }
+        ports.clear();
+      });
+
+      /// Registers a holder under [name] that answers whether it holds.
+      void holder(String name, {required bool holds, String? token}) {
+        final port = ReceivePort()
+          ..listen(
+            (m) => WalletHolders.answer(m, {'op': 'holds', 'holds': holds, 'token': ?token}),
+          );
+        ports.add(port);
+        WalletHolders.register(name, port.sendPort);
+      }
+
+      test('a run skips while the Continuous Sync service holds the wallets', () async {
+        holder(WalletHolders.serviceName, holds: true);
+        final r = await runPass([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+        expect(r.opens('BTC'), 0);
+        expect(r.opens('XMR'), 0);
+      });
+
+      test('nobody holds them: what a destroyed app isolate left is closed first, '
+          "sparing a live app's", () async {
+        holder(WalletHolders.appName, holds: false, token: 'live-app');
+        final spared = <String?>[];
+        WalletManager.closeOrphanedWallets = ({exceptToken}) async => spared.add(exceptToken);
+
+        final r = await runPass([const WalletSpec('BTC')]);
+        expect(spared, ['live-app']);
+        expect(r.opens('BTC'), 1);
+      });
+    });
+
+    test('the service holds as a registered holder, and lets go on hello', () async {
+      final r = install([const WalletSpec('BTC')]);
+      final handler = BackgroundSyncTaskHandler();
+      // The app answers that it holds nothing (its lock screen after a cold start).
+      handler.onReceiveData(SyncMessage.pong(holds: false, synced: false, token: 'app'));
+      while (r.opens('BTC') == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      final answer = await WalletHolders.ask(
+        WalletHolders.serviceName,
+        WalletHolders.holdsQuery,
+        timeout: const Duration(seconds: 5),
+      );
+      expect(answer, {'op': 'holds', 'holds': true});
+
+      handler.onReceiveData(SyncMessage.hello);
+      while (IsolateNameServer.lookupPortByName(WalletHolders.serviceName) != null) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(r.last('BTC').isLoaded, isFalse);
+    });
+
+    test('nobody registered: a claim has nothing to wait for', () async {
+      expect(
+        await WalletHolders.ask(
+          WalletHolders.periodicRunName,
+          SyncMessage.hello,
+          timeout: const Duration(milliseconds: 50),
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('view-only, whatever the configuration', () {
+    test('a run never reads the kept wallet password', () async {
+      final store = _CountingSecretStore();
+      store.values.addAll((WalletSecrets.store as MemorySecretStore).values);
+      WalletSecrets.store = store;
+
+      final r = await runPass([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+      expect(r.opens('BTC'), 1);
+      expect(r.opens('XMR'), 1);
+      expect(r.last('XMR').calls, contains('openViewOnly'));
+      expect(r.last('XMR').calls, isNot(contains('openExisting')));
+      expect(store.reads, isNot(contains(walletPasswordStorageKey)));
+    });
+
+    test('a coin whose view-only material is not set up yet is skipped', () async {
+      final r = await runPass([
+        const WalletSpec('BTC'),
+        const WalletSpec('XMR', type: 'node', viewOnly: false),
+      ]);
+      expect(r.opens('BTC'), 1);
+      expect(r.opens('XMR'), 0);
+    });
+
+    test('the Continuous Sync service marks every coin before opening it', () {
+      final r = install([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+      final coins = serviceCoins();
+      expect(coins.every((w) => w.unattended), isTrue);
+      expect(r.created.every((w) => w.markedUnattendedBeforeOpen), isTrue);
+    });
+  });
 
   group('which coins a window may sync', () {
     test('the default window syncs everything configured', () async {
@@ -600,4 +773,15 @@ void main() {
       expect(await SharedPreferencesService.get<String>('skylight_contacts'), isNull);
     });
   });
+}
+
+/// Records which keys were read, to show a run never asks for the password.
+class _CountingSecretStore extends MemorySecretStore {
+  final List<String> reads = [];
+
+  @override
+  Future<String?> read(String key) {
+    reads.add(key);
+    return super.read(key);
+  }
 }

@@ -42,7 +42,7 @@ void main() {
       expect(InfraPreferenceKeys.torMode, 'torMode');
       expect(InfraPreferenceKeys.torSocksPort, 'torSocksPort');
       expect(InfraPreferenceKeys.torUseOrbot, 'torUseOrbot');
-      expect(InfraPreferenceKeys.verboseLoggingEnabled, 'verboseLoggingEnabled');
+      expect(InfraPreferenceKeys.loggingEnabled, 'verboseLoggingEnabled');
     });
   });
 

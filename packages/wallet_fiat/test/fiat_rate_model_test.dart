@@ -23,7 +23,7 @@ void main() {
     WalletSecrets.store = MemorySecretStore();
     WalletAppConfig.install(WalletAppConfig.spice, directories: FixedDirectories(tmp));
     WalletLog.sink = MemoryLogSink();
-    WalletLog.isVerbose = () async => true;
+    WalletLog.isLoggingOn = () async => true;
     // No Tor, and no clearnet either unless a test asks for it. A test that
     // reaches the network is a test that will one day fail in CI for a reason
     // that has nothing to do with this code.
@@ -425,6 +425,70 @@ void main() {
       expect(seen, everyElement(61234.5), reason: 'the rate went blank during the switch');
       expect(model.rateFor('BTC'), 61234.5, reason: 'a failed refetch dropped the last rate');
       expect(model.quoteFor('BTC'), isNotNull);
+    });
+  });
+
+  group('the price read from Kraken', () {
+    // The shape of a real `Ticker` reply, abridged, with the numbers Kraken
+    // returned for XXMRZUSD on 2026-10-18.
+    final reply = {
+      'error': <String>[],
+      'result': {
+        'XXMRZUSD': {
+          'a': ['590.40000', '1', '1.000'],
+          'b': ['590.20000', '3', '3.000'],
+          'c': ['590.33000', '0.12'],
+          'o': '569.93000000',
+          'p': ['586.38033360', '585.34601403'],
+          'l': ['569.44000', '569.44000'],
+          'h': ['607.87000', '607.87000'],
+        },
+      },
+    };
+
+    test('is the last trade, not the day\'s opening price', () {
+      expect(krakenLastTradePrice(reply, 'XXMRZUSD'), 590.33);
+    });
+
+    test('a Kraken error is reported as one', () {
+      expect(
+        () => krakenLastTradePrice({
+          'error': ['EGeneral:Too many requests'],
+          'result': <String, dynamic>{},
+        }, 'XXMRZUSD'),
+        throwsA(predicate((e) => '$e'.contains('Too many requests'))),
+      );
+    });
+
+    test('a reply without a usable price is not a price', () {
+      for (final bad in <Object?>[
+        null,
+        <String, dynamic>{'error': <String>[], 'result': <String, dynamic>{}},
+        {
+          'error': <String>[],
+          'result': {
+            'XXMRZUSD': {'o': '569.93'},
+          },
+        },
+        {
+          'error': <String>[],
+          'result': {
+            'XXMRZUSD': {
+              'c': ['not a number', '1'],
+            },
+          },
+        },
+        {
+          'error': <String>[],
+          'result': {
+            'XXMRZUSD': {
+              'c': ['0', '1'],
+            },
+          },
+        },
+      ]) {
+        expect(() => krakenLastTradePrice(bad, 'XXMRZUSD'), throwsException, reason: '$bad');
+      }
     });
   });
 }

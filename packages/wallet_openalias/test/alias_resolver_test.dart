@@ -212,7 +212,7 @@ AliasResolver _resolverReturning(OpenAliasResult result) =>
       required String alias,
       required String network,
       required String asset,
-      required int socksPort,
+      required int? socksPort,
       String? nativeAsset,
     }) async => resolvedAliasFrom(result);
 

@@ -1,0 +1,10 @@
+# The shared Backup screens' strings (lib/src/l10n). Generated into the same
+# directory and committed; regenerate with `flutter gen-l10n` here after
+# editing backup_en.arb. Apps add BackupLocalizations.delegate to their
+# localizationsDelegates.
+arb-dir: lib/src/l10n
+template-arb-file: backup_en.arb
+output-localization-file: backup_localizations.dart
+output-class: BackupLocalizations
+nullable-getter: false
+preferred-supported-locales: [en, pt]

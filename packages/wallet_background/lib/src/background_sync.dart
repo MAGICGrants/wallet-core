@@ -1,10 +1,15 @@
 import 'dart:io';
+import 'dart:isolate';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart' show NotificationIcon;
 import 'package:wallet_domain/wallet_domain.dart'
     show BackgroundSyncMode, CoinRegistry, CryptoWallet, WalletManager;
 import 'package:wallet_infra/wallet_infra.dart';
 import 'package:workmanager/workmanager.dart';
+
+import 'sync_handoff.dart' show SyncMessage;
+import 'wallet_holders.dart';
 
 /// Brings the app's Tor up and waits for it; `true` once connected. The apps run
 /// their own `TorService` (the one the wallet connects through), so the core
@@ -125,11 +130,97 @@ const _minSyncIntervalMinutes = 15;
 ///
 /// [pollInterval] is for tests. The wait loop is where a scan's and a check's
 /// progress rules live, and a unit test can't wait five real seconds per poll.
+///
+/// One holder at a time ([WalletHolders]): a run skips while the app or the
+/// Continuous Sync service holds the wallets (it syncs and announces them
+/// itself), and one that holds them lets go when another is about to open
+/// them: it stops waiting, stores, closes and says so. Every run closes its
+/// wallets at the end, so none is left open in a process that outlives it.
+/// [anotherHolderHasWallets] is for tests; on Android it asks the app and the
+/// service.
 Future<bool> runTxNotifier({
   Duration budget = _backgroundSyncBudget,
   bool allowTor = true,
   bool allowNode = true,
   Duration pollInterval = _backgroundSyncPollInterval,
+  @visibleForTesting Future<bool> Function()? anotherHolderHasWallets,
+}) async {
+  // Registered before the app is asked, so an app that claims the wallets
+  // right after answering finds this run and waits for it.
+  final release = _ReleaseRequest();
+  WalletHolders.register(WalletHolders.periodicRunName, release.port.sendPort);
+  try {
+    if (await (anotherHolderHasWallets ?? _askOtherHolders)()) {
+      log(LogLevel.info, '[Background sync] the wallets are held; their holder syncs them.');
+      return true;
+    }
+    return await _runTxNotifier(
+      budget: budget,
+      allowTor: allowTor,
+      allowNode: allowNode,
+      pollInterval: pollInterval,
+      release: release,
+    );
+  } finally {
+    WalletHolders.unregister(WalletHolders.periodicRunName, release.port.sendPort);
+    // Asked after the run let go of everything, before it opened anything, or
+    // after its last store, with every scan paused.
+    release.answerIfAsked();
+    release.port.close();
+  }
+}
+
+/// Whether the app, the Continuous Sync service and a periodic run share a
+/// process, so that they must take turns: Android. Replaced in tests.
+@visibleForTesting
+bool holdersShareProcess = Platform.isAndroid;
+
+/// Whether the app (its wallets open, with the keys or view-only) or the
+/// Continuous Sync service holds the wallets. Android only, where they share
+/// the process; one that does not answer within two seconds has gone. When
+/// neither does, native wallets an app isolate left open when Android
+/// destroyed it are closed first, sparing a live app's.
+Future<bool> _askOtherHolders() async {
+  if (!holdersShareProcess) return false;
+  Future<Object?> ask(String name) =>
+      WalletHolders.ask(name, WalletHolders.holdsQuery, timeout: const Duration(seconds: 2));
+  final app = await ask(WalletHolders.appName);
+  if (app is Map && app['holds'] == true) return true;
+  final service = await ask(WalletHolders.serviceName);
+  if (service is Map && service['holds'] == true) return true;
+  await WalletManager.closeOrphanedWallets?.call(
+    exceptToken: app is Map ? app['token'] as String? : null,
+  );
+  return false;
+}
+
+/// The app asking a run to let go ([WalletHolders.periodicRunName]).
+class _ReleaseRequest {
+  _ReleaseRequest() {
+    port.listen((message) {
+      if (SyncMessage.opOf(message) == 'hello') _asked ??= message;
+    });
+  }
+
+  final port = ReceivePort();
+  Object? _asked;
+  bool _answered = false;
+
+  bool get asked => _asked != null;
+
+  void answerIfAsked() {
+    if (_asked == null || _answered) return;
+    _answered = true;
+    WalletHolders.answer(_asked, SyncMessage.released);
+  }
+}
+
+Future<bool> _runTxNotifier({
+  required Duration budget,
+  required bool allowTor,
+  required bool allowNode,
+  required Duration pollInterval,
+  required _ReleaseRequest release,
 }) async {
   // Decide what this window can sync WITHOUT opening any wallet file: load the
   // persisted connections onto a probe manager and read what each coin says an
@@ -177,50 +268,76 @@ Future<bool> runTxNotifier({
         .map((w) => w..markUnattended())
         .toList(),
   );
-  await walletManager.openAll();
+  try {
+    // The app is about to open its own: open nothing.
+    if (release.asked) return true;
+    await walletManager.openAll();
 
-  final wallets = walletManager.activeWallets;
-  if (wallets.isEmpty) return true;
+    final wallets = walletManager.activeWallets;
+    if (wallets.isEmpty) return true;
 
-  for (final w in wallets) {
-    await w.loadPersistedConnection();
-  }
-
-  if (wallets.any((w) => w.usingTor)) {
-    await BackgroundSync.ensureTorConnected?.call();
-  }
-
-  // Kick each wallet's daemon connection (starts the scan thread).
-  await Future.wait(
-    wallets.map((w) async {
-      if (w.connectionAddress.isEmpty) return;
-      try {
-        await w.connectToDaemon();
-      } catch (e) {
-        log(LogLevel.warn, '[Background sync] connect failed: $e', coin: w.coinSymbol);
-      }
-    }),
-  );
-
-  await _waitForWallets(wallets, budget: budget, pollInterval: pollInterval);
-
-  for (final w in wallets) {
-    if (w.connectionAddress.isEmpty) continue;
-    try {
-      await w.loadTxHistory(persistCount: false);
-    } catch (e) {
-      log(LogLevel.warn, '[Background sync] loadTxHistory failed: $e', coin: w.coinSymbol);
+    for (final w in wallets) {
+      await w.loadPersistedConnection();
     }
+
+    if (wallets.any((w) => w.usingTor)) {
+      await BackgroundSync.ensureTorConnected?.call();
+    }
+
+    // Kick each wallet's daemon connection (starts the scan thread).
+    await Future.wait(
+      wallets.map((w) async {
+        if (w.connectionAddress.isEmpty) return;
+        try {
+          await w.connectToDaemon();
+        } catch (e) {
+          log(LogLevel.warn, '[Background sync] connect failed: $e', coin: w.coinSymbol);
+        }
+      }),
+    );
+
+    await _waitForWallets(
+      wallets,
+      budget: budget,
+      pollInterval: pollInterval,
+      stop: () => release.asked,
+    );
+
+    // The app wants the wallets, and announces from here.
+    if (release.asked) return true;
+
+    for (final w in wallets) {
+      if (w.connectionAddress.isEmpty) continue;
+      try {
+        await w.loadTxHistory(persistCount: false);
+      } catch (e) {
+        log(LogLevel.warn, '[Background sync] loadTxHistory failed: $e', coin: w.coinSymbol);
+      }
+    }
+
+    // Checkpoint the scan so a killed isolate doesn't lose progress since the
+    // last store, then announce new incoming txs. The app's notifier respects
+    // the notifications toggle on mobile and records txs as seen either way, so
+    // enabling notifications later does not replay a backlog.
+    await walletManager.pauseSyncAndStoreAll();
+    await walletManager.notifyNewIncomingTxsAll();
+    return true;
+  } finally {
+    // However the run ended, and before anyone that asked is told it may open
+    // the wallets: checkpoint the scans and close everything. WorkManager
+    // destroys this isolate next, and a wallet left open would stay behind in
+    // a process the app or the service keeps alive.
+    await _closeAll(walletManager);
   }
+}
 
-  // Checkpoint the scan so a killed isolate doesn't lose progress since the last
-  // store, then announce new incoming txs. The app's notifier respects the
-  // notifications toggle on mobile and records txs as seen either way, so
-  // enabling notifications later does not replay a backlog.
-  await walletManager.pauseSyncAndStoreAll();
-  await walletManager.notifyNewIncomingTxsAll();
-
-  return true;
+Future<void> _closeAll(WalletManager manager) async {
+  try {
+    await manager.fullyLock();
+  } catch (e) {
+    log(LogLevel.warn, '[Background sync] closing the wallets failed: $e');
+  }
+  manager.dispose();
 }
 
 /// Keeps the isolate alive while the wallets get on with it, up to [budget].
@@ -237,6 +354,7 @@ Future<void> _waitForWallets(
   List<CryptoWallet> wallets, {
   required Duration budget,
   required Duration pollInterval,
+  required bool Function() stop,
 }) async {
   final deadline = DateTime.now().add(budget);
   final waiting = wallets.where((w) => w.connectionAddress.isNotEmpty).toList();
@@ -250,7 +368,7 @@ Future<void> _waitForWallets(
   // check, which has no progress to reset it; see the two constants above.
   final pollsWaited = {for (final w in waiting) w.coinSymbol: 0};
 
-  while (waiting.isNotEmpty && DateTime.now().isBefore(deadline)) {
+  while (waiting.isNotEmpty && DateTime.now().isBefore(deadline) && !stop()) {
     waiting.removeWhere((w) {
       if (w.isConnected && w.isSynced) return true;
 

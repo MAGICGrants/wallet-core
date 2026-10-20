@@ -18,7 +18,7 @@ class InfraPreferenceKeys {
   static const torMode = 'torMode';
   static const torSocksPort = 'torSocksPort';
   static const torUseOrbot = 'torUseOrbot';
-  static const verboseLoggingEnabled = 'verboseLoggingEnabled';
+  static const loggingEnabled = SettingsKeys.loggingEnabled;
 }
 
 class TorSettingsService {

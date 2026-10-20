@@ -111,6 +111,20 @@ class FakeBackgroundWallet extends CryptoWallet {
     setIsLoaded(true);
   }
 
+  /// What an unattended run opens: the coin's view-only material (a Monero
+  /// node's background copy, a view key, an xpub, an address). Every real coin
+  /// has one; [hasViewOnly] false models one not set up yet.
+  bool hasViewOnly = true;
+
+  @override
+  Future<bool> openViewOnly() async {
+    if (!unattended || !hasViewOnly) return false;
+    openCount++;
+    calls.add('openViewOnly');
+    setIsLoaded(true);
+    return true;
+  }
+
   @override
   Future<void> connectToDaemonImpl({
     required String address,

@@ -1,10 +1,11 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:pointycastle/export.dart';
 
+import '../logging.dart';
 import 'pbkdf2.dart';
 
 /// AES-256-GCM at-rest encryption for wallet files, keyed via PBKDF2-HMAC-SHA256.
@@ -22,12 +23,23 @@ class WalletFileCrypto {
   static const _keyLen = 32;
   static const _tagLenBits = 128;
 
-  /// Low on mobile, OWASP count on desktop.
+  /// For anything encrypted with a password the user typed: OWASP's count for
+  /// PBKDF2-HMAC-SHA256.
+  static const typedPasswordIterations = 600000;
+
+  /// For a full-entropy password: generated (128 bits, `genWalletPassword()`)
+  /// or derived from the seed (FHSE's 256-bit root). Nobody can guess one, so
+  /// iterations defend nothing there and only cost time.
+  static const generatedPasswordIterations = 100000;
+
+  /// The count for files encrypted with the wallet password, set by
+  /// `WalletManager` from the kind of password it holds. It starts at the
+  /// typed count, so anything written before the manager knows errs slow
+  /// rather than weak.
   ///
-  /// On mobile the password is a full-entropy 128-bit value from
-  /// `genWalletPassword()`, so there is no brute-force surface for iterations to
-  /// defend. On desktop the user picks the password, so the count matters.
-  static int get defaultIterations => (Platform.isAndroid || Platform.isIOS) ? 100000 : 600000;
+  /// Per isolate, like every static: code that encrypts inside `Isolate.run`
+  /// reads it first and passes it in as `iterations`.
+  static int walletPasswordIterations = typedPasswordIterations;
 
   /// Bounds accepted when *reading* a blob's header.
   ///
@@ -57,8 +69,9 @@ class WalletFileCrypto {
 
   /// Encrypts [plaintext] with [password], returning a base64 blob.
   ///
-  /// [iterations] overrides [defaultIterations]. Intended for tests and format
-  /// migration only; production callers should omit it.
+  /// [iterations] overrides [walletPasswordIterations]: for a file under some
+  /// other password ([typedPasswordIterations] for one the user typed), for
+  /// code that encrypts in another isolate, and for tests.
   static Future<String> encryptToBase64(
     String plaintext,
     String password, {
@@ -86,7 +99,7 @@ class WalletFileCrypto {
     int? iterations,
     Pbkdf2Kdf? kdf,
   }) async {
-    final rounds = iterations ?? defaultIterations;
+    final rounds = iterations ?? walletPasswordIterations;
     final salt = _randomBytes(_saltLen);
     final iv = _randomBytes(_ivLen);
     final key = await _deriveKey(password, salt, rounds, kdf);
@@ -159,6 +172,37 @@ class WalletFileCrypto {
   /// are proven byte-identical in `test/pbkdf2_test.dart`. Do not reassign this
   /// in production code.
   static Pbkdf2Kdf kdf = const WebCryptoPbkdf2();
+
+  static var _derivationsTimed = false;
+
+  /// Logs how long one key derivation takes on this device at each count, so
+  /// the counts can be chosen from real numbers. Once per process, only with
+  /// logging on, and off the UI thread. The times include starting an
+  /// isolate, a few milliseconds.
+  static Future<void> logDerivationTimes() async {
+    if (_derivationsTimed || !await WalletLog.isLoggingOn()) return;
+    _derivationsTimed = true;
+    final backend = kdf;
+    for (final iterations in [generatedPasswordIterations, typedPasswordIterations]) {
+      final watch = Stopwatch()..start();
+      await Isolate.run(
+        () => backend.derive(
+          password: 'timing',
+          salt: Uint8List(_saltLen),
+          iterations: iterations,
+          keyLengthBytes: _keyLen,
+        ),
+      );
+      await log(
+        LogLevel.info,
+        '[WalletFileCrypto] PBKDF2 at $iterations iterations: ${watch.elapsedMilliseconds} ms',
+      );
+    }
+    await log(
+      LogLevel.info,
+      '[WalletFileCrypto] wallet files use $walletPasswordIterations iterations',
+    );
+  }
 
   /// [override] wins over the static [kdf].
   ///

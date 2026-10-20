@@ -17,9 +17,12 @@ packages/
   wallet_bitcoin/    Bitcoin and testnet: BIP84 over Electrum
   wallet_ethereum/   Ethereum, Sepolia and ERC-20: JSON-RPC plus Blockscout history
   wallet_openalias/  OpenAlias resolution over Tor, DNSSEC-validated (Rust FFI)
-  wallet_background/ background sync and incoming-transaction notifications
+  wallet_fhse/       FHSE: security keys (FIDO2 hmac-secret) guarding the wallet password (C FFI)
+  wallet_backup/     metadata backup: payment destinations, tx keys and contacts as sealed files (pure Dart)
+  wallet_backup_platform/  the backup's iCloud location (Swift), Auto Backup folder, backup file, screens
+  wallet_background/ background sync and incoming-transaction notifications, view-only
   wallet_fiat/       fiat exchange rates from Kraken
-  wallet_ui/         shared Flutter widgets
+  wallet_ui/         shared Flutter widgets, the route policy and the payment-link gate
 scripts/             reproducible-build tooling for monero_c and the Tor toolchain
 Dockerfile.builder   pinned build image
 test_fixtures/       manifest for the generated Monero test wallets
@@ -32,6 +35,14 @@ sanitization, per-coin address validation, and a Tor gate that fails closed.
 `wallet_openalias` holds the resolver, which is a Rust build and would otherwise
 drag a Rust toolchain into every consumer. `AliasResolver` is the seam; the app
 installs `resolveOpenAlias` in `main()`.
+
+Anything that runs without the user is view-only: the periodic Background sync,
+Android's always-on Continuous sync and the notification check open Monero's
+view-only background copy (or ask its light-wallet server with the view key),
+a Bitcoin account xpub or an Ethereum address, never the wallet password, the
+seed or a spend key. When the spend wallet locks, the app's own wallets drop
+their spending keys the same way. `packages/wallet_background/README.md` has
+the details.
 
 Logging is a privacy surface. Seeds, keys and raw server payloads never reach a
 log; addresses and transaction ids only as salted fingerprints; amounts only as
@@ -103,7 +114,7 @@ you need depends on the packages you take:
 
 | Override | Needed when you depend on |
 | --- | --- |
-| `hashlib: 1.19.2` | `wallet_domain` or `wallet_monero` (both pull `polyseed`) |
+| `hashlib: 1.19.2` | `wallet_domain` or `wallet_monero` (both pull `polyseed`), so also `wallet_backup` |
 | `bip39` at the `cypherstack/stack-bip39` SHA | any coin package or `wallet_domain` |
 | `blockchain_utils` at the `cake-tech` SHA | `wallet_bitcoin`, `wallet_ethereum` or `wallet_monero` |
 | `web3dart` at the `cake-tech` SHA | `wallet_ethereum` |

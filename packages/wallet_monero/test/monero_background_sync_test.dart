@@ -112,6 +112,95 @@ void main() {
     return run;
   }
 
+  // Background sync and Continuous sync both open only the view-only copy, so
+  // either toggle has the main wallet keep it.
+  group('either sync toggle sets the copy up', () {
+    test('Continuous sync alone is enough', () async {
+      await SharedPreferencesService.set<bool>(SettingsKeys.foregroundSyncEnabled, true);
+      await openMain('node');
+      expect(backend.backgroundSyncSetups.single.type, MoneroBackgroundSyncType.customPassword);
+    });
+
+    test('with both off it is never set up', () async {
+      await openMain('node');
+      expect(backend.backgroundSyncSetups, isEmpty);
+    });
+  });
+
+  // wallet2's in-process background mode, for when the spend wallet locks while
+  // the app keeps running: no spend key in memory until the password returns.
+  group('background mode', () {
+    test('drops the spend key; only the right password brings it back', () async {
+      await enableBackgroundSync();
+      await openMain('node');
+
+      expect(await wallet.startBackgroundMode(), isTrue);
+      expect(wallet.inBackgroundMode, isTrue);
+      expect(backend.backgroundSyncing, hasLength(1));
+      final handle = backend.backgroundSyncing.single;
+      expect(await backend.secretSpendKey(NativeHandle(handle)), FakeMoneroBackend.nullSpendKey);
+
+      expect(await wallet.stopBackgroundMode('wrong'), isFalse);
+      expect(wallet.inBackgroundMode, isTrue, reason: 'still no spend key');
+
+      expect(await wallet.stopBackgroundMode(_password), isTrue);
+      expect(wallet.inBackgroundMode, isFalse);
+      expect(backend.backgroundSyncing, isEmpty);
+    });
+
+    test('needs the copy set up: with both toggles off it is refused', () async {
+      await openMain('node');
+      expect(await wallet.startBackgroundMode(), isFalse);
+      expect(wallet.inBackgroundMode, isFalse);
+    });
+
+    test('LWS has no background mode', () async {
+      await enableBackgroundSync();
+      await openMain('lws');
+      expect(await wallet.startBackgroundMode(), isFalse);
+      expect(backend.calls, isNot(contains('startBackgroundSync')));
+    });
+
+    test('a closed wallet leaves it', () async {
+      await enableBackgroundSync();
+      await openMain('node');
+      await wallet.startBackgroundMode();
+      await wallet.close();
+      expect(wallet.inBackgroundMode, isFalse);
+    });
+  });
+
+  // The spend wallet locked ([CryptoWallet.enterViewOnly]): with the copy set
+  // up, wallet2 keeps scanning in background mode; without it, or on LWS, the
+  // wallet closes.
+  group('the spend wallet locked', () {
+    test('a node wallet with the copy keeps scanning, then takes its keys back', () async {
+      await enableBackgroundSync();
+      await openMain('node');
+
+      await wallet.enterViewOnly();
+      expect((wallet.isViewOnly, wallet.isLoaded, wallet.inBackgroundMode), (true, true, true));
+
+      expect(await wallet.leaveViewOnly('wrong'), isFalse);
+      expect(wallet.isViewOnly, isTrue);
+      expect(await wallet.leaveViewOnly(_password), isTrue);
+      expect((wallet.isViewOnly, wallet.inBackgroundMode), (false, false));
+    });
+
+    test('without the copy it closes', () async {
+      await openMain('node');
+      await wallet.enterViewOnly();
+      expect((wallet.isViewOnly, wallet.isLoaded), (false, false));
+    });
+
+    test('an LWS wallet closes; its server keeps scanning', () async {
+      await enableBackgroundSync();
+      await openMain('lws');
+      await wallet.enterViewOnly();
+      expect((wallet.isViewOnly, wallet.isLoaded), (false, false));
+    });
+  });
+
   group('the mode split — a scan is not a check', () {
     test('node mode is a scan, LWS mode is a check', () {
       connect('node');
@@ -260,6 +349,7 @@ void main() {
     test('applying an unchanged setting does nothing at all', () async {
       await enableBackgroundSync();
       await openMain('node');
+      await materialiseBackgroundFiles();
       backend.backgroundSyncSetups.clear();
 
       await wallet.applyBackgroundSyncSetting(password: _password);
@@ -298,6 +388,7 @@ void main() {
       await enableBackgroundSync();
       await openMain('node');
       expect(backend.backgroundSyncSetups, hasLength(1));
+      await materialiseBackgroundFiles();
 
       final second = nextRun();
       connectOn(second, 'node');
@@ -309,6 +400,58 @@ void main() {
       // this one, so a second call deletes and rewrites both files and resets
       // the background cache; discarding whatever it had scanned.
       expect(backend.backgroundSyncSetups, hasLength(1));
+    });
+  });
+
+  // Older builds' monero_c ignored "off" and rewrote the copy under an empty
+  // password, and the app then dropped the copy's password: the wallet still
+  // reported the copy set up, so it was never set up again.
+  group('a copy left unusable by an older build', () {
+    Future<void> openAgain() async {
+      final again = nextRun();
+      connectOn(again, 'node');
+      backend.existingWalletPaths.add(await pathFor('node'));
+      await again.openExisting(password: _password);
+    }
+
+    test('without its password, is set up again under a new one', () async {
+      await enableBackgroundSync();
+      await openMain('node');
+      await materialiseBackgroundFiles();
+      await WalletSecrets.store.delete(wallet.backgroundCachePasswordKey);
+
+      await openAgain();
+
+      expect(backend.backgroundSyncSetups, hasLength(2));
+      final setup = backend.backgroundSyncSetups.last;
+      expect(setup.type, MoneroBackgroundSyncType.customPassword);
+      expect(
+        await WalletSecrets.store.read(wallet.backgroundCachePasswordKey),
+        setup.cachePassword,
+      );
+    });
+
+    test('without its keys file, is set up again', () async {
+      await enableBackgroundSync();
+      await openMain('node');
+
+      await openAgain();
+
+      expect(backend.backgroundSyncSetups, hasLength(2));
+    });
+
+    test("in LWS mode the node wallet's copy is removed", () async {
+      final base = MoneroWallet.backgroundPathFor(await pathFor('node'));
+      for (final path in [base, '$base.keys', '$base.address.txt']) {
+        await File(path).writeAsString('left behind');
+      }
+
+      await openMain('lws');
+
+      for (final path in [base, '$base.keys', '$base.address.txt']) {
+        expect(File(path).existsSync(), isFalse, reason: path);
+      }
+      expect(backend.backgroundSyncSetups, isEmpty);
     });
   });
 
@@ -391,33 +534,30 @@ void main() {
       expect(fresh.unlockedBalanceBaseUnits, isNull);
     });
 
-    test('falls back to the main wallet when there is no cache yet', () async {
-      // The first run after the setting is switched on, before any open has
-      // written the files. Syncing the real wallet is the correct fallback; the
-      // alternative is a wake-up that does nothing at all.
+    test('with no copy yet it skips XMR, never opening the main wallet', () async {
+      // The first run after a toggle is switched on, before any open has written
+      // the files. An unattended run holds view-only material only, so it
+      // checks nothing rather than taking the spend key.
       await enableBackgroundSync();
       final run = nextRun();
       run.markUnattended();
       connectOn(run, 'node');
       backend.existingWalletPaths.add(await pathFor('node'));
 
-      await run.openExisting(password: _password);
-
-      expect(backend.opens.single.path, isNot(endsWith('.background')));
-      expect(run.isBackgroundWallet, isFalse);
+      expect(await run.openViewOnly(), isFalse);
+      await expectLater(run.openExisting(password: _password), throwsStateError);
+      expect(backend.opens, isEmpty);
     });
 
-    test('an LWS run opens the ordinary wallet', () async {
+    test('an LWS run never opens a wallet file: its check asks the server', () async {
       await enableBackgroundSync();
       final run = nextRun();
       run.markUnattended();
       connectOn(run, 'lws');
       backend.existingWalletPaths.add(await pathFor('lws'));
 
-      await run.openExisting(password: _password);
-
-      expect(backend.opens.single.password, _password);
-      expect(run.isBackgroundWallet, isFalse);
+      await expectLater(run.openExisting(password: _password), throwsStateError);
+      expect(backend.opens, isEmpty);
       expect(backend.backgroundSyncSetups, isEmpty);
     });
 

@@ -98,9 +98,9 @@ void main() {
       // And it is the key the store actually reaches for, not just a constant
       // sitting next to one; the same reasoning as this file's header.
       WalletSecrets.store = secrets;
-      await storeMobileWalletPassword('minted-at-restore');
+      await storeKeystoreWalletPassword('minted-at-restore');
       expect(secrets.values.keys, ['walletPassword']);
-      expect(await getMobileWalletPassword(), 'minted-at-restore');
+      expect(await readKeystoreWalletPassword(), 'minted-at-restore');
     });
   });
 
@@ -177,6 +177,16 @@ void main() {
       expect(read.address, 'lws.example.com');
       expect(read.connectionType, 'node');
     });
+  });
+
+  test('each app has its own security-key label domain, at most 16 ASCII bytes', () {
+    final skylight = WalletAppConfig.skylight.securityKeyLabelDomain;
+    final spice = WalletAppConfig.spice.securityKeyLabelDomain;
+    expect(skylight, isNot(spice));
+    for (final domain in [skylight, spice]) {
+      expect(domain.codeUnits.every((c) => c < 0x80), isTrue);
+      expect(domain.length, lessThanOrEqualTo(16));
+    }
   });
 
   group('the shipped wallet-file layouts', () {

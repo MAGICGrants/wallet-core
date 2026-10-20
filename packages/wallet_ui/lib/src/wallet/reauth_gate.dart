@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:wallet_infra/wallet_infra.dart' show BiometricAuth, BiometricAuthResult;
+import 'package:wallet_infra/wallet_infra.dart'
+    show BiometricAuth, BiometricAuthResult, WalletSecrets;
 
 import '../design/brand.dart';
 
@@ -11,8 +10,11 @@ import '../design/brand.dart';
 ///
 /// Must wrap the route, not sit inside the screen's `build`: any route (Settings,
 /// coin settings, a deep link) then goes through the same gate, and no caller can
-/// be trusted to have authenticated first. Prompts only when app lock is on
-/// (see [BiometricAuth.authenticateIfAppLockEnabled]), and only on mobile.
+/// be trusted to have authenticated first. Always prompts, as App Lock is always
+/// on, except on a device with no lock to ask for
+/// ([BiometricAuth.confirmOwner]); and only where App Lock is the device's own
+/// prompt: where the wallet password is keystore-held
+/// ([WalletSecrets.holdsWalletPassword]: Android, iOS and macOS).
 class ReauthGate extends StatefulWidget {
   final String reason;
   final Widget child;
@@ -33,11 +35,11 @@ class _ReauthGateState extends State<ReauthGate> {
   }
 
   Future<void> _authenticate() async {
-    if (!(Platform.isAndroid || Platform.isIOS)) {
+    if (!WalletSecrets.holdsWalletPassword) {
       if (mounted) setState(() => _authed = true);
       return;
     }
-    final result = await BiometricAuth.authenticateIfAppLockEnabled(reason: widget.reason);
+    final result = await BiometricAuth.confirmOwner(reason: widget.reason);
     if (!mounted) return;
     if (result == BiometricAuthResult.authenticated) {
       setState(() => _authed = true);

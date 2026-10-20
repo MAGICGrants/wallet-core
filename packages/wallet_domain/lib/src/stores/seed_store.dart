@@ -44,7 +44,7 @@ class SeedStore {
       'restore': from.toJson(),
     });
     final file = await _file();
-    await file.writeAsString(await WalletFileCrypto.encryptToBase64(body, password));
+    await writeStringAtomic(file, await WalletFileCrypto.encryptToBase64(body, password));
   }
 
   /// Decrypts and returns the stored seed, or null when no file exists.

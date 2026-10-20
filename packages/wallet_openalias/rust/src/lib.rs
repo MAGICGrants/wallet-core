@@ -3,6 +3,12 @@
 //! validated locally by hickory (RRSIG → DS → root trust anchor), so no
 //! resolver is trusted and no DNS leaks outside Tor.
 //!
+//! When the user chose clearnet lookups instead, [`openalias_secure_txt_direct`]
+//! makes the same DNS-over-HTTPS queries without the proxy: the validation is
+//! identical, but the resolvers see the device's IP address. It is a separate
+//! entry point rather than a special port so that no value of the Tor port can
+//! ever turn a lookup into a direct one.
+//!
 //! The FFI surface is deliberately thin: it returns the DNSSEC-validated TXT
 //! records at a name, and Dart parses the OpenAlias v1 and v2 grammars on top
 //! (see `lib/src/openalias_records.dart`). That split keeps the record parsing
@@ -56,6 +62,11 @@ lazy_static! {
     /// a new port, builds a fresh one rather than dialing a dead proxy.
     static ref RESOLVERS: Mutex<HashMap<u16, Arc<Resolver<SocksRuntimeProvider>>>> =
         Mutex::new(HashMap::new());
+
+    /// The direct (clearnet) resolver, built on first use and shared for the
+    /// same reasons as [`RESOLVERS`].
+    static ref DIRECT_RESOLVER: Mutex<Option<Arc<Resolver<DirectRuntimeProvider>>>> =
+        Mutex::new(None);
 }
 
 /// Public recursive resolvers queried (over Tor) for the signed records, as
@@ -171,6 +182,48 @@ impl RuntimeProvider for SocksRuntimeProvider {
     }
 }
 
+/// A hickory runtime provider that dials its TCP connections directly, for the
+/// user who chose clearnet lookups. Still DNS-over-HTTPS only: UDP is refused
+/// as in [`SocksRuntimeProvider`], so the query is never sent as plain DNS that
+/// anyone on the network could read.
+#[derive(Clone)]
+struct DirectRuntimeProvider {
+    handle: TokioHandle,
+}
+
+impl RuntimeProvider for DirectRuntimeProvider {
+    type Handle = TokioHandle;
+    type Timer = TokioTime;
+    type Udp = TokioUdpSocket;
+    type Tcp = AsyncIoTokioAsStd<TokioTcpStream>;
+
+    fn create_handle(&self) -> Self::Handle {
+        self.handle.clone()
+    }
+
+    fn connect_tcp(
+        &self,
+        server_addr: SocketAddr,
+        _bind_addr: Option<SocketAddr>,
+        _timeout: Option<Duration>,
+    ) -> Pin<Box<dyn Send + Future<Output = io::Result<Self::Tcp>>>> {
+        Box::pin(async move { Ok(AsyncIoTokioAsStd(TokioTcpStream::connect(server_addr).await?)) })
+    }
+
+    fn bind_udp(
+        &self,
+        _local_addr: SocketAddr,
+        _server_addr: SocketAddr,
+    ) -> Pin<Box<dyn Send + Future<Output = io::Result<Self::Udp>>>> {
+        Box::pin(async move {
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "UDP is unavailable: OpenAlias DNS goes over HTTPS only",
+            ))
+        })
+    }
+}
+
 /// Fetches the TXT records at `name` over Tor, requiring a DNSSEC-secure answer.
 ///
 /// Three outcomes, and the caller must keep them apart:
@@ -201,16 +254,17 @@ pub unsafe extern "C" fn openalias_secure_txt(
     socks_port: u16,
 ) -> *mut c_char {
     ffi_guard("openalias_secure_txt", std::ptr::null_mut(), || unsafe {
-        secure_txt_entry(name, socks_port)
+        txt_entry(name, Some(socks_port))
     })
 }
 
-/// The body of [`openalias_secure_txt`], separated so the guard above wraps
-/// every path out of it including the ones that panic.
+/// The body of both entry points, separated so the guard above wraps every
+/// path out of it including the ones that panic. `socks_port` is `None` only
+/// for [`openalias_secure_txt_direct`].
 ///
 /// # Safety
 /// `name` must be a valid NUL-terminated C string.
-unsafe fn secure_txt_entry(name: *const c_char, socks_port: u16) -> *mut c_char {
+unsafe fn txt_entry(name: *const c_char, socks_port: Option<u16>) -> *mut c_char {
     let name = match cstr(name) {
         Some(s) => s,
         None => return ret_err("invalid name"),
@@ -221,13 +275,38 @@ unsafe fn secure_txt_entry(name: *const c_char, socks_port: u16) -> *mut c_char 
         Err(e) => return ret_err(format!("tokio runtime: {e}")),
     };
 
-    match runtime.block_on(secure_txt(&name, socks_port)) {
+    let result = match socks_port {
+        Some(port) => runtime.block_on(async {
+            check_clock()?;
+            secure_txt(&name, &*resolver_for(port)?).await
+        }),
+        None => runtime.block_on(async {
+            check_clock()?;
+            secure_txt(&name, &*direct_resolver()?).await
+        }),
+    };
+    match result {
         Ok(records) => match CString::new(json_string_array(&records)) {
             Ok(c) => c.into_raw(),
             Err(_) => ret_err("record contained NUL"),
         },
         Err(msg) => ret_err(msg),
     }
+}
+
+/// [`openalias_secure_txt`] without Tor: the same DNS-over-HTTPS queries and the
+/// same DNSSEC validation, dialed directly, so the resolvers see this device's
+/// IP address. Only for a user who chose clearnet lookups.
+///
+/// Caller frees the returned string with `openalias_string_free`.
+///
+/// # Safety
+/// `name` must be a valid NUL-terminated C string.
+#[no_mangle]
+pub unsafe extern "C" fn openalias_secure_txt_direct(name: *const c_char) -> *mut c_char {
+    ffi_guard("openalias_secure_txt_direct", std::ptr::null_mut(), || unsafe {
+        txt_entry(name, None)
+    })
 }
 
 /// Frees a string returned by this library.
@@ -317,7 +396,28 @@ fn resolver_for(socks_port: u16) -> Result<Arc<Resolver<SocksRuntimeProvider>>, 
     }
 
     let proxy = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), socks_port);
+    let resolver =
+        Arc::new(build_resolver(SocksRuntimeProvider { proxy, handle: TokioHandle::default() })?);
+    cache.insert(socks_port, Arc::clone(&resolver));
+    Ok(resolver)
+}
 
+/// The direct (clearnet) resolver, building it on first use.
+fn direct_resolver() -> Result<Arc<Resolver<DirectRuntimeProvider>>, String> {
+    let mut cache = DIRECT_RESOLVER
+        .lock()
+        .map_err(|_| "resolver cache poisoned".to_string())?;
+    if let Some(existing) = cache.as_ref() {
+        return Ok(Arc::clone(existing));
+    }
+    let resolver = Arc::new(build_resolver(DirectRuntimeProvider { handle: TokioHandle::default() })?);
+    *cache = Some(Arc::clone(&resolver));
+    Ok(resolver)
+}
+
+/// A validating DNS-over-HTTPS resolver over [`UPSTREAMS`] that dials through
+/// `provider`.
+fn build_resolver<P: RuntimeProvider>(provider: P) -> Result<Resolver<P>, String> {
     // DNS-over-HTTPS (default /dns-query on 443). The TLS cert is verified
     // against `host`; the answer's DNSSEC chain is validated locally.
     let name_servers = UPSTREAMS
@@ -330,15 +430,10 @@ fn resolver_for(socks_port: u16) -> Result<Arc<Resolver<SocksRuntimeProvider>>, 
     opts.validate = true; // local DNSSEC validation against the root trust anchor
     opts.timeout = TCP_TIMEOUT;
 
-    let provider = SocksRuntimeProvider { proxy, handle: TokioHandle::default() };
-    let resolver = Arc::new(
-        Resolver::builder_with_config(config, provider)
-            .with_options(opts)
-            .build()
-            .map_err(|e| format!("resolver build failed: {e}"))?,
-    );
-    cache.insert(socks_port, Arc::clone(&resolver));
-    Ok(resolver)
+    Resolver::builder_with_config(config, provider)
+        .with_options(opts)
+        .build()
+        .map_err(|e| format!("resolver build failed: {e}"))
 }
 
 /// The TXT records at `name`, or an empty vector when their absence was proved.
@@ -346,14 +441,14 @@ fn resolver_for(socks_port: u16) -> Result<Arc<Resolver<SocksRuntimeProvider>>, 
 /// Those are different answers and only two call sites may produce them: the
 /// `Ok` arm below never returns an empty vector — [`secure_txt_answers`] fails
 /// instead — so an empty vector means the denial arm and nothing else.
-async fn secure_txt(name: &str, socks_port: u16) -> Result<Vec<String>, String> {
-    // Before anything is built or any circuit opened: a clock this wrong makes
-    // every signature check downstream meaningless, so there is no point paying
-    // for the lookup.
-    check_clock()?;
-
-    let resolver = resolver_for(socks_port)?;
-
+///
+/// The clock is checked by the caller before `resolver` is built or any circuit
+/// opened: a clock this wrong makes every signature check downstream
+/// meaningless, so there is no point paying for the lookup.
+async fn secure_txt<P: RuntimeProvider>(
+    name: &str,
+    resolver: &Resolver<P>,
+) -> Result<Vec<String>, String> {
     // Non-ASCII labels are converted to their A-label (Punycode) form by
     // hickory when it parses the name, as OpenAlias requires (RFC 5890).
     // Parsed once and reused: the same value is both what gets asked and what

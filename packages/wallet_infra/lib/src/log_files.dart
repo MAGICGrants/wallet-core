@@ -33,8 +33,8 @@ Future<File> _todaysLogFile() async {
 }
 
 /// The file half of the shared logger: appends each record to today's log file.
-/// Only writes when verbose logging is on, matching the apps' original behaviour
-/// (no file at all when the preference is off). Appends are serialized so
+/// Only writes when logging is on, matching the apps' original behaviour (no
+/// file at all when the setting is off). Appends are serialized so
 /// concurrent [log] calls can't interleave.
 class FileLogSink extends LogSink {
   FileLogSink();
@@ -44,9 +44,9 @@ class FileLogSink extends LogSink {
   @override
   Future<void> write(LogLevel level, String line) {
     // Chain synchronously (no await before assigning _lastWrite) so ordering is
-    // strict; the verbose gate lives inside the queued op.
+    // strict; the logging-on check lives inside the queued op.
     _lastWrite = (_lastWrite ?? Future.value()).then((_) async {
-      if (!await WalletLog.isVerbose()) return;
+      if (!await WalletLog.isLoggingOn()) return;
       try {
         final file = await _todaysLogFile();
         await file.writeAsString('$line\n', mode: FileMode.append);
@@ -58,8 +58,10 @@ class FileLogSink extends LogSink {
   }
 }
 
-/// Deletes log files older than [maxAge]. Best-effort; failures are logged only.
-Future<void> cleanOldLogFiles({Duration maxAge = const Duration(days: 30)}) async {
+/// Deletes log files older than [maxAge], three days by default: logs are for
+/// diagnosing a problem just seen, not a history of what the wallet did.
+/// Best-effort; failures are logged only.
+Future<void> cleanOldLogFiles({Duration maxAge = const Duration(days: 3)}) async {
   try {
     final dir = await _logsDir();
     if (!await dir.exists()) return;

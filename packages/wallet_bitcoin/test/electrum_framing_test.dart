@@ -58,7 +58,7 @@ void main() {
   setUp(() async {
     SharedPreferencesService.store = MemoryPreferenceStore();
     WalletLog.sink = MemoryLogSink();
-    WalletLog.isVerbose = () async => true;
+    WalletLog.isLoggingOn = () async => true;
     server = await _FakeElectrumServer.start();
     client = ElectrumClient(coinSymbol: 'BTC');
   });

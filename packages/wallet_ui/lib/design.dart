@@ -26,6 +26,8 @@ export 'src/design/icon_badge.dart';
 export 'src/design/icon_circle_button.dart';
 export 'src/design/mini_action_button.dart';
 export 'src/design/mode_select_card.dart';
+export 'src/design/option_card.dart';
+export 'src/design/notice_sheet.dart';
 export 'src/design/radio_dot.dart';
 export 'src/design/route_pill.dart';
 export 'src/design/section_header.dart';
