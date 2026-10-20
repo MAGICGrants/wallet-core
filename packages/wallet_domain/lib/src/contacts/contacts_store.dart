@@ -113,6 +113,9 @@ abstract final class ContactsSync {
 
   /// [changes] maps a contact id to its new version, or to null when it was
   /// deleted. Ids not named are left alone.
+  ///
+  /// Throws when the changes were not stored (the address book could not be
+  /// read or written), so the caller does not take them as stored.
   static Future<void> applyRemote(Map<String, Contact?> changes) async {
     if (changes.isEmpty) return;
     final model = _model;
@@ -120,8 +123,7 @@ abstract final class ContactsSync {
 
     final stored = await readEncodedContacts();
     if (stored == null) {
-      unawaited(log(LogLevel.warn, 'Address book unreadable; backup changes not applied.'));
-      return;
+      throw StateError('Address book unreadable; backup changes not applied');
     }
     await writeEncodedContacts(applyContactChanges(stored, changes));
   }

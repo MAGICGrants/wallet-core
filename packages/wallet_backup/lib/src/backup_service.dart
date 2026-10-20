@@ -861,14 +861,31 @@ class MetadataBackupService extends ChangeNotifier
       }
     }
     if (writes.isNotEmpty) await _writeChange(writes);
-    final applied = await _applyMerged(local);
+    final changes = _mergedChanges(local);
+    final stored = await _storeChanges(changes);
 
-    // The address book now matches the merged state; that is the new base.
+    // The new base is what the address book now holds: the merged state,
+    // except for changes that were not stored. For those it still holds what it
+    // did, and so must the base: a contact the base has and the address book
+    // lacks would be recorded as deleted here, and an older version as an edit
+    // made here, undoing the change everywhere. Left out, they are applied
+    // again by the next sync.
+    final base = {for (final v in _merged.contacts) v.id: _fingerprint(v.name, v.addresses)};
+    if (!stored) {
+      for (final id in changes.keys) {
+        final mine = local[id];
+        if (mine == null) {
+          base.remove(id);
+        } else {
+          base[id] = _fingerprint(mine.name, mine.addresses);
+        }
+      }
+    }
     state
-      ..contactBase = {for (final v in _merged.contacts) v.id: _fingerprint(v.name, v.addresses)}
+      ..contactBase = base
       ..contactsJoined = true;
     await _saveState();
-    return applied;
+    return stored ? changes.values.whereType<Contact>().length : 0;
   }
 
   /// Set by [importBundle] for the sync that follows it.
@@ -900,8 +917,30 @@ class MetadataBackupService extends ChangeNotifier
   }
 
   /// Applies to the address book ([local]) what the merged state says and it
-  /// does not. Returns how many contacts were added or changed.
+  /// does not. Returns how many contacts were added or changed: none when the
+  /// changes could not be stored.
   Future<int> _applyMerged(Map<String, Contact> local) async {
+    final changes = _mergedChanges(local);
+    return await _storeChanges(changes) ? changes.values.whereType<Contact>().length : 0;
+  }
+
+  /// Stores [changes] in the address book. False when they were not stored
+  /// (it could not be read or written): it keeps what it had, and the next
+  /// sync applies them again.
+  Future<bool> _storeChanges(Map<String, Contact?> changes) async {
+    if (changes.isEmpty) return true;
+    try {
+      await _applyContacts(changes);
+      return true;
+    } catch (e) {
+      unawaited(log(LogLevel.warn, 'Address book changes from the backup not stored: $e'));
+      return false;
+    }
+  }
+
+  /// What the merged state says and the address book ([local]) does not: a
+  /// contact's new version, or null where it was deleted.
+  Map<String, Contact?> _mergedChanges(Map<String, Contact> local) {
     final changes = <String, Contact?>{};
     for (final v in _merged.contactVersions.values) {
       final mine = local[v.id];
@@ -914,8 +953,7 @@ class MetadataBackupService extends ChangeNotifier
         changes[v.id] = Contact(id: v.id, name: v.name, addresses: v.addresses);
       }
     }
-    if (changes.isNotEmpty) await _applyContacts(changes);
-    return changes.values.whereType<Contact>().length;
+    return changes;
   }
 
   String _fingerprint(String name, Map<String, String> addresses) {

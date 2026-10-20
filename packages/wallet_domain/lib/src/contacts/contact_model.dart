@@ -80,29 +80,44 @@ class ContactModel with ChangeNotifier {
     }
   }
 
-  Future<void> _saveContacts() async {
+  /// Writes the address book, then lets a metadata backup record the change
+  /// ([MetadataBackup.contactsChanged]). Throws when nothing was written: over
+  /// an address book that was not read it refuses, and a failed write is
+  /// logged and rethrown.
+  Future<void> _store() async {
     if (!_loaded) {
-      unawaited(
-        log(LogLevel.error, 'Refusing to save contacts over an address book that was not read.'),
-      );
-      return;
+      throw StateError('Refusing to save contacts over an address book that was not read');
     }
-
     try {
       await _write(_contacts.map((contact) => json.encode(contact.toJson())).toList());
     } catch (e) {
       unawaited(log(LogLevel.error, 'Error saving contacts: $e'));
-      return;
+      rethrow;
     }
     MetadataBackup.instance?.contactsChanged();
   }
 
-  /// Changes merged in from a metadata backup; see [ContactsSync].
+  /// [_store] for the user's own edits, which stay in memory when it fails.
+  Future<void> _saveContacts() async {
+    try {
+      await _store();
+    } on StateError catch (e) {
+      unawaited(log(LogLevel.error, '${e.message}.'));
+    } catch (_) {
+      // Logged by _store.
+    }
+  }
+
+  /// Changes merged in from a metadata backup; see [ContactsSync]. Throws when
+  /// they were not stored, so the backup does not count them as this device's
+  /// address book: a contact it then lacks would read as deleted here.
   Future<void> _applyRemote(Map<String, Contact?> changes) async {
     if (!_loaded) {
       // Nothing in memory to keep in step yet: change storage, then read it.
       final stored = await _read();
-      if (stored == null) return;
+      if (stored == null) {
+        throw StateError('Address book unreadable; backup changes not applied');
+      }
       await _write(applyContactChanges(stored, changes));
       await load();
       return;
@@ -120,7 +135,9 @@ class ContactModel with ChangeNotifier {
     updated.addAll(remaining.values.whereType<Contact>());
     _contacts = updated;
     notifyListeners();
-    await _saveContacts();
+    // Kept in memory if this fails: the next save of any edit writes them, and
+    // the next sync applies them again meanwhile.
+    await _store();
   }
 
   Future<void> addContact(String name, Map<String, String> addresses) async {

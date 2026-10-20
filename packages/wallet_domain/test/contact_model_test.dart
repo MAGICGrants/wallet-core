@@ -140,6 +140,52 @@ void main() {
     });
   });
 
+  // ContactsSync.applyRemote reaches the open model. The backup counts the
+  // changes as this device's address book only if they were stored, so a
+  // failure must reach it; the user's own edits still stay in memory quietly.
+  group('changes from the backup', () {
+    const carol = Contact(id: '3', name: 'Carol', addresses: {'XMR': '4carol'});
+
+    test('are applied and written', () async {
+      final h = modelWith(read: () async => stored);
+      addTearDown(h.model.dispose);
+      await h.model.load();
+      await ContactsSync.applyRemote({'2': null, '3': carol});
+      expect(h.model.contacts.map((c) => c.name), ['Alice', 'Carol']);
+      expect(h.writes.last, hasLength(2));
+    });
+
+    test('a write that fails is reported, and they stay in memory', () async {
+      final model = ContactModel(
+        read: () async => stored,
+        write: (_) async => throw Exception('keystore unavailable'),
+      );
+      addTearDown(model.dispose);
+      await model.load();
+      await expectLater(ContactsSync.applyRemote({'3': carol}), throwsException);
+      expect(model.contacts.map((c) => c.name), ['Alice', 'Bob', 'Carol']);
+    });
+
+    test('an address book that could not be read refuses them', () async {
+      final h = modelWith(read: () async => null);
+      addTearDown(h.model.dispose);
+      await h.model.load();
+      await expectLater(ContactsSync.applyRemote({'3': carol}), throwsStateError);
+      expect(h.writes, isEmpty);
+    });
+
+    test("the user's own edit that fails to save does not throw", () async {
+      final model = ContactModel(
+        read: () async => stored,
+        write: (_) async => throw Exception('keystore unavailable'),
+      );
+      addTearDown(model.dispose);
+      await model.load();
+      await model.addContact('Dan', {'XMR': '4dan'});
+      expect(model.contacts.map((c) => c.name), contains('Dan'));
+    });
+  });
+
   group('the stored format both apps share', () {
     test('a legacy single-address entry reads as a Monero contact', () async {
       // What earlier Skylight builds wrote. It predates any other chain being

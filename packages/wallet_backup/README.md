@@ -95,7 +95,10 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   syncing merges three ways: what its address book held at the last sync is the
   base (in the device state), so an edit or deletion made here becomes a new
   version, which wins, and a change made elsewhere is applied here (through
-  `ContactsSync`, which an open `ContactModel` takes in memory). A device that
+  `ContactsSync`, which an open `ContactModel` takes in memory). A change
+  that could not be stored here (the address book could not be written) stays
+  out of the base and is applied again by the next sync, so it never reads as
+  a deletion or edit made here. A device that
   *joins* (its first sync, a restore, or a location turned on when none was)
   has no base and cannot tell its own changes from a stale copy. It takes the backup's
   version of every contact the backup knows, deletions included, and adds only

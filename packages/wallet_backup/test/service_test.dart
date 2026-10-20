@@ -39,6 +39,7 @@ class Device {
       observeLifecycle: false,
       readContacts: () async => contacts,
       applyContactChanges: (changes) async {
+        if (contactWritesFail) throw const FileSystemException('keystore unavailable');
         contacts = applyContactChanges(contacts, changes);
       },
       clock: () => now,
@@ -51,6 +52,9 @@ class Device {
   final wallet = FakeWallet('XMR', seedFormats: {SeedFormat.polyseed, SeedFormat.bip39});
   List<String> contacts = [];
   DateTime now = DateTime.utc(2026, 10, 10);
+
+  /// The address book cannot be written: changes from the backup are refused.
+  bool contactWritesFail = false;
 
   List<Contact> get contactList => [
     for (final e in contacts) Contact.fromJson(json.decode(e) as Map<String, dynamic>),
@@ -242,6 +246,87 @@ void main() {
 
     await a.service.close();
     await b.service.close();
+  });
+
+  // A change from the backup that this device could not store must not count
+  // as stored: it would then read as deleted or edited here, and travel back.
+  group('when the address book cannot be written', () {
+    test('a contact added elsewhere arrives later, and is not deleted', () async {
+      final a = device('a');
+      a.setContacts([
+        const Contact(id: 'alice', name: 'Alice', addresses: {'XMR': recipient}),
+      ]);
+      await a.open(const PolyseedSeed(raven));
+      final b = device('b');
+      await b.open(const PolyseedSeed(raven), restored: true);
+
+      final bob = Contact(id: newContactId(), name: 'Bob', addresses: const {'XMR': recipient});
+      a.setContacts([...a.contactList, bob]);
+      a.service.contactsChanged();
+      await a.service.sync();
+
+      b.contactWritesFail = true;
+      await b.service.sync();
+      expect(b.contactList.map((c) => c.name), ['Alice']);
+
+      b.contactWritesFail = false;
+      await b.service.sync();
+      expect(b.contactList.map((c) => c.name), ['Alice', 'Bob']);
+      await a.service.sync();
+      expect(a.contactList.map((c) => c.name), ['Alice', 'Bob']);
+
+      await a.service.close();
+      await b.service.close();
+    });
+
+    test('a contact edited elsewhere arrives later, and is not undone', () async {
+      final a = device('a');
+      a.setContacts([
+        const Contact(id: 'alice', name: 'Alice', addresses: {'XMR': recipient}),
+      ]);
+      await a.open(const PolyseedSeed(raven));
+      final b = device('b');
+      await b.open(const PolyseedSeed(raven), restored: true);
+
+      a.setContacts([a.contactList.single.copyWith(name: 'Alice A')]);
+      a.service.contactsChanged();
+      await a.service.sync();
+
+      b.contactWritesFail = true;
+      await b.service.sync();
+      expect(b.contactList.single.name, 'Alice');
+
+      b.contactWritesFail = false;
+      await b.service.sync();
+      expect(b.contactList.single.name, 'Alice A');
+      await a.service.sync();
+      expect(a.contactList.single.name, 'Alice A');
+
+      await a.service.close();
+      await b.service.close();
+    });
+
+    test('a restore that could not write the address book deletes nothing', () async {
+      final a = device('a');
+      a.setContacts([
+        const Contact(id: 'alice', name: 'Alice', addresses: {'XMR': recipient}),
+      ]);
+      await a.open(const PolyseedSeed(raven));
+
+      final b = device('b')..contactWritesFail = true;
+      await b.open(const PolyseedSeed(raven), restored: true);
+      expect(b.contactList, isEmpty);
+      expect(b.service.lastRestoreReport!.contactsRestored, 0);
+
+      b.contactWritesFail = false;
+      await b.service.sync();
+      expect(b.contactList.map((c) => c.name), ['Alice']);
+      await a.service.sync();
+      expect(a.contactList.map((c) => c.name), ['Alice']);
+
+      await a.service.close();
+      await b.service.close();
+    });
   });
 
   // Only changes made while syncing travel: a device that was off (or is
