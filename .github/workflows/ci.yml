@@ -89,6 +89,43 @@ jobs:
           REQUIRE_FIXTURE_CORPUS: '1'
         run: flutter test --no-pub
 
+      # The real native library, built for the host from its vendored sources
+      # (FHSE, libsodium, libcbor): the tests load it rather than a stand-in.
+      - name: Build wallet_fhse for the host
+        working-directory: packages/wallet_fhse
+        run: |
+          cmake -S src -B build/host -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/host -j4
+
+      # REQUIRE_FHSE_LIBRARY=1: a missing build fails the tests instead of
+      # skipping them. The libfido2 tests still skip without libfido2 installed;
+      # they cover only the Linux backend's error mapping.
+      - name: wallet_fhse
+        working-directory: packages/wallet_fhse
+        env:
+          REQUIRE_FHSE_LIBRARY: '1'
+        run: flutter test --no-pub
+
+      - name: wallet_backup
+        working-directory: packages/wallet_backup
+        run: flutter test --no-pub
+
+      - name: wallet_backup_platform
+        working-directory: packages/wallet_backup_platform
+        run: flutter test --no-pub
+
+      - name: wallet_background
+        working-directory: packages/wallet_background
+        run: flutter test --no-pub
+
+      - name: wallet_fiat
+        working-directory: packages/wallet_fiat
+        run: flutter test --no-pub
+
+      - name: wallet_ui
+        working-directory: packages/wallet_ui
+        run: flutter test --no-pub
+
   openalias-rust:
     name: OpenAlias resolver (Rust)
     runs-on: ubuntu-latest

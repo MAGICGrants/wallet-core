@@ -405,13 +405,16 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
             ),
           ],
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, BrandSpacing.md, 4, 0),
-          child: Text(
-            i18n.securityKeysBackgroundNote,
-            style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
+        // Only where a lock leaves the wallet syncing (phones): a desktop's
+        // "Lock after" closes it.
+        if (!isDesktopAutoLockPlatform)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, BrandSpacing.md, 4, 0),
+            child: Text(
+              i18n.securityKeysBackgroundNote,
+              style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
+            ),
           ),
-        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(4, BrandSpacing.sm, 4, 0),
           child: Text(

@@ -15,109 +15,110 @@ class FhseLocalizationsPt extends FhseLocalizations {
   String get advancedSecurityTitle => 'Advanced Security';
 
   @override
-  String get advancedSecurityOff => 'Off';
+  String get advancedSecurityOff => 'Desativada';
 
   @override
   String advancedSecurityKeyCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count keys',
-      one: '1 key',
+      other: '$count chaves',
+      one: '1 chave',
     );
     return '$_temp0';
   }
 
   @override
-  String get advancedSecurityNeedsAttention => 'Needs attention';
+  String get advancedSecurityNeedsAttention => 'Precisa de atenção';
 
   @override
-  String get securityKeysUnreadableTitle => 'Set up your security keys again';
+  String get securityKeysUnreadableTitle => 'Configure suas chaves de segurança novamente';
 
   @override
   String get securityKeysUnreadableBody =>
-      'This happens after moving to a new phone. Your wallet is safe and your recovery phrase still opens it. Set up your keys again, or turn security keys off.';
+      'Isso acontece depois de trocar de celular. Sua carteira está segura e sua frase de recuperação ainda a abre. Configure suas chaves novamente ou desative as chaves de segurança.';
 
   @override
-  String get securityKeysLoadFailed => 'Couldn\'t load your security key settings.';
+  String get securityKeysLoadFailed =>
+      'Não foi possível carregar as configurações da sua chave de segurança.';
 
   @override
-  String get securityKeysIntroTitle => 'Protect this wallet with a security key';
+  String get securityKeysIntroTitle => 'Proteja esta carteira com uma chave de segurança';
 
   @override
   String get securityKeysIntroBody =>
-      'Advanced Security is another layer of protection for your wallet beyond the App Lock. When enabled, your wallet can only be opened with your security key and its PIN.';
+      'A Advanced Security é uma camada extra de proteção para sua carteira, além do Bloqueio do app. Quando ativada, sua carteira só pode ser aberta com sua chave de segurança e o PIN dela.';
 
   @override
   String get securityKeysRequirements =>
-      'Works with most FIDO2 capable hardware security keys over NFC. Over USB, only YubiKeys work for now (on iPhone, with firmware 5.8 or later).';
+      'Funciona com a maioria das chaves de segurança físicas compatíveis com FIDO2 via NFC. Via USB, por enquanto só funcionam YubiKeys (no iPhone, com firmware 5.8 ou mais recente).';
 
   @override
-  String get securityKeysSetUpButton => 'Set up security keys';
+  String get securityKeysSetUpButton => 'Configurar chaves de segurança';
 
   @override
   String securityKeysUnavailable(String appName) {
-    return 'Security keys only work with a wallet created or restored in this version of $appName.';
+    return 'As chaves de segurança só funcionam com uma carteira criada ou restaurada nesta versão da $appName.';
   }
 
   @override
-  String get securityKeysYourKeys => 'Your keys';
+  String get securityKeysYourKeys => 'Suas chaves';
 
   @override
   String securityKeysAdded(String date) {
-    return 'Added $date';
+    return 'Adicionada em $date';
   }
 
   @override
   String get securityKeysOneKeyWarning =>
-      'You have only one key. Add a second one as a backup. Without a key, you\'ll need your recovery phrase.';
+      'Você tem só uma chave. Adicione uma segunda como reserva. Sem uma chave, você vai precisar da sua frase de recuperação.';
 
   @override
-  String get securityKeysAddButton => 'Add a security key';
+  String get securityKeysAddButton => 'Adicionar uma chave de segurança';
 
   @override
-  String get securityKeysManageSection => 'Manage';
+  String get securityKeysManageSection => 'Gerenciar';
 
   @override
-  String get securityKeysRemoveTitle => 'Remove a key';
+  String get securityKeysRemoveTitle => 'Remover uma chave';
 
   @override
-  String get securityKeysRemoveSubtitle => 'Set up again without that key';
+  String get securityKeysRemoveSubtitle => 'Configurar novamente sem essa chave';
 
   @override
-  String get securityKeysRemoveLink => 'Set up';
+  String get securityKeysRemoveLink => 'Configurar';
 
   @override
   String get securityKeysRemoveExplain =>
-      'To remove a key, set up again with only the keys you want to keep. Any key you leave out stops working. Have all the keys you\'re keeping with you.';
+      'Para remover uma chave, configure novamente só com as chaves que você quer manter. Qualquer chave que ficar de fora para de funcionar. Tenha com você todas as chaves que vai manter.';
 
   @override
-  String get securityKeysRemoveConfirm => 'Set up again';
+  String get securityKeysRemoveConfirm => 'Configurar novamente';
 
   @override
-  String get securityKeysTurnOff => 'Turn off security keys';
+  String get securityKeysTurnOff => 'Desativar chaves de segurança';
 
   @override
-  String get securityKeysTurnOffBody => 'Your wallet will open without a security key again.';
+  String get securityKeysTurnOffBody => 'Sua carteira voltará a abrir sem uma chave de segurança.';
 
   @override
-  String get securityKeysTurnOffConfirm => 'Turn off';
+  String get securityKeysTurnOffConfirm => 'Desativar';
 
   @override
-  String get securityKeysTurnedOff => 'Security keys are off';
+  String get securityKeysTurnedOff => 'As chaves de segurança estão desativadas';
 
   @override
-  String get securityKeysTurnedOn => 'Security keys are on';
+  String get securityKeysTurnedOn => 'As chaves de segurança estão ativadas';
 
   @override
-  String get securityKeysLockSection => 'Lock';
+  String get securityKeysLockSection => 'Bloqueio';
 
   @override
-  String get securityKeysFullLockLabel => 'Fully lock after';
+  String get securityKeysFullLockLabel => 'Bloquear totalmente após';
 
   @override
   String securityKeysFullLockDescription(String appName) {
-    return 'After this long in the background, $appName fully locks the wallet. You\'ll need a security key to open it again.';
+    return 'Depois de todo esse tempo em segundo plano, a $appName bloqueia totalmente a carteira. Você vai precisar de uma chave de segurança para abri-la novamente.';
   }
 
   @override
@@ -125,8 +126,8 @@ class FhseLocalizationsPt extends FhseLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count minutes',
-      one: '1 minute',
+      other: '$count minutos',
+      one: '1 minuto',
     );
     return '$_temp0';
   }
@@ -136,451 +137,458 @@ class FhseLocalizationsPt extends FhseLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count hours',
-      one: '1 hour',
+      other: '$count horas',
+      one: '1 hora',
     );
     return '$_temp0';
   }
 
   @override
   String get securityKeysBackgroundNote =>
-      'While locked, the wallet keeps syncing and can show new payments, but it can\'t spend.';
+      'Enquanto bloqueada, a carteira continua sincronizando e pode mostrar novos pagamentos, mas não pode gastar.';
 
   @override
-  String get securityKeysSetupTitle => 'Set up security keys';
+  String get securityKeysSetupTitle => 'Configurar chaves de segurança';
 
   @override
-  String get securityKeysSetupAgainTitle => 'Set up keys again';
+  String get securityKeysSetupAgainTitle => 'Configurar chaves novamente';
 
   @override
   String get securityKeysSetupAgainNote =>
-      'Add only the keys you want to keep. Any key you leave out stops working.';
+      'Adicione só as chaves que você quer manter. Qualquer chave que ficar de fora para de funcionar.';
 
   @override
-  String get securityKeysSetupNote => 'Add each security key you want to use, then tap Finish.';
+  String get securityKeysSetupNote =>
+      'Adicione cada chave de segurança que você quer usar e toque em Concluir.';
 
   @override
-  String get securityKeysAddFirst => 'Add your first key';
+  String get securityKeysAddFirst => 'Adicione sua primeira chave';
 
   @override
-  String get securityKeysAddAnother => 'Add another key';
+  String get securityKeysAddAnother => 'Adicionar outra chave';
 
   @override
-  String get securityKeysFinish => 'Finish';
+  String get securityKeysFinish => 'Concluir';
 
   @override
-  String get securityKeysOneKeyTitle => 'Use only one key?';
+  String get securityKeysOneKeyTitle => 'Usar só uma chave?';
 
   @override
   String get securityKeysOneKeyBody =>
-      'We recommend at least two. If you lose your only key, you\'ll need your recovery phrase.';
+      'Recomendamos pelo menos duas. Se você perder sua única chave, vai precisar da sua frase de recuperação.';
 
   @override
-  String get securityKeysFinishAnyway => 'Use one key';
+  String get securityKeysFinishAnyway => 'Usar uma chave';
 
   @override
-  String get securityKeysNameLabel => 'Key name';
+  String get securityKeysNameLabel => 'Nome da chave';
 
   @override
   String securityKeysNameDefault(int number) {
-    return 'Security key $number';
+    return 'Chave de segurança $number';
   }
 
   @override
-  String get securityKeysPinLabel => 'Key PIN';
+  String get securityKeysPinLabel => 'PIN da chave';
 
   @override
-  String get securityKeysContinue => 'Continue';
+  String get securityKeysContinue => 'Continuar';
 
   @override
-  String get securityKeysNewPinTitle => 'Create a PIN for this key';
+  String get securityKeysNewPinTitle => 'Crie um PIN para esta chave';
 
   @override
-  String get securityKeysNewPinLabel => 'New PIN';
+  String get securityKeysNewPinLabel => 'Novo PIN';
 
   @override
-  String get securityKeysConfirmPinLabel => 'Confirm PIN';
+  String get securityKeysConfirmPinLabel => 'Confirme o PIN';
 
   @override
-  String get securityKeysSetPinButton => 'Set PIN';
+  String get securityKeysSetPinButton => 'Definir PIN';
 
   @override
-  String get securityKeysPinMismatch => 'The PINs don\'t match.';
+  String get securityKeysPinMismatch => 'Os PINs não coincidem.';
 
   @override
   String securityKeysErrorPinInvalid(int count) {
-    return 'Incorrect PIN. $count attempts left before the key locks.';
+    return 'PIN incorreto. Restam $count tentativas antes de a chave bloquear.';
   }
 
   @override
-  String get securityKeysErrorPinInvalidUnknown => 'Incorrect PIN.';
+  String get securityKeysErrorPinInvalidUnknown => 'PIN incorreto.';
 
   @override
   String get securityKeysErrorPinBlocked =>
-      'This key is locked after too many wrong PINs. It can only be reset, and a reset key no longer opens any wallet.';
+      'Esta chave está bloqueada depois de muitos PINs errados. Ela só pode ser redefinida, e uma chave redefinida não abre mais nenhuma carteira.';
 
   @override
   String get securityKeysErrorPinAuthBlocked =>
-      'Too many wrong PINs. Disconnect the key and connect it again.';
+      'Muitos PINs errados. Desconecte a chave e conecte-a novamente.';
 
   @override
   String get securityKeysErrorPinPolicy =>
-      'The key didn\'t accept that PIN. Some keys need 6 or more characters.';
+      'A chave não aceitou esse PIN. Algumas chaves exigem 6 ou mais caracteres.';
 
   @override
-  String get securityKeysErrorNotEnrolled => 'This key isn\'t set up for this wallet.';
+  String get securityKeysErrorNotEnrolled => 'Esta chave não está configurada para esta carteira.';
 
   @override
   String get securityKeysErrorNotThisWallet =>
-      'Your security key settings don\'t match this wallet. Open it with your recovery phrase, then set up your keys again.';
+      'As configurações da sua chave de segurança não correspondem a esta carteira. Abra-a com sua frase de recuperação e configure suas chaves novamente.';
 
   @override
-  String get securityKeysErrorAlreadyAdded => 'This key is already set up for this wallet.';
+  String get securityKeysErrorAlreadyAdded => 'Esta chave já está configurada para esta carteira.';
 
   @override
   String securityKeysErrorUnsupported(String reason) {
-    return 'This key cannot be used here: $reason';
+    return 'Esta chave não pode ser usada aqui: $reason';
   }
 
   @override
-  String get securityKeysErrorTimeout => 'No key was found. Try again.';
+  String get securityKeysErrorTimeout => 'Nenhuma chave foi encontrada. Tente novamente.';
 
   @override
-  String get securityKeysErrorTransport => 'Lost the connection to your key. Try again.';
+  String get securityKeysErrorTransport => 'A conexão com sua chave caiu. Tente novamente.';
 
   @override
   String securityKeysErrorGeneric(String reason) {
-    return 'Something went wrong: $reason';
+    return 'Algo deu errado: $reason';
   }
 
   @override
-  String get securityKeyUnlockTitle => 'Unlock with your security key';
+  String get securityKeyUnlockTitle => 'Desbloqueie com sua chave de segurança';
 
   @override
-  String get securityKeyUnlockButton => 'Unlock';
+  String get securityKeyUnlockButton => 'Desbloquear';
 
   @override
-  String get securityKeyLostKeys => 'Lost your keys?';
+  String get securityKeyLostKeys => 'Perdeu suas chaves?';
 
   @override
   String get securityKeyLostKeysBody =>
-      'Open the wallet with your recovery phrase, then set up new keys in Settings.';
+      'Abra a carteira com sua frase de recuperação e configure novas chaves nas Configurações.';
 
   @override
-  String get securityKeyUseRecoveryPhrase => 'Use recovery phrase';
+  String get securityKeyUseRecoveryPhrase => 'Usar frase de recuperação';
 
   @override
-  String get securityKeyRecoveryPhraseHint => 'Enter your recovery phrase';
+  String get securityKeyRecoveryPhraseHint => 'Insira sua frase de recuperação';
 
   @override
-  String get securityKeyRecoveryWrongPhrase => 'That recovery phrase doesn\'t match this wallet.';
+  String get securityKeyRecoveryWrongPhrase =>
+      'Essa frase de recuperação não corresponde a esta carteira.';
 
   @override
   String get securityKeyRecoveryNotPossible =>
-      'This wallet was restored from a 25-word recovery phrase, which can\'t unlock it here. Delete the wallet, then restore it from that phrase.';
+      'Esta carteira foi restaurada de uma frase de recuperação de 25 palavras, que não pode desbloqueá-la aqui. Exclua a carteira e restaure-a a partir dessa frase.';
 
   @override
   String get securityKeyRecoveredToast =>
-      'Unlocked with your recovery phrase. Set up your keys again in Settings.';
+      'Desbloqueada com sua frase de recuperação. Configure suas chaves novamente nas Configurações.';
 
   @override
-  String get securityKeyConnectTitle => 'Connect your security key';
+  String get securityKeyConnectTitle => 'Conecte sua chave de segurança';
 
   @override
   String get securityKeyConnectBodyAndroid =>
-      'Plug in your security key and touch it when it blinks, or hold it flat against the back of your phone.';
+      'Conecte sua chave de segurança e toque nela quando piscar, ou encoste-a na parte de trás do celular.';
 
   @override
   String get securityKeyConnectBodyIos =>
-      'Hold your security key near the top of your iPhone, or plug it in and touch it when it blinks.';
+      'Aproxime sua chave de segurança da parte de cima do iPhone, ou conecte-a e toque nela quando piscar.';
 
   @override
-  String get securityKeyConnectButton => 'Connect key';
+  String get securityKeyConnectButton => 'Conectar chave';
 
   @override
-  String get securityKeyTryAgain => 'Try again';
+  String get securityKeyTryAgain => 'Tentar novamente';
 
   @override
-  String get securityKeyWaiting => 'Waiting for your key…';
+  String get securityKeyWaiting => 'Aguardando sua chave…';
 
   @override
-  String get securityKeyTalkingToKey => 'Connecting to your key…';
+  String get securityKeyTalkingToKey => 'Conectando à sua chave…';
 
   @override
-  String get securityKeyKeyBlinking => 'Your key is blinking';
+  String get securityKeyKeyBlinking => 'Sua chave está piscando';
 
   @override
-  String get securityKeyTouchToSelect => 'Touch your key';
+  String get securityKeyTouchToSelect => 'Toque na sua chave';
 
   @override
-  String get securityKeyTouchBody => 'Touch your security key while it blinks.';
+  String get securityKeyTouchBody => 'Toque na sua chave de segurança enquanto ela pisca.';
 
   @override
-  String get securityKeyPinTitle => 'Enter your key\'s PIN';
+  String get securityKeyPinTitle => 'Insira o PIN da sua chave';
 
   @override
-  String get securityKeyPinBody => 'This is your security key\'s PIN, not your phone\'s passcode.';
+  String get securityKeyPinBody =>
+      'Este é o PIN da sua chave de segurança, não o código do seu celular.';
 
   @override
   String securityKeyPinAttemptsLeft(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count attempts left before the key locks.',
-      one: '1 attempt left before the key locks.',
+      other: 'Restam $count tentativas antes de a chave bloquear.',
+      one: 'Resta 1 tentativa antes de a chave bloquear.',
     );
     return '$_temp0';
   }
 
   @override
-  String get securityKeyUseAnotherKey => 'Use a different key';
+  String get securityKeyUseAnotherKey => 'Usar outra chave';
 
   @override
-  String get securityKeyUseFingerprint => 'Use fingerprint instead';
+  String get securityKeyUseFingerprint => 'Usar impressão digital';
 
   @override
-  String get securityKeyUsePin => 'Use PIN instead';
+  String get securityKeyUsePin => 'Usar PIN';
 
   @override
   String securityKeysNewPinBodyCount(int count) {
-    return 'This key doesn\'t have a PIN yet. Choose one with at least $count characters, so someone who finds your key can\'t use it.';
+    return 'Esta chave ainda não tem PIN. Escolha um com pelo menos $count caracteres, para que quem encontrar sua chave não consiga usá-la.';
   }
 
   @override
   String securityKeysPinTooShortCount(int count) {
-    return 'Use at least $count characters.';
+    return 'Use pelo menos $count caracteres.';
   }
 
   @override
-  String get securityKeyCheckingPin => 'Checking your PIN…';
+  String get securityKeyCheckingPin => 'Verificando seu PIN…';
 
   @override
-  String get securityKeyWorking => 'One moment…';
+  String get securityKeyWorking => 'Um momento…';
 
   @override
-  String get securityKeyKeepHolding => 'Keep holding your key to the phone.';
+  String get securityKeyKeepHolding => 'Continue segurando sua chave junto ao celular.';
 
   @override
-  String get securityKeyHoldAgain => 'Hold your key to your phone again';
+  String get securityKeyHoldAgain => 'Encoste sua chave no celular novamente';
 
   @override
-  String get securityKeyConnectAgain => 'Connect your key again';
+  String get securityKeyConnectAgain => 'Conecte sua chave novamente';
 
   @override
-  String get securityKeyTouchToConfirm => 'Touch your key to confirm';
+  String get securityKeyTouchToConfirm => 'Toque na sua chave para confirmar';
 
   @override
-  String get securityKeyTouchOnceMore => 'Touch your key once more';
+  String get securityKeyTouchOnceMore => 'Toque na sua chave mais uma vez';
 
   @override
-  String get securityKeyTouchToUnlock => 'Touch your key to unlock';
+  String get securityKeyTouchToUnlock => 'Toque na sua chave para desbloquear';
 
   @override
-  String get securityKeyFingerprintToConfirm => 'Touch the fingerprint sensor';
+  String get securityKeyFingerprintToConfirm => 'Toque no sensor de impressão digital';
 
   @override
-  String get securityKeyFingerprintOnceMore => 'Touch the sensor once more';
+  String get securityKeyFingerprintOnceMore => 'Toque no sensor mais uma vez';
 
   @override
-  String get securityKeyFingerprintToUnlock => 'Touch the sensor to unlock';
+  String get securityKeyFingerprintToUnlock => 'Toque no sensor para desbloquear';
 
   @override
-  String get securityKeyFingerprintBody => 'Use a finger you added to this security key.';
+  String get securityKeyFingerprintBody =>
+      'Use um dedo que você cadastrou nesta chave de segurança.';
 
   @override
   String securityKeyTouchCount(int current, int total) {
-    return 'Touch $current of $total';
+    return 'Toque $current de $total';
   }
 
   @override
-  String get securityKeyAddedTitle => 'Key added';
+  String get securityKeyAddedTitle => 'Chave adicionada';
 
   @override
-  String get securityKeyNameBody => 'Give it a name so you can tell your keys apart.';
+  String get securityKeyNameBody => 'Dê um nome a ela para diferenciar suas chaves.';
 
   @override
-  String get securityKeySaveName => 'Save';
+  String get securityKeySaveName => 'Salvar';
 
   @override
   String get securityKeysErrorKeyUnsupported =>
-      'This security key isn\'t supported. Try a different one.';
+      'Esta chave de segurança não é compatível. Tente outra.';
 
   @override
   String get securityKeysErrorPinChangeRequired =>
-      'This security key needs a new PIN first. Change it with the key maker\'s app, then try again.';
+      'Esta chave de segurança precisa de um novo PIN primeiro. Altere-o com o app do fabricante da chave e tente novamente.';
 
   @override
   String securityKeysErrorUvInvalid(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Fingerprint not recognized. $count tries left.',
-      one: 'Fingerprint not recognized. 1 try left.',
+      other: 'Impressão digital não reconhecida. Restam $count tentativas.',
+      one: 'Impressão digital não reconhecida. Resta 1 tentativa.',
     );
     return '$_temp0';
   }
 
   @override
-  String get securityKeysErrorUvInvalidUnknown => 'Fingerprint not recognized.';
+  String get securityKeysErrorUvInvalidUnknown => 'Impressão digital não reconhecida.';
 
   @override
   String get securityKeysErrorUvBlocked =>
-      'Fingerprint is locked on this key. Enter its PIN instead.';
+      'A impressão digital está bloqueada nesta chave. Insira o PIN dela.';
 
   @override
   String get securityKeysErrorUvNotConfigured =>
-      'This key has no fingerprint set up. Enter its PIN instead.';
+      'Esta chave não tem impressão digital configurada. Insira o PIN dela.';
 
   @override
   String securityKeyPinTitleNamed(String name) {
-    return 'Enter the PIN for $name';
+    return 'Insira o PIN de $name';
   }
 
   @override
   String securityKeysSerial(String serial) {
-    return 'Serial $serial';
+    return 'Nº de série $serial';
   }
 
   @override
   String get securityKeysErrorDifferentKey =>
-      'This isn\'t the key you touched. Start again with the key you want to use.';
+      'Esta não é a chave que você tocou. Comece de novo com a chave que você quer usar.';
 
   @override
   String get securityKeysErrorMultipleKeys =>
-      'More than one security key is plugged in. Unplug the others, then try again.';
+      'Há mais de uma chave de segurança conectada. Desconecte as outras e tente novamente.';
 
   @override
   String get unlockBoundToAnotherPc =>
-      'This wallet can\'t be opened on this PC. If you created it on this PC, restart the PC and try again. Otherwise, restore the wallet from its recovery phrase.';
+      'Esta carteira não pode ser aberta neste PC. Se você a criou neste PC, reinicie o PC e tente novamente. Caso contrário, restaure a carteira a partir da frase de recuperação dela.';
 
   @override
-  String get securityKeysCancel => 'Cancel';
+  String get securityKeysCancel => 'Cancelar';
 
   @override
-  String get securityKeysPinEmpty => 'Enter your PIN.';
+  String get securityKeysPinEmpty => 'Insira seu PIN.';
 
   @override
   String get securityKeysSharedPhraseWarning =>
-      'Your wallet is only as strong as the weakest protection. Make sure your recovery phrase is saved safely, and if you use the same wallet on multiple devices, make sure to set up Advanced Security there too.';
+      'Sua carteira é tão forte quanto a proteção mais fraca. Guarde sua frase de recuperação em segurança e, se você usa a mesma carteira em vários dispositivos, configure a Advanced Security neles também.';
 
   @override
-  String get securityKeysRequirementsMac => 'Works with most FIDO2 capable hardware security keys.';
+  String get securityKeysRequirementsMac =>
+      'Funciona com a maioria das chaves de segurança físicas compatíveis com FIDO2.';
 
   @override
   String get securityKeyConnectBodyMac =>
-      'Plug your security key into this Mac and touch it when it blinks.';
+      'Conecte sua chave de segurança a este Mac e toque nela quando piscar.';
 
   @override
-  String get securityKeyPinBodyMac => 'This is your security key\'s PIN, not your Mac\'s password.';
+  String get securityKeyPinBodyMac =>
+      'Este é o PIN da sua chave de segurança, não a senha do seu Mac.';
 
   @override
-  String get desktopAutoLockLabel => 'Lock after';
+  String get desktopAutoLockLabel => 'Bloquear após';
 
   @override
   String desktopAutoLockDescription(String appName) {
-    return 'After this long without use, $appName locks the wallet. Unlock it to continue.';
+    return 'Depois de todo esse tempo sem uso, a $appName bloqueia a carteira. Desbloqueie-a para continuar.';
   }
 
   @override
   String get securityKeysRequirementsLinux =>
-      'Works with most FIDO2 capable hardware security keys. Needs libfido2, which most Linux systems already have.';
+      'Funciona com a maioria das chaves de segurança físicas compatíveis com FIDO2. Requer a libfido2, que a maioria dos sistemas Linux já tem.';
 
   @override
   String get securityKeysRequirementsWindows =>
-      'Works with most FIDO2 capable hardware security keys. Needs Windows 11 (22H2 or later).';
+      'Funciona com a maioria das chaves de segurança físicas compatíveis com FIDO2. Requer Windows 11 (22H2 ou mais recente).';
 
   @override
-  String get securityKeysTurnOffBodyDesktop => 'Your password alone will open the wallet again.';
+  String get securityKeysTurnOffBodyDesktop => 'Só a sua senha voltará a abrir a carteira.';
 
   @override
   String get securityKeyConnectBodyDesktop =>
-      'Plug your security key into this computer and touch it when it blinks.';
+      'Conecte sua chave de segurança a este computador e toque nela quando piscar.';
 
   @override
   String get securityKeyConnectBodyWindows =>
-      'Windows asks for your security key, its PIN, and a touch.';
+      'O Windows pede sua chave de segurança, o PIN dela e um toque.';
 
   @override
   String get securityKeyPinBodyDesktop =>
-      'This is your security key\'s PIN, not your wallet password.';
+      'Este é o PIN da sua chave de segurança, não a senha da sua carteira.';
 
   @override
-  String get securityKeyWindowsPromptTitle => 'Continue in Windows Security';
+  String get securityKeyWindowsPromptTitle => 'Continue na Segurança do Windows';
 
   @override
-  String get securityKeyWindowsPromptBody => 'Enter your security key\'s PIN, then touch the key.';
+  String get securityKeyWindowsPromptBody =>
+      'Insira o PIN da sua chave de segurança e toque na chave.';
 
   @override
   String get securityKeyWindowsPromptEnrollBody =>
-      'Windows will ask twice. Each time, enter your security key\'s PIN, then touch the key.';
+      'O Windows vai pedir duas vezes. Em cada uma, insira o PIN da sua chave de segurança e toque na chave.';
 
   @override
-  String get securityKeyWindowsWaiting => 'Waiting for Windows Security…';
+  String get securityKeyWindowsWaiting => 'Aguardando a Segurança do Windows…';
 
   @override
-  String get securityKeyUseButton => 'Use security key';
+  String get securityKeyUseButton => 'Usar chave de segurança';
 
   @override
-  String get advancedSecurityAuthReason => 'Confirm it\'s you to open Advanced Security';
+  String get advancedSecurityAuthReason => 'Confirme sua identidade para abrir a Advanced Security';
 
   @override
-  String get advancedSecurityAuthFailed => 'Couldn\'t confirm it\'s you.';
+  String get advancedSecurityAuthFailed => 'Não foi possível confirmar sua identidade.';
 
   @override
-  String get advancedSecurityPasswordTitle => 'Enter your password';
+  String get advancedSecurityPasswordTitle => 'Digite sua senha';
 
   @override
   String advancedSecurityPasswordBody(String appName) {
-    return 'Enter the password you use to unlock $appName.';
+    return 'Digite a senha que você usa para desbloquear a $appName.';
   }
 
   @override
-  String get advancedSecurityPasswordLabel => 'Password';
+  String get advancedSecurityPasswordLabel => 'Senha';
 
   @override
-  String get advancedSecurityPasswordWrong => 'Incorrect password.';
+  String get advancedSecurityPasswordWrong => 'Senha incorreta.';
 
   @override
-  String get advancedSecurityContinue => 'Continue';
+  String get advancedSecurityContinue => 'Continuar';
 
   @override
-  String get appLockLabel => 'App Lock';
+  String get appLockLabel => 'Bloqueio do app';
 
   @override
-  String get appLockImmediately => 'Immediately';
+  String get appLockImmediately => 'Imediatamente';
 
   @override
   String appLockDescriptionPhone(String appName) {
-    return 'How long $appName can be in the background before it asks for your face, fingerprint or passcode again.';
+    return 'Quanto tempo a $appName pode ficar em segundo plano antes de pedir seu rosto, impressão digital ou código novamente.';
   }
 
   @override
   String appLockDescriptionMac(String appName) {
-    return 'How long $appName can go unused before it asks for Touch ID or your Mac\'s password again. Immediately locks it as soon as its window is hidden. The wallet keeps syncing.';
+    return 'Quanto tempo a $appName pode ficar sem uso antes de pedir o Touch ID ou a senha do seu Mac novamente. Imediatamente a bloqueia assim que a janela é ocultada. A carteira continua sincronizando.';
   }
 
   @override
   String appLockDescriptionPassword(String appName) {
-    return 'How long $appName can go unused before it asks for your password again. Immediately locks it as soon as its window is hidden. The wallet keeps syncing.';
+    return 'Quanto tempo a $appName pode ficar sem uso antes de pedir sua senha novamente. Imediatamente a bloqueia assim que a janela é ocultada. A carteira continua sincronizando.';
   }
 
   @override
   String appLockNoDeviceLock(String appName) {
-    return 'This device has no screen lock, so anyone holding it can open $appName. Set a passcode or screen lock in the device\'s settings.';
+    return 'Este dispositivo não tem bloqueio de tela, então qualquer pessoa com ele em mãos pode abrir a $appName. Defina um código ou bloqueio de tela nos ajustes do dispositivo.';
   }
 
   @override
   String lockLaterAuthReason(String appName) {
-    return 'Confirm it\'s you to lock $appName less often';
+    return 'Confirme sua identidade para bloquear a $appName com menos frequência';
   }
 
   @override
   String lockLaterPasswordBody(String appName) {
-    return 'A longer time leaves $appName open for longer. Enter the password you unlock it with.';
+    return 'Um tempo maior deixa a $appName aberta por mais tempo. Digite a senha que você usa para desbloqueá-la.';
   }
 
   @override
   String appLockUseRecoveryPhraseBody(String appName) {
-    return 'If this device can\'t confirm it\'s you, your recovery phrase opens $appName instead.';
+    return 'Se este dispositivo não conseguir confirmar sua identidade, sua frase de recuperação abre a $appName.';
   }
 }

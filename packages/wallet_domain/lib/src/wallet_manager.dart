@@ -205,7 +205,9 @@ class WalletManager with ChangeNotifier {
   /// keystore.
   void useGeneratedPassword() => _setPassword(genWalletPassword(), _PasswordSource.generated);
 
-  /// Clears the in-memory password, e.g. when App Lock locks.
+  /// Drops the in-memory password, as a lock would, without closing anything.
+  /// The apps lock through [lockSpend] and [fullyLock].
+  @visibleForTesting
   void clearPassword() => _password = null;
 
   /// Whether an engaged [passwordGuard] holds the password, so the keystore

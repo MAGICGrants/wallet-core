@@ -212,7 +212,9 @@ class SecurityKeyService implements SecurityKeyAuthenticator {
 
   /// This service held to the key with [serial], the one the user touched in
   /// [inspect]: a different key is refused before any PIN reaches it, so a
-  /// PIN meant for one key never costs another an attempt.
+  /// PIN meant for one key never costs another an attempt. Only where the
+  /// key's serial can be read (a YubiKey that shows it): with [serial] null,
+  /// any key that answers is used.
   SecurityKeyAuthenticator expecting(int? serial) =>
       serial == null ? this : _ExpectedKey(this, serial);
 

@@ -23,8 +23,9 @@ import 'monero_backend.dart';
 /// comes off before its wallet closes, so an isolate destroyed in between
 /// leaks a wallet rather than leaving it to be closed twice. Reads and writes
 /// are synchronous, on a file of a few lines, so one isolate's never
-/// interleave. Only the app's own (attended) wallets are listed; a background
-/// run and the service close theirs themselves.
+/// interleave; two isolates' can, and a change one makes can then be lost.
+/// Only the app's own (attended) wallets are listed; a background run and the
+/// service close theirs themselves.
 abstract final class NativeWalletRegistry {
   static const fileName = 'native_wallets.json';
 

@@ -283,15 +283,14 @@ Future<void> _fullyLock(WalletManager manager) async {
   }
 }
 
-/// Locks the wallet now, as "Fully lock after" does when its time is up, with
-/// the unlock screen in front: for a screen that must lock by itself, such as
-/// the seed check after repeated wrong answers. The stack goes first, so
-/// nothing that was open stays reachable behind the unlock screen.
-Future<void> lockWalletNow(BuildContext context) => lockWalletAction(context)();
-
-/// [lockWalletNow], bound now and run later: the wallet and the navigator are
-/// taken from [context] here, so the lock still runs if that screen has been
-/// closed in the meantime.
+/// Locks the wallet, as "Fully lock after" does when its time is up, with the
+/// unlock screen in front: for a screen that must lock by itself, such as the
+/// recovery phrase check after repeated wrong answers. The stack goes first,
+/// so nothing that was open stays reachable behind the unlock screen.
+///
+/// Bound now and run later: the wallet and the navigator are taken from
+/// [context] here, so the lock still runs if that screen has been closed in
+/// the meantime.
 Future<void> Function() lockWalletAction(BuildContext context) {
   final manager = _manager(context);
   final navigator = Navigator.of(context);

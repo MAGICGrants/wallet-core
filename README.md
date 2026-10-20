@@ -76,6 +76,8 @@ local clone:
 
 ```yaml
 dependency_overrides:
+  # Every wallet-core package the app's pubspec.yaml pins (all twelve for
+  # Spice; Skylight leaves out wallet_bitcoin and wallet_ethereum):
   wallet_infra:
     path: ../wallet-core/packages/wallet_infra
   wallet_domain:
@@ -84,6 +86,22 @@ dependency_overrides:
     path: ../wallet-core/packages/wallet_monero
   wallet_openalias:
     path: ../wallet-core/packages/wallet_openalias
+  wallet_bitcoin:
+    path: ../wallet-core/packages/wallet_bitcoin
+  wallet_ethereum:
+    path: ../wallet-core/packages/wallet_ethereum
+  wallet_fhse:
+    path: ../wallet-core/packages/wallet_fhse
+  wallet_backup:
+    path: ../wallet-core/packages/wallet_backup
+  wallet_backup_platform:
+    path: ../wallet-core/packages/wallet_backup_platform
+  wallet_background:
+    path: ../wallet-core/packages/wallet_background
+  wallet_fiat:
+    path: ../wallet-core/packages/wallet_fiat
+  wallet_ui:
+    path: ../wallet-core/packages/wallet_ui
   # Plus every override from the app's own pubspec.yaml, copied verbatim:
   # hashlib, bip39, blockchain_utils, web3dart, intl. See the table below.
 ```
@@ -225,7 +243,8 @@ implementation, so this does not just check monero_c against itself.
 ## CI
 
 `ci.yml` runs on every push: analysis, formatting and the unit tests for every
-package, plus `cargo test` for the OpenAlias resolver and a native-crypto job.
+package (wallet_fhse's against its native library, built in the job), plus
+`cargo test` for the OpenAlias resolver and a native-crypto job.
 Everything there uses `FakeMoneroBackend` rather than a real Monero library.
 
 `native.yml` builds monero_c and runs `wallet_monero`'s tests against it,

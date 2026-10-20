@@ -38,14 +38,22 @@ seed                    polyseed / BIP39
 **No intermediate root.** Each purpose hashes straight from the seed's secret
 above its spend key (bytes 32–63 of polyseed's keygen, or BIP39's SLIP-21
 `Key(m/"Monero")`) under its own domain string, so neither key is derived from
-the other. A polyseed offset passphrase or a BIP39 account goes into each
-purpose; offset passphrases are not supported. Every step is a hash, and the
-domain strings are fixed: changing one would change every seed-derived wallet
+the other ([polyseed#25](https://github.com/tevador/polyseed/issues/25)
+weighed this against a root above both). A BIP39 account goes into each
+purpose (both apps use account 0). Every step is a hash, and the domain
+strings are fixed: changing one would change every seed-derived wallet
 password.
 
 A 25-word legacy seed *is* the spend key, whose public key is in the address,
 so anything derived from it falls to a discrete-log solver. Such a wallet gets
-a random `s_f`.
+a random `s_f` (`WalletKeyTree.isSeedDerived`).
+
+**Offset passphrases are not supported yet:** neither app accepts one. When
+they are, the polyseed offset `o` (`cn_slow_hash` of the passphrase) goes into
+every purpose, as the BIP39 account does: Monero applies the offset after
+keygen, so without `o` an offset wallet would get the plain wallet's `s_f`.
+Until then `SeedSecret.isAvailableFor` refuses an offset polyseed rather than
+derive without `o`.
 
 There are two states:
 
@@ -278,6 +286,9 @@ key: set up, unlock, add, set up again, recovery phrase, turn off, delete.
   ("unplug the others"). Windows' own dialog does the same choosing.
 - **YubiKey Bio** speaks FIDO over USB HID only (no NFC, no CCID), so it works
   on Android over USB-C and on a Mac, but cannot reach an iPhone.
+- **The iPhone app on a Mac** (Apple silicon) has no security keys: it has
+  neither NFC nor the Mac app's USB path, so Settings shows no Advanced
+  Security there (`SecurityKeyService.isSupportedPlatform`).
 - **macOS** follows mobile: a generated wallet password in the Keychain,
   App Lock through Touch ID or the Mac's password, and security keys over USB
   HID (any FIDO2 YubiKey firmware; no NFC). It needs macOS 13 (YubiKit Swift)

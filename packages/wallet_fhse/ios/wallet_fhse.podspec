@@ -19,7 +19,8 @@ the small C interface in src/wfhse.h.
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*.c'
   s.dependency 'Flutter'
-  s.platform = :ios, '13.0'
+  # YubiKit Swift, which the plugin's Swift half needs, requires iOS 16.
+  s.platform = :ios, '16.0'
 
   src = '${PODS_TARGET_SRCROOT}/../src'
   s.pod_target_xcconfig = {

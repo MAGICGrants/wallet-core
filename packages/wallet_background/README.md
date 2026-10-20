@@ -59,8 +59,11 @@ one of them holds the wallets at a time:
   native Monero wallets with the process id and its isolate's token
   (wallet_monero's `NativeWalletRegistry`). Whoever takes over (the service
   after three missed pings, a periodic run, or the app's next isolate on its
-  claim) closes the ones a destroyed isolate left (`closeOrphanedMoneroWallets`),
-  never a live app's. The service holds the view-only copies meanwhile.
+  claim) closes the ones a destroyed isolate left (`closeOrphanedMoneroWallets`).
+  The service holds the view-only copies meanwhile. Not every live isolate can
+  be told from a destroyed one: a second instance of the app, started while
+  the first still runs, takes the first one's wallets for left behind and
+  closes them while they are in use.
 - **Killed** (low memory, a native crash): the service restarts itself and
   holds nothing until no app answers its pings.
 - **Force-stopped:** nothing runs until the app is opened again; WorkManager

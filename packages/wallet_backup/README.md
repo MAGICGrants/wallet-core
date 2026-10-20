@@ -82,9 +82,11 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
     restored to a location the user never turned on.
   - A saved backup file is the user's: it is written under a new name (the
     date and time) and never touched again, and importing one only reads it.
-- **Writing.** Each change is one file: the seq is saved first, the file goes to
-  the local copy (temporary name, flushed, renamed), then to every enabled
-  location. Payment files reach iCloud after a random delay of up to 10 minutes.
+- **Writing.** Each write is one file: a payment, or everything one sync
+  records (its address-book changes, or the payments a history scan
+  backfills). The seq is saved first, the file goes to the local copy
+  (temporary name, flushed, renamed), then to every enabled location. Payment
+  files reach iCloud after a random delay of up to 10 minutes.
 - **Payments.** `MoneroWallet.commitTx` hands the payment over straight after
   the broadcast, with the key read from the wallet. A history scan also records
   every outgoing payment this wallet built that has no record yet, including
@@ -150,9 +152,10 @@ still see:
 - **That the files belong to one wallet.** The folder name comes from the seed,
   so it is the same on every device and never changes: the location can link a
   wallet's files across devices and over time, though not to its addresses.
-- **How much happens.** Each change is one file, and files are deleted only
-  when the user deletes them there, so their count roughly tracks the
-  payments recorded and the address-book edits made.
+- **How much happens.** Each sent payment is one file, and so is each sync
+  that changed the address book (all its edits together) or backfilled
+  payments. Files are deleted only when the user deletes them there, so their
+  count roughly tracks payments and editing sessions.
 - **Roughly when.** Upload times. A payment's file reaches iCloud after a
   random delay of up to 10 minutes; contact changes are not delayed. Android
   backup runs about once a day, which blurs timing there.

@@ -10,7 +10,8 @@ flutter test
 
 `test/support/host_library.dart` finds `build/host/libwallet_fhse.{dylib,so}`,
 or the path in `WALLET_FHSE_LIBRARY`. Without either, every test is skipped
-with a message saying so rather than failing.
+with a message saying so rather than failing, unless `REQUIRE_FHSE_LIBRARY=1`
+is set, as CI does: then the run fails.
 
 No unit test talks to a FIDO2 key (the parity check below is run by hand). `FakeSecurityKey` stands in for one: each
 credential has its own random secret, and the "hmac-secret" is a keyed hash of
