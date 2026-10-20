@@ -18,21 +18,26 @@ nothing is written anywhere, on the device or off it.
   a migration.
 - **Android:** Auto Backup. The files go to `<app dir>/metadata_backup/`
   (`app_flutter/metadata_backup/`), the one folder the app's backup rules
-  include, and only while the user has this location on; turning it off
-  empties the folder, so Android has nothing of the app's to copy. Android
-  copies it about once a night to the user's Google Drive, or to the phone's
-  own backup service (Seedvault on GrapheneOS and CalyxOS), and restores it on
-  install, before the first launch. A copy restored that way is left alone
-  while the location is off: Skip on the import screen neither reads nor
-  deletes it. Turning Android backup on reads it in; "Delete the Android
-  backup copy", in its card while it is off, removes it. No Kotlin.
+  include, and only while the user has this location on. Android copies it
+  about once a night to the user's Google Drive, or to the phone's own backup
+  service (Seedvault on GrapheneOS and CalyxOS), and restores it on install,
+  before the first launch. Turning the location off stops adding files; what
+  is there stays, and Android keeps carrying it. So does a copy Android
+  restored: nothing reads it while the location is off, and nothing deletes it
+  (not Skip on the import screen, a cancelled save, a failed import, "Delete
+  the copy on this device" or deleting the wallet). Turning Android backup on
+  reads it in; only "Delete the Android backup copy", in its card while it is
+  off, removes it. No Kotlin.
 - **Everywhere:** saving the whole backup as one file (the share sheet on a
   phone, a save dialog on a desktop OS) and importing one.
 - **The screens:** Settings > Backup (`MetadataBackupScreen`): the automatic
   locations as toggles, and the backup file below them, usable at any time
   and alongside them. There is no switch of its own: turning a location on,
   saving a file or importing one starts the copy on this device, and "Delete
-  the copy on this device" stops everything. Then "Import wallet data" after
+  the copy on this device" stops everything and deletes that copy, leaving
+  iCloud's, Android backup's and every saved file. The only deletes of a
+  location's files are its own links, "Delete the iCloud copy" and "Delete the
+  Android backup copy", each shown in its card while that location is off. Then "Import wallet data" after
   a restore from the seed (`ImportWalletDataScreen`, shown by
   `scheduleImportWalletData`), with three choices:
   - *From iCloud / Android backup:* looks there first without writing

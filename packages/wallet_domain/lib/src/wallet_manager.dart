@@ -988,8 +988,9 @@ class WalletManager with ChangeNotifier {
 
   /// Deletes every wallet file and clears the keys this layer owns.
   ///
-  /// [extraPrefKeys] lets the app clear its own (contacts, pending txs,
-  /// notification state) in the same pass; the manager does not know them.
+  /// [extraPrefKeys] lets the app clear its own (pending txs, notification
+  /// state) in the same pass; the manager does not know them. The address book
+  /// and the app's settings outlive the wallet.
   Future<void> deleteAll({List<String> extraPrefKeys = const []}) async {
     AppSession.lock();
     // The guard first: one left behind by a delete cut short would make the

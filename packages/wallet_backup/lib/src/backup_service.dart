@@ -368,9 +368,9 @@ class MetadataBackupService extends ChangeNotifier
   /// [reportRestore] it reports what they held, as after a restore, and starts a
   /// new device id.
   ///
-  /// Off: turns every location off, deletes this wallet's files from on-device
-  /// locations (Android backup), and deletes the local copy and the device
-  /// state. Files already in iCloud stay until [deleteFromLocation].
+  /// Off: turns every location off, and deletes the local copy and the device
+  /// state. Every location keeps its files: nothing but [deleteFromLocation]
+  /// deletes them.
   Future<void> setEnabled(
     bool enabled, {
     Iterable<String> locations = const [],
@@ -405,9 +405,6 @@ class MetadataBackupService extends ChangeNotifier
     await _serial(() async {
       final folder = _folder;
       if (folder != null) {
-        for (final c in _locations.where((c) => c.onDevice)) {
-          await c.location.deleteFolder(folder);
-        }
         await _local.deleteFolder(folder);
         final state = await _stateFile();
         if (await state.exists()) await state.delete();
@@ -420,23 +417,20 @@ class MetadataBackupService extends ChangeNotifier
   Future<bool> isLocationEnabled(String id) async =>
       _enabled[id] ??= await SharedPreferencesService.get<bool>(enabledKey(id)) ?? false;
 
-  /// Turns a location on or off. Turning on uploads everything it lacks.
-  /// Turning off an on-device location (Auto Backup) also deletes this
-  /// wallet's files there, so the next OS backup no longer carries them.
+  /// Turns a location on or off. Turning on reads what is there and uploads
+  /// everything it lacks, adding files and never removing or replacing one.
+  /// Turning off only stops adding: the files stay, and Android backup keeps
+  /// carrying an on-device location's, until [deleteFromLocation].
   ///
   /// With the last one off, the address book stops syncing: the next one
   /// turned on joins ([_syncContacts]).
   Future<void> setLocationEnabled(String id, bool enabled) async {
     _enabled[id] = enabled;
     await SharedPreferencesService.set<bool>(enabledKey(id), enabled);
-    final config = _locations.firstWhere((c) => c.location.id == id);
-    if (!enabled) {
-      final none = !await _anyLocationEnabled();
+    if (!enabled && !await _anyLocationEnabled()) {
       await _serial(() async {
-        final folder = _folder;
-        if (config.onDevice && folder != null) await config.location.deleteFolder(folder);
         final state = _state;
-        if (none && state != null) await _leaveContactSync(state);
+        if (state != null) await _leaveContactSync(state);
       });
     }
     _locationStatus[id] = LocationStatus(id: id, enabled: enabled);
@@ -468,18 +462,20 @@ class MetadataBackupService extends ChangeNotifier
   }
 
   /// How many of this wallet's files [id] holds, without reading or writing
-  /// any, even with the backup or [id] off: Android puts back a copy with the
-  /// app's files, which then stays while its location is off until the user
-  /// deletes it ([deleteFromLocation]) or turns the location on, which reads
-  /// it. Needs the wallet unlocked ([isOpen]); 0 otherwise.
+  /// any, even with the backup or [id] off. A location that is off can still
+  /// hold some: the files stay when it is turned off, and Android puts back a
+  /// copy with the app's files. They stay until the user deletes them
+  /// ([deleteFromLocation]); turning the location on reads them. Needs the
+  /// wallet unlocked ([isOpen]); 0 otherwise.
   Future<int> filesIn(String id) => _serial(() async {
     final folder = _folder;
     if (!isOpen || folder == null) return 0;
     return (await _probe(_locations.firstWhere((c) => c.location.id == id).location, folder)).files;
   });
 
-  /// Deletes this wallet's files from [id], e.g. the iCloud copy. The local
-  /// copy and every other location keep theirs.
+  /// Deletes this wallet's files from [id], e.g. the iCloud copy: the only
+  /// way a location's files are ever deleted. The local copy and every other
+  /// location keep theirs.
   Future<void> deleteFromLocation(String id) => _serial(() async {
     final folder = _folder;
     if (folder == null) return;
@@ -581,7 +577,8 @@ class MetadataBackupService extends ChangeNotifier
   }
 
   /// Also forgets the switches, so a wallet made after this one starts with
-  /// the backup off.
+  /// the backup off. Every location keeps its files, as [setEnabled] leaves
+  /// them: only the user deletes those ([deleteFromLocation]).
   @override
   Future<void> deleteLocal() async {
     await close();
@@ -595,10 +592,6 @@ class MetadataBackupService extends ChangeNotifier
       for (final root in {(await _localRoot()).path, (await _stateRoot()).path}) {
         final dir = Directory(root);
         if (await dir.exists()) await dir.delete(recursive: true);
-      }
-      for (final c in _locations.where((c) => c.onDevice)) {
-        final l = c.location;
-        if (l is FolderLocation) await l.clear();
       }
     });
   }

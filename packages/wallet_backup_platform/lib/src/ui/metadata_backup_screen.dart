@@ -40,8 +40,9 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
   bool _on = false;
   bool _busy = false;
 
-  /// This wallet's files that Android put back with the app's, there while
-  /// Android backup is off: kept until deleted here or read by turning it on.
+  /// This wallet's files in Android backup while it is off, left by turning
+  /// it off or put back by Android with the app's files: kept until deleted
+  /// here, and read by turning it on.
   bool _autoLeftover = false;
 
   MetadataBackupService? get _service => MetadataBackupSetup.service;
@@ -354,8 +355,8 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
           ),
           child: (_enabled[autoId] ?? false)
               ? status(autoId)
-              // Android put a copy back (a new phone, or the app reinstalled)
-              // that the user has not turned on: it stays until deleted here.
+              // Files in Android backup while it is off: they stay, and
+              // Android keeps carrying them, until deleted here.
               : _autoLeftover
               ? _deleteLink(i18n.backupDeleteAndroid, _deleteAndroid)
               : null,

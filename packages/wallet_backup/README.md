@@ -63,11 +63,25 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   not even the local copy or the device state, and no location is read; the
   service only holds the unlocked wallet's keys so it can be turned on without
   unlocking again. Turning it off turns every location off and deletes the
-  local copy, the device state and the on-device locations' files (Android
-  backup); a copy already in iCloud stays until the user deletes it. Deleting
-  the wallet also forgets the switches. It is off by default because anyone
+  local copy and the device state. Deleting the wallet also forgets the
+  switches. It is off by default because anyone
   with the seed and a copy can read who the user paid, a cost the user should
   choose.
+- **Only the user deletes a backup.** The one way a location's files are
+  deleted is the user's delete for that location (`deleteFromLocation`:
+  "Delete the iCloud copy", "Delete the Android backup copy"). Otherwise:
+  - Turning a location on reads what is there and adds what it lacks. It
+    never removes a file or replaces one (a different file under one of our
+    names is left as it is).
+  - Turning a location off only stops adding. Its files stay, and Android
+    backup keeps carrying an on-device location's.
+  - Turning the whole backup off, deleting the copy on this device and
+    deleting the wallet remove only the app's own local copy and device
+    state, never a location's files. That covers a step undone because it
+    did not complete (a cancelled save, a failed import), and a copy Android
+    restored to a location the user never turned on.
+  - A saved backup file is the user's: it is written under a new name (the
+    date and time) and never touched again, and importing one only reads it.
 - **Writing.** Each change is one file: the seq is saved first, the file goes to
   the local copy (temporary name, flushed, renamed), then to every enabled
   location. Payment files reach iCloud after a random delay of up to 10 minutes.
@@ -133,9 +147,9 @@ still see:
 - **That the files belong to one wallet.** The folder name comes from the seed,
   so it is the same on every device and never changes: the location can link a
   wallet's files across devices and over time, though not to its addresses.
-- **How much happens.** Each change is one file, and files are not deleted
-  while the location is on, so their count roughly tracks the payments
-  recorded and the address-book edits made.
+- **How much happens.** Each change is one file, and files are deleted only
+  when the user deletes them there, so their count roughly tracks the
+  payments recorded and the address-book edits made.
 - **Roughly when.** Upload times. A payment's file reaches iCloud after a
   random delay of up to 10 minutes; contact changes are not delayed. Android
   backup runs about once a day, which blurs timing there.

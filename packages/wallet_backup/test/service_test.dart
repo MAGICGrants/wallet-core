@@ -506,7 +506,7 @@ void main() {
     await clone.service.close();
   });
 
-  test('turning off an on-device location deletes its copy', () async {
+  test('turning a location off only stops adding; its delete is what removes the files', () async {
     final auto = FolderLocation('auto', () async => Directory('${tmp.path}/auto'));
     final a = Device(
       Directory('${tmp.path}/a'),
@@ -515,13 +515,43 @@ void main() {
     );
     a.setContacts([const Contact(id: 'c1', name: 'One', addresses: {})]);
     await a.open(const PolyseedSeed(raven));
-    expect(await auto.list(a.service.folderName!), hasLength(1));
+    final folder = a.service.folderName!;
+    expect(await auto.list(folder), hasLength(1));
+    expect(cloud.folders[folder], hasLength(1));
+
     await a.service.setLocationEnabled('auto', false);
-    expect(await auto.list(a.service.folderName!), isEmpty);
+    await a.service.setLocationEnabled('icloud', false);
+    a.setContacts([
+      const Contact(id: 'c1', name: 'One', addresses: {}),
+      const Contact(id: 'c2', name: 'Two', addresses: {}),
+    ]);
+    a.service.contactsChanged();
+    await a.service.idle();
+    expect(await auto.list(folder), hasLength(1), reason: 'kept, and nothing added');
+    expect(cloud.folders[folder], hasLength(1), reason: 'kept, and nothing added');
+
+    await a.service.deleteFromLocation('auto');
+    expect(await auto.list(folder), isEmpty);
+    expect(cloud.folders[folder], hasLength(1), reason: 'each location has its own delete');
+    await a.service.deleteFromLocation('icloud');
+    expect(cloud.folders[folder] ?? const {}, isEmpty);
+    await a.service.close();
+  });
+
+  test('deleting the wallet keeps every location\'s files, even one that was on', () async {
+    final auto = FolderLocation('auto', () async => Directory('${tmp.path}/auto'));
+    final a = Device(
+      Directory('${tmp.path}/a'),
+      cloud,
+      extra: [BackupLocationConfig(location: auto, onDevice: true)],
+    );
+    a.setContacts([const Contact(id: 'c1', name: 'One', addresses: {})]);
+    await a.open(const PolyseedSeed(raven));
+    final folder = a.service.folderName!;
     await a.service.deleteLocal();
-    expect(await Directory('${tmp.path}/a/local').exists(), isFalse);
-    // The cloud copy is untouched by a wallet delete.
-    expect(cloud.folders.values.single, hasLength(1));
+    expect(await Directory('${tmp.path}/a/local').exists(), isFalse, reason: 'its own copy goes');
+    expect(await auto.list(folder), hasLength(1));
+    expect(cloud.folders[folder], hasLength(1));
   });
 
   group('opt-in', () {
@@ -589,43 +619,46 @@ void main() {
       },
     );
 
-    test('turning it off deletes this device\'s copies and turns every location off', () async {
-      final auto = FolderLocation('auto', () async => Directory('${tmp.path}/auto'));
-      final a = Device(
-        Directory('${tmp.path}/a'),
-        cloud,
-        extra: [BackupLocationConfig(location: auto, onDevice: true)],
-      );
-      a.setContacts([const Contact(id: 'c1', name: 'One', addresses: {})]);
-      await a.open(const PolyseedSeed(raven));
-      await a.service.setEnabled(true, locations: ['icloud', 'auto']);
-      await a.service.idle();
-      final folder = a.service.folderName!;
-      expect(await auto.list(folder), hasLength(1));
-      expect(cloud.folders[folder], hasLength(1));
+    test(
+      'deleting the copy on this device turns every location off and leaves their files',
+      () async {
+        final auto = FolderLocation('auto', () async => Directory('${tmp.path}/auto'));
+        final a = Device(
+          Directory('${tmp.path}/a'),
+          cloud,
+          extra: [BackupLocationConfig(location: auto, onDevice: true)],
+        );
+        a.setContacts([const Contact(id: 'c1', name: 'One', addresses: {})]);
+        await a.open(const PolyseedSeed(raven));
+        await a.service.setEnabled(true, locations: ['icloud', 'auto']);
+        await a.service.idle();
+        final folder = a.service.folderName!;
+        expect(await auto.list(folder), hasLength(1));
+        expect(cloud.folders[folder], hasLength(1));
 
-      await a.service.setEnabled(false);
-      expect(a.service.enabled, isFalse);
-      expect(await a.service.isEnabled(), isFalse);
-      expect(await a.service.isLocationEnabled('icloud'), isFalse);
-      expect(await a.service.isLocationEnabled('auto'), isFalse);
-      expect(await auto.list(folder), isEmpty);
-      expect(await Directory('${tmp.path}/a/local/$folder').exists(), isFalse);
-      expect(await File('${tmp.path}/a/local/$folder.state').exists(), isFalse);
-      // iCloud keeps its copy until the user deletes it there.
-      expect(cloud.folders[folder], hasLength(1));
+        await a.service.setEnabled(false);
+        expect(a.service.enabled, isFalse);
+        expect(await a.service.isEnabled(), isFalse);
+        expect(await a.service.isLocationEnabled('icloud'), isFalse);
+        expect(await a.service.isLocationEnabled('auto'), isFalse);
+        expect(await Directory('${tmp.path}/a/local/$folder').exists(), isFalse);
+        expect(await File('${tmp.path}/a/local/$folder.state').exists(), isFalse);
+        // Both locations keep their copies until the user deletes them there.
+        expect(await auto.list(folder), hasLength(1));
+        expect(cloud.folders[folder], hasLength(1));
 
-      // Nothing more is written while it is off.
-      a.setContacts([
-        const Contact(id: 'c1', name: 'One', addresses: {}),
-        const Contact(id: 'c2', name: 'Two', addresses: {}),
-      ]);
-      a.service.contactsChanged();
-      await a.service.idle();
-      expect(cloud.folders[folder], hasLength(1));
-      expect(await Directory('${tmp.path}/a/local/$folder').exists(), isFalse);
-      await a.service.close();
-    });
+        // Nothing more is written while it is off.
+        a.setContacts([
+          const Contact(id: 'c1', name: 'One', addresses: {}),
+          const Contact(id: 'c2', name: 'Two', addresses: {}),
+        ]);
+        a.service.contactsChanged();
+        await a.service.idle();
+        expect(cloud.folders[folder], hasLength(1));
+        expect(await Directory('${tmp.path}/a/local/$folder').exists(), isFalse);
+        await a.service.close();
+      },
+    );
 
     test('a restore with the backup off reads nothing until it is turned on', () async {
       final a = device('a');
@@ -661,6 +694,36 @@ void main() {
       expect(b.service.deviceIdHex, isNot(aDevice));
       await b.service.close();
     });
+
+    test(
+      'a copy Android put back survives the backup going on and off, and the wallet\'s deletion',
+      () async {
+        final auto = FolderLocation('auto', () async => Directory('${tmp.path}/auto'));
+        final a = Device(
+          Directory('${tmp.path}/a'),
+          cloud,
+          extra: [BackupLocationConfig(location: auto, onDevice: true)],
+        );
+        await a.open(const PolyseedSeed(raven), restored: true);
+        final restored = File('${tmp.path}/auto/${a.service.folderName}/restored');
+        await restored.create(recursive: true);
+        await restored.writeAsBytes([1]);
+
+        // A save the user cancelled: the local copy started, then stopped.
+        await a.service.setEnabled(true);
+        await a.service.idle();
+        await a.service.setEnabled(false);
+        expect(await restored.exists(), isTrue);
+
+        // Deleting the copy on this device.
+        await a.service.setEnabled(true);
+        await a.service.setEnabled(false);
+        expect(await restored.exists(), isTrue);
+
+        await a.service.deleteLocal();
+        expect(await restored.exists(), isTrue);
+      },
+    );
 
     test(
       'a copy Android put back is not read while its location is off; turning it on reads it',

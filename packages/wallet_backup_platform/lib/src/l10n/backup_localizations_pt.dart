@@ -213,7 +213,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
 
   @override
   String get backupDeleteAndroidBody =>
-      'Remove o backup desta carteira que o Android restaurou neste aparelho, para que o próximo backup do Android não o leve mais.';
+      'Remove os arquivos desta carteira do backup do Android neste aparelho, para que o próximo backup do Android não os leve mais.';
 
   @override
   String get backupDeletedAndroid => 'Cópia do backup do Android apagada';
@@ -264,7 +264,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
 
   @override
   String get backupDeleteLocalBody =>
-      'Desativa o iCloud e o backup do Android e apaga o backup neste aparelho. Cópias já no iCloud ou em arquivos de backup salvos ficam até você apagá-las.';
+      'Desativa o iCloud e o backup do Android e apaga a cópia de trabalho do app neste aparelho. As cópias no iCloud e no backup do Android, e os arquivos de backup salvos, ficam até você apagá-los.';
 
   @override
   String get backupDeletedLocal => 'Backup neste aparelho apagado';

@@ -153,6 +153,21 @@ class ContactModel with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Deletes every contact: the user's own "Delete Address Book". A metadata
+  /// backup that syncs to a location records the deletions there too
+  /// ([MetadataBackup.contactsChanged]). Deleting a wallet does not call this:
+  /// the address book outlives it.
+  ///
+  /// Unlike an edit, it may write over an address book that could not be read:
+  /// the user asked for all of it to go.
+  Future<void> deleteAll() async {
+    _contacts = [];
+    _loaded = true;
+    _unreadable = false;
+    await _saveContacts();
+    notifyListeners();
+  }
+
   Contact? getContactById(String id) {
     for (final contact in _contacts) {
       if (contact.id == id) return contact;

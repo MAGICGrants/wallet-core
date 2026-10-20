@@ -42,10 +42,12 @@ class MetadataBackupConfig {
 /// - **Android**: Auto Backup. The files go to `<app dir>/metadata_backup/`,
 ///   the one folder the app's backup rules include, and Android copies it to
 ///   the user's Google Drive (or the phone's own backup service) about once a
-///   day. Turning the location off empties the folder. Android can put a copy
-///   back with the app's files (a new phone, or the app reinstalled): it stays,
-///   unread, while the location is off, until the user turns it on (which
-///   reads it) or deletes it in Settings > Backup.
+///   day. Files go in only while the location is on. Turning it off stops
+///   adding them; what is there stays, and Android keeps carrying it. So does a
+///   copy Android puts back with the app's files (a new phone, or the app
+///   reinstalled), unread while the location is off. Only "Delete the Android
+///   backup copy" in Settings > Backup removes them; turning the location on
+///   reads them.
 /// - **Everywhere, once on**: the local copy (`<app dir>/metadata_backup_local/`,
 ///   not backed up by Android) and the single-file export.
 class MetadataBackupSetup {
@@ -150,7 +152,10 @@ class MetadataBackupSetup {
   /// A file name for an export: the app's stem and today's date.
   static String exportFileName(DateTime now) {
     String two(int v) => v.toString().padLeft(2, '0');
-    return '${config.exportFileStem}-${now.year}${two(now.month)}${two(now.day)}.bin';
+    // To the second, so a second save the same day never suggests replacing
+    // the first.
+    return '${config.exportFileStem}-${now.year}${two(now.month)}${two(now.day)}'
+        '-${two(now.hour)}${two(now.minute)}${two(now.second)}.bin';
   }
 
   /// Saves the whole backup as one file. On a phone it goes through the share

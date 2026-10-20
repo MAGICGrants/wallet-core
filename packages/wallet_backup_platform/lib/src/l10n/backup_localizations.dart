@@ -337,7 +337,7 @@ abstract class BackupLocalizations {
   /// No description provided for @backupDeleteAndroidBody.
   ///
   /// In en, this message translates to:
-  /// **'Removes this wallet\'s backup that Android restored to this device, so Android\'s next backup no longer carries it.'**
+  /// **'Removes this wallet\'s files from Android backup on this device, so Android\'s next backup no longer carries them.'**
   String get backupDeleteAndroidBody;
 
   /// No description provided for @backupDeletedAndroid.
@@ -409,7 +409,7 @@ abstract class BackupLocalizations {
   /// No description provided for @backupDeleteLocalBody.
   ///
   /// In en, this message translates to:
-  /// **'Turns off iCloud and Android backup and deletes the backup on this device. Copies already in iCloud or in saved backup files stay until you delete them.'**
+  /// **'Turns off iCloud and Android backup and deletes the app\'s working copy on this device. The copies in iCloud and Android backup, and saved backup files, stay until you delete them.'**
   String get backupDeleteLocalBody;
 
   /// No description provided for @backupDeletedLocal.

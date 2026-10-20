@@ -53,9 +53,10 @@ Future<void> writeEncodedContacts(List<String> contacts) async {
   await WalletSecrets.store.write(_storageKey, json.encode(contacts));
 }
 
-/// Deletes the stored address book. Part of deleting a wallet: contacts are the
-/// user's counterparties, and leaving them behind outlives the wallet they
-/// belonged to.
+/// Deletes the stored address book, and any copy a build from before secure
+/// storage left in preferences. Deleting a wallet does not: the address book
+/// outlives it, and the user deletes it on its own
+/// (`ContactModel.deleteAll`).
 Future<void> clearContacts() async {
   try {
     await WalletSecrets.store.delete(_storageKey);

@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_backup/wallet_backup.dart' show MetadataBackupService;
 import 'package:wallet_backup_platform/backup_ui.dart';
 import 'package:wallet_backup_platform/wallet_backup_platform.dart';
-import 'package:wallet_ui/wallet_ui.dart' show BrandButton;
+import 'package:wallet_ui/wallet_ui.dart' show BrandButton, BrandSwitch;
 import 'package:wallet_domain/wallet_domain.dart';
 import 'package:wallet_infra/testing.dart';
 import 'package:wallet_infra/wallet_infra.dart';
@@ -139,6 +139,85 @@ void main() {
     expect(service.enabled, isFalse);
 
     await tester.runAsync(service.close);
+  });
+
+  testWidgets('Android: a cancelled save, and deleting the copy here, leave the copy it restored', (
+    tester,
+  ) async {
+    MetadataBackupSetup.androidForTesting = true;
+    var save = false;
+    await openScreen(tester, exportFile: () async => save);
+    final restored = File('${tmp.path}/metadata_backup/${service.folderName}/restored');
+    await tester.runAsync(() async {
+      await restored.create(recursive: true);
+      await restored.writeAsBytes([1]);
+    });
+
+    await tapText(tester, i18n.backupExport);
+    expect(service.enabled, isFalse, reason: 'the cancelled save stopped the copy it started');
+    expect(await tester.runAsync(restored.exists), isTrue);
+
+    save = true;
+    await tapText(tester, i18n.backupExport);
+    expect(service.enabled, isTrue);
+    await tapText(tester, i18n.backupDeleteLocal);
+    await tester.tap(find.text(i18n.backupDeleteConfirm));
+    await waitIdle(tester);
+    expect(service.enabled, isFalse);
+    expect(await tester.runAsync(restored.exists), isTrue, reason: 'Android backup was never on');
+
+    await tester.runAsync(service.close);
+  });
+
+  testWidgets('Android: turning it off keeps its files; only its delete link removes them', (
+    tester,
+  ) async {
+    MetadataBackupSetup.androidForTesting = true;
+    await openScreen(tester);
+    final kept = File('${tmp.path}/metadata_backup/${service.folderName}/kept');
+    await tester.runAsync(() async {
+      await kept.create(recursive: true);
+      await kept.writeAsBytes([1]);
+    });
+
+    // On, then off: the only switch on this host is Android's.
+    await tester.tap(find.byType(BrandSwitch));
+    await waitIdle(tester);
+    expect(
+      await tester.runAsync(
+        () => service.isLocationEnabled(MetadataBackupSetup.autoBackupLocationId),
+      ),
+      isTrue,
+    );
+    await tester.tap(find.byType(BrandSwitch));
+    await waitIdle(tester);
+    expect(
+      await tester.runAsync(kept.exists),
+      isTrue,
+      reason: 'off stops adding, and deletes nothing',
+    );
+    expect(find.text(i18n.backupDeleteAndroid), findsOneWidget);
+
+    await tapText(tester, i18n.backupDeleteAndroid);
+    await tester.tap(find.text(i18n.backupDeleteConfirm));
+    await waitIdle(tester);
+    expect(await tester.runAsync(kept.exists), isFalse);
+
+    await tester.runAsync(service.close);
+  });
+
+  test('saved files are named to the second, so a later save never suggests replacing one', () {
+    MetadataBackupSetup.install(
+      const MetadataBackupConfig(
+        appName: 'Skylight',
+        iCloudContainer: 'iCloud.org.magicgrants.test',
+        exportFileStem: 'skylight-backup',
+      ),
+    );
+    expect(
+      MetadataBackupSetup.exportFileName(DateTime(2026, 10, 20, 9, 5, 7)),
+      'skylight-backup-20261020-090507.bin',
+    );
   });
 
   testWidgets('saving a file starts the copy on this device, and keeps it', (tester) async {

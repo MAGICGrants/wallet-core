@@ -52,9 +52,32 @@ void main() {
       await h.model.addContact('Alice', {'XMR': '4alice'});
       expect(h.writes.single, hasLength(1));
     });
+
+    test('deleting the address book empties it, saves that, and tells the backup', () async {
+      final backup = _CountingBackup();
+      MetadataBackup.instance = backup;
+      addTearDown(() => MetadataBackup.instance = null);
+      final h = modelWith(read: () async => stored);
+      await h.model.load();
+
+      await h.model.deleteAll();
+      expect(h.model.contacts, isEmpty);
+      expect(h.writes.single, isEmpty);
+      expect(backup.contactsChanges, 1, reason: 'a syncing backup records the deletions');
+    });
   });
 
   group('a store that could not be read', () {
+    test('deleting the address book writes over it: the user asked for all of it to go', () async {
+      final h = modelWith(read: () async => null);
+      await h.model.load();
+      expect(h.model.isUnreadable, isTrue);
+
+      await h.model.deleteAll();
+      expect(h.model.isUnreadable, isFalse);
+      expect(h.writes.single, isEmpty);
+    });
+
     test('does not present as an empty address book', () async {
       final h = modelWith(read: () async => null);
       await h.model.load();
@@ -228,4 +251,15 @@ void main() {
 
     expect(h.model.contacts, hasLength(2), reason: 'the real address book still loads');
   });
+}
+
+/// Counts the address-book changes reported to the metadata backup.
+class _CountingBackup implements MetadataBackup {
+  int contactsChanges = 0;
+
+  @override
+  void contactsChanged() => contactsChanges++;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -213,7 +213,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
 
   @override
   String get backupDeleteAndroidBody =>
-      'Removes this wallet\'s backup that Android restored to this device, so Android\'s next backup no longer carries it.';
+      'Removes this wallet\'s files from Android backup on this device, so Android\'s next backup no longer carries them.';
 
   @override
   String get backupDeletedAndroid => 'Android backup copy deleted';
@@ -264,7 +264,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
 
   @override
   String get backupDeleteLocalBody =>
-      'Turns off iCloud and Android backup and deletes the backup on this device. Copies already in iCloud or in saved backup files stay until you delete them.';
+      'Turns off iCloud and Android backup and deletes the app\'s working copy on this device. The copies in iCloud and Android backup, and saved backup files, stay until you delete them.';
 
   @override
   String get backupDeletedLocal => 'Backup on this device deleted';

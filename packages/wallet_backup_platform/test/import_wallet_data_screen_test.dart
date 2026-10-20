@@ -22,10 +22,13 @@ const abandon =
 
 /// One install: its own files and address book, sharing [cloud].
 class Install {
-  Install(this.root, MemoryLocation cloud) {
+  Install(this.root, MemoryLocation cloud, {FolderLocation? onDevice}) {
     service = MetadataBackupService(
       localRoot: () async => Directory('${root.path}/local'),
-      locations: [BackupLocationConfig(location: cloud)],
+      locations: [
+        BackupLocationConfig(location: cloud),
+        if (onDevice != null) BackupLocationConfig(location: onDevice, onDevice: true),
+      ],
       paymentUploadDelay: Duration.zero,
       observeLifecycle: false,
       readContacts: () async => contacts,
@@ -93,9 +96,9 @@ void main() {
   /// The phone being restored. Built in real time (runAsync): the service's
   /// futures must not belong to the test's fake-time zone, or its file work
   /// would wait on frames that never come.
-  Future<Install> restoredInstall(WidgetTester tester) async {
+  Future<Install> restoredInstall(WidgetTester tester, {FolderLocation? onDevice}) async {
     return (await tester.runAsync(() async {
-      final b = Install(Directory('${tmp.path}/new'), cloud);
+      final b = Install(Directory('${tmp.path}/new'), cloud, onDevice: onDevice);
       await b.service.open(const PolyseedSeed(raven), wallets: const [], restored: true);
       return b;
     }))!;
@@ -234,6 +237,25 @@ void main() {
     expect(find.text('From a backup file'), findsOneWidget);
     expect(b.service.enabled, isFalse);
     expect(await tester.runAsync(() => isEmptyDir(Directory('${tmp.path}/new/local'))), isTrue);
+    await tester.runAsync(b.service.close);
+  });
+
+  testWidgets('a backup file of another wallet leaves the copy Android restored', (tester) async {
+    final other = (await tester.runAsync(() => earlierInstall(const Bip39Seed(abandon))))!;
+    final auto = FolderLocation('auto', () async => Directory('${tmp.path}/new/auto'));
+    final b = await restoredInstall(tester, onDevice: auto);
+    final restored = File('${tmp.path}/new/auto/${b.service.folderName}/restored');
+    await tester.runAsync(() async {
+      await restored.create(recursive: true);
+      await restored.writeAsBytes([1]);
+    });
+    await pumpScreen(tester, b, pickFile: () async => other);
+
+    await tester.tap(find.text('From a backup file'));
+    await settle(tester, () => shows("That file isn't a backup of this wallet"));
+
+    expect(b.service.enabled, isFalse);
+    expect(await tester.runAsync(restored.exists), isTrue);
     await tester.runAsync(b.service.close);
   });
 
