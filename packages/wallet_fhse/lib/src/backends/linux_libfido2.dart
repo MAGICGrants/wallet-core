@@ -820,11 +820,18 @@ final class _Worker {
 
   /// Checks the key can verify the user as asked: a PIN that is set, need not
   /// be changed first and could be its PIN, or built-in UV that is set up and
-  /// hands out tokens. A PIN that cannot be the key's is not sent, so it
-  /// costs no attempt.
+  /// hands out tokens. Built-in UV also needs the PIN set: on a key without
+  /// one, whoever holds it could set a PIN and use that instead. A PIN that
+  /// cannot be the key's is not sent, so it costs no attempt.
   void _requireVerification(_Info info, String? pin) {
     builtInUv = pin == null;
     pinSet = info.options['clientPin'] == true;
+    if (!pinSet) {
+      throw const SecurityKeyException(
+        SecurityKeyFailure.pinNotSet,
+        message: 'This security key has no PIN set',
+      );
+    }
     if (pin == null) {
       if (info.options['uv'] != true || info.options['pinUvAuthToken'] != true) {
         throw const SecurityKeyException(
@@ -833,12 +840,6 @@ final class _Worker {
         );
       }
       return;
-    }
-    if (!pinSet) {
-      throw const SecurityKeyException(
-        SecurityKeyFailure.pinNotSet,
-        message: 'This security key has no PIN set',
-      );
     }
     if (info.forcePinChange) {
       throw const SecurityKeyException(

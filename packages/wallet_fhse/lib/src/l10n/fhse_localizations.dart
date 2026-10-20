@@ -126,26 +126,20 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysUnreadableTitle.
   ///
   /// In en, this message translates to:
-  /// **'Your security-key data can\'t be read here'**
+  /// **'Set up your security keys again'**
   String get securityKeysUnreadableTitle;
 
   /// No description provided for @securityKeysUnreadableBody.
   ///
   /// In en, this message translates to:
-  /// **'This happens after moving to a new phone. Your wallet is safe, and your recovery phrase still opens it. Set up your keys again to use them on this phone, or turn security keys off.'**
+  /// **'This happens after moving to a new phone. Your wallet is safe and your recovery phrase still opens it. Set up your keys again, or turn security keys off.'**
   String get securityKeysUnreadableBody;
 
   /// No description provided for @securityKeysLoadFailed.
   ///
   /// In en, this message translates to:
-  /// **'Couldn\'t load your security-key settings.'**
+  /// **'Couldn\'t load your security key settings.'**
   String get securityKeysLoadFailed;
-
-  /// No description provided for @securityKeysSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Security keys'**
-  String get securityKeysSection;
 
   /// No description provided for @securityKeysIntroTitle.
   ///
@@ -156,20 +150,14 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysIntroBody.
   ///
   /// In en, this message translates to:
-  /// **'Require a YubiKey and its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this phone cannot be decrypted, even by someone who can unlock the phone.'**
+  /// **'Advanced Security is another layer of protection for your wallet beyond the App Lock. When enabled, your wallet can only be opened with your security key and its PIN.'**
   String get securityKeysIntroBody;
 
   /// No description provided for @securityKeysRequirements.
   ///
   /// In en, this message translates to:
-  /// **'Works with YubiKey 5 series keys over NFC or USB-C, and with YubiKey Bio over USB-C on Android. On iPhone, USB-C needs YubiKey firmware 5.8 or later. Each key needs a FIDO2 PIN.'**
+  /// **'Works with most FIDO2 capable hardware security keys over NFC. Over USB, only YubiKeys work for now (on iPhone, with firmware 5.8 or later).'**
   String get securityKeysRequirements;
-
-  /// No description provided for @securityKeysSuggestTwo.
-  ///
-  /// In en, this message translates to:
-  /// **'Set up two or more keys and keep one somewhere safe. Your recovery phrase still restores the wallet if you lose them all.'**
-  String get securityKeysSuggestTwo;
 
   /// No description provided for @securityKeysSetUpButton.
   ///
@@ -180,7 +168,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Security keys need a wallet created or restored with this version of {appName}.'**
+  /// **'Security keys only work with a wallet created or restored in this version of {appName}.'**
   String securityKeysUnavailable(String appName);
 
   /// No description provided for @securityKeysYourKeys.
@@ -198,7 +186,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysOneKeyWarning.
   ///
   /// In en, this message translates to:
-  /// **'You have one key. If you lose it, you will need your recovery phrase to open this wallet. Add a second key as a backup.'**
+  /// **'You have only one key. Add a second one as a backup. Without a key, you\'ll need your recovery phrase.'**
   String get securityKeysOneKeyWarning;
 
   /// No description provided for @securityKeysAddButton.
@@ -222,7 +210,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysRemoveSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Set up again with only the keys you keep'**
+  /// **'Set up again without that key'**
   String get securityKeysRemoveSubtitle;
 
   /// No description provided for @securityKeysRemoveLink.
@@ -234,7 +222,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysRemoveExplain.
   ///
   /// In en, this message translates to:
-  /// **'To remove a key, set up your keys again with only the keys you want to keep. Any key you leave out stops working for this wallet. Have every key you keep with you.'**
+  /// **'To remove a key, set up again with only the keys you want to keep. Any key you leave out stops working. Have all the keys you\'re keeping with you.'**
   String get securityKeysRemoveExplain;
 
   /// No description provided for @securityKeysRemoveConfirm.
@@ -252,7 +240,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysTurnOffBody.
   ///
   /// In en, this message translates to:
-  /// **'The wallet password goes back into this phone\'s secure storage, and the wallet opens without a key.'**
+  /// **'Your wallet will open without a security key again.'**
   String get securityKeysTurnOffBody;
 
   /// No description provided for @securityKeysTurnOffConfirm.
@@ -288,7 +276,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysFullLockDescription.
   ///
   /// In en, this message translates to:
-  /// **'After this long in the background, {appName} locks the wallet and forgets its password and spending keys. Opening it again needs a security key.'**
+  /// **'After this long in the background, {appName} fully locks the wallet. You\'ll need a security key to open it again.'**
   String securityKeysFullLockDescription(String appName);
 
   /// No description provided for @securityKeysMinutes.
@@ -306,7 +294,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysBackgroundNote.
   ///
   /// In en, this message translates to:
-  /// **'Background sync keeps working with view-only access, which can see your payments but cannot spend.'**
+  /// **'While locked, the wallet keeps syncing and can show new payments, but it can\'t spend.'**
   String get securityKeysBackgroundNote;
 
   /// No description provided for @securityKeysSetupTitle.
@@ -324,8 +312,14 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysSetupAgainNote.
   ///
   /// In en, this message translates to:
-  /// **'Add only the keys you want to keep. Any key you leave out will no longer open this wallet.'**
+  /// **'Add only the keys you want to keep. Any key you leave out stops working.'**
   String get securityKeysSetupAgainNote;
+
+  /// Set up security keys screen, first setup: the one line above the keys added so far.
+  ///
+  /// In en, this message translates to:
+  /// **'Add each security key you want to use, then tap Finish.'**
+  String get securityKeysSetupNote;
 
   /// No description provided for @securityKeysAddFirst.
   ///
@@ -348,19 +342,19 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysOneKeyTitle.
   ///
   /// In en, this message translates to:
-  /// **'Finish with one key?'**
+  /// **'Use only one key?'**
   String get securityKeysOneKeyTitle;
 
   /// No description provided for @securityKeysOneKeyBody.
   ///
   /// In en, this message translates to:
-  /// **'We suggest two or more. If you lose your only key, you will need your recovery phrase to open this wallet.'**
+  /// **'We recommend at least two. If you lose your only key, you\'ll need your recovery phrase.'**
   String get securityKeysOneKeyBody;
 
   /// No description provided for @securityKeysFinishAnyway.
   ///
   /// In en, this message translates to:
-  /// **'Finish anyway'**
+  /// **'Use one key'**
   String get securityKeysFinishAnyway;
 
   /// No description provided for @securityKeysNameLabel.
@@ -372,7 +366,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysNameDefault.
   ///
   /// In en, this message translates to:
-  /// **'YubiKey {number}'**
+  /// **'Security key {number}'**
   String securityKeysNameDefault(int number);
 
   /// No description provided for @securityKeysPinLabel.
@@ -414,7 +408,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysPinMismatch.
   ///
   /// In en, this message translates to:
-  /// **'The PINs do not match.'**
+  /// **'The PINs don\'t match.'**
   String get securityKeysPinMismatch;
 
   /// No description provided for @securityKeysErrorPinInvalid.
@@ -432,31 +426,31 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysErrorPinBlocked.
   ///
   /// In en, this message translates to:
-  /// **'This key\'s PIN is blocked. The key must be reset, which removes it from every wallet it protects.'**
+  /// **'This key is locked after too many wrong PINs. It can only be reset, and a reset key no longer opens any wallet.'**
   String get securityKeysErrorPinBlocked;
 
   /// No description provided for @securityKeysErrorPinAuthBlocked.
   ///
   /// In en, this message translates to:
-  /// **'Too many wrong PINs in a row. Remove the key and connect it again.'**
+  /// **'Too many wrong PINs. Disconnect the key and connect it again.'**
   String get securityKeysErrorPinAuthBlocked;
 
   /// No description provided for @securityKeysErrorPinPolicy.
   ///
   /// In en, this message translates to:
-  /// **'The key did not accept that PIN. Some keys need at least 6 characters.'**
+  /// **'The key didn\'t accept that PIN. Some keys need 6 or more characters.'**
   String get securityKeysErrorPinPolicy;
 
   /// No description provided for @securityKeysErrorNotEnrolled.
   ///
   /// In en, this message translates to:
-  /// **'This key is not set up for this wallet.'**
+  /// **'This key isn\'t set up for this wallet.'**
   String get securityKeysErrorNotEnrolled;
 
   /// No description provided for @securityKeysErrorNotThisWallet.
   ///
   /// In en, this message translates to:
-  /// **'Your security-key data doesn\'t match this wallet. Open it with your recovery phrase, then set up your keys again.'**
+  /// **'Your security key settings don\'t match this wallet. Open it with your recovery phrase, then set up your keys again.'**
   String get securityKeysErrorNotThisWallet;
 
   /// No description provided for @securityKeysErrorAlreadyAdded.
@@ -480,7 +474,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysErrorTransport.
   ///
   /// In en, this message translates to:
-  /// **'The connection to the key was lost. Try again.'**
+  /// **'Lost the connection to your key. Try again.'**
   String get securityKeysErrorTransport;
 
   /// No description provided for @securityKeysErrorGeneric.
@@ -510,7 +504,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyLostKeysBody.
   ///
   /// In en, this message translates to:
-  /// **'Your recovery phrase can open this wallet. Then set up new keys in Settings.'**
+  /// **'Open the wallet with your recovery phrase, then set up new keys in Settings.'**
   String get securityKeyLostKeysBody;
 
   /// No description provided for @securityKeyUseRecoveryPhrase.
@@ -528,13 +522,13 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyRecoveryWrongPhrase.
   ///
   /// In en, this message translates to:
-  /// **'That recovery phrase is not this wallet\'s.'**
+  /// **'That recovery phrase doesn\'t match this wallet.'**
   String get securityKeyRecoveryWrongPhrase;
 
   /// No description provided for @securityKeyRecoveryNotPossible.
   ///
   /// In en, this message translates to:
-  /// **'This wallet came from a 25-word seed, so its phrase cannot open it here. Delete the wallet and restore it from the phrase.'**
+  /// **'This wallet was restored from a 25-word recovery phrase, which can\'t unlock it here. Delete the wallet, then restore it from that phrase.'**
   String get securityKeyRecoveryNotPossible;
 
   /// No description provided for @securityKeyRecoveredToast.
@@ -552,13 +546,13 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyConnectBodyAndroid.
   ///
   /// In en, this message translates to:
-  /// **'Plug your YubiKey into the USB-C port and touch it when it blinks, or hold it flat against the back of your phone.'**
+  /// **'Plug in your security key and touch it when it blinks, or hold it flat against the back of your phone.'**
   String get securityKeyConnectBodyAndroid;
 
   /// No description provided for @securityKeyConnectBodyIos.
   ///
   /// In en, this message translates to:
-  /// **'Hold your YubiKey near the top of your iPhone, or plug it in and touch it when it blinks.'**
+  /// **'Hold your security key near the top of your iPhone, or plug it in and touch it when it blinks.'**
   String get securityKeyConnectBodyIos;
 
   /// No description provided for @securityKeyConnectButton.
@@ -582,7 +576,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyTalkingToKey.
   ///
   /// In en, this message translates to:
-  /// **'Talking to your key…'**
+  /// **'Connecting to your key…'**
   String get securityKeyTalkingToKey;
 
   /// No description provided for @securityKeyKeyBlinking.
@@ -600,7 +594,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyTouchBody.
   ///
   /// In en, this message translates to:
-  /// **'Touch the gold contact on your key while it blinks.'**
+  /// **'Touch your security key while it blinks.'**
   String get securityKeyTouchBody;
 
   /// No description provided for @securityKeyPinTitle.
@@ -612,7 +606,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyPinBody.
   ///
   /// In en, this message translates to:
-  /// **'The PIN you set for this YubiKey. It is not your phone\'s passcode.'**
+  /// **'This is your security key\'s PIN, not your phone\'s passcode.'**
   String get securityKeyPinBody;
 
   /// No description provided for @securityKeyPinAttemptsLeft.
@@ -642,8 +636,8 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysNewPinBodyCount.
   ///
   /// In en, this message translates to:
-  /// **'This key has no PIN yet. Choose one with at least {count} characters. {appName} requires it, so a key found by someone else cannot open your wallet.'**
-  String securityKeysNewPinBodyCount(int count, String appName);
+  /// **'This key doesn\'t have a PIN yet. Choose one with at least {count} characters, so someone who finds your key can\'t use it.'**
+  String securityKeysNewPinBodyCount(int count);
 
   /// No description provided for @securityKeysPinTooShortCount.
   ///
@@ -666,7 +660,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyKeepHolding.
   ///
   /// In en, this message translates to:
-  /// **'Keep your key against the phone.'**
+  /// **'Keep holding your key to the phone.'**
   String get securityKeyKeepHolding;
 
   /// No description provided for @securityKeyHoldAgain.
@@ -720,7 +714,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyFingerprintBody.
   ///
   /// In en, this message translates to:
-  /// **'Use a finger you enrolled on this YubiKey Bio.'**
+  /// **'Use a finger you added to this security key.'**
   String get securityKeyFingerprintBody;
 
   /// No description provided for @securityKeyTouchCount.
@@ -750,13 +744,13 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysErrorKeyUnsupported.
   ///
   /// In en, this message translates to:
-  /// **'This key cannot protect a wallet. Use a YubiKey 5 series key or a YubiKey Bio.'**
+  /// **'This security key isn\'t supported. Try a different one.'**
   String get securityKeysErrorKeyUnsupported;
 
   /// No description provided for @securityKeysErrorPinChangeRequired.
   ///
   /// In en, this message translates to:
-  /// **'This key wants a new PIN first. Change it in the Yubico Authenticator app, then try again.'**
+  /// **'This security key needs a new PIN first. Change it with the key maker\'s app, then try again.'**
   String get securityKeysErrorPinChangeRequired;
 
   /// No description provided for @securityKeysErrorUvInvalid.
@@ -774,7 +768,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysErrorUvBlocked.
   ///
   /// In en, this message translates to:
-  /// **'The fingerprint reader on this key is locked. Enter the key\'s PIN instead.'**
+  /// **'Fingerprint is locked on this key. Enter its PIN instead.'**
   String get securityKeysErrorUvBlocked;
 
   /// No description provided for @securityKeysErrorUvNotConfigured.
@@ -798,7 +792,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysErrorDifferentKey.
   ///
   /// In en, this message translates to:
-  /// **'That is a different key from the one you touched. Start again with the key you want to use.'**
+  /// **'This isn\'t the key you touched. Start again with the key you want to use.'**
   String get securityKeysErrorDifferentKey;
 
   /// No description provided for @securityKeysErrorMultipleKeys.
@@ -810,7 +804,7 @@ abstract class FhseLocalizations {
   /// Linux/Windows unlock: the wallet files are bound to a PC's TPM that this PC cannot use (another computer, or a cleared TPM).
   ///
   /// In en, this message translates to:
-  /// **'This wallet\'s files are tied to the PC they were made on, and this PC cannot open them. If this is that PC, restart it and try again. Otherwise, restore the wallet from its recovery phrase as a new wallet.'**
+  /// **'This wallet can\'t be opened on this PC. If you created it on this PC, restart the PC and try again. Otherwise, restore the wallet from its recovery phrase.'**
   String get unlockBoundToAnotherPc;
 
   /// Cancel button in the security key sheets.
@@ -822,43 +816,31 @@ abstract class FhseLocalizations {
   /// Shown when the PIN field is submitted empty.
   ///
   /// In en, this message translates to:
-  /// **'This field cannot be empty.'**
+  /// **'Enter your PIN.'**
   String get securityKeysPinEmpty;
 
-  /// Advanced Security: the same recovery phrase in two apps is only as protected as the weaker app.
+  /// Advanced Security: the wallet is only as safe as its least protected copy, so protect the recovery phrase and every device that has the wallet.
   ///
   /// In en, this message translates to:
-  /// **'Using this recovery phrase in another wallet app too? Protect that app as well. Once unlocked, either app can show the phrase, so it is only as safe as the less protected one.'**
+  /// **'Your wallet is only as strong as the weakest protection. Make sure your recovery phrase is saved safely, and if you use the same wallet on multiple devices, make sure to set up Advanced Security there too.'**
   String get securityKeysSharedPhraseWarning;
-
-  /// No description provided for @securityKeysIntroBodyMac.
-  ///
-  /// In en, this message translates to:
-  /// **'Require a YubiKey and its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this Mac cannot be decrypted, even by someone who can log in to it.'**
-  String get securityKeysIntroBodyMac;
 
   /// No description provided for @securityKeysRequirementsMac.
   ///
   /// In en, this message translates to:
-  /// **'Works with YubiKey 5 series keys and YubiKey Bio plugged into this Mac. Each key needs a FIDO2 PIN.'**
+  /// **'Works with most FIDO2 capable hardware security keys.'**
   String get securityKeysRequirementsMac;
-
-  /// No description provided for @securityKeysTurnOffBodyMac.
-  ///
-  /// In en, this message translates to:
-  /// **'The wallet password goes back into this Mac\'s keychain, and the wallet opens without a key.'**
-  String get securityKeysTurnOffBodyMac;
 
   /// No description provided for @securityKeyConnectBodyMac.
   ///
   /// In en, this message translates to:
-  /// **'Plug your YubiKey into this Mac and touch it when it blinks.'**
+  /// **'Plug your security key into this Mac and touch it when it blinks.'**
   String get securityKeyConnectBodyMac;
 
   /// No description provided for @securityKeyPinBodyMac.
   ///
   /// In en, this message translates to:
-  /// **'The PIN you set for this YubiKey. It is not your Mac\'s password.'**
+  /// **'This is your security key\'s PIN, not your Mac\'s password.'**
   String get securityKeyPinBodyMac;
 
   /// No description provided for @desktopAutoLockLabel.
@@ -870,49 +852,43 @@ abstract class FhseLocalizations {
   /// No description provided for @desktopAutoLockDescription.
   ///
   /// In en, this message translates to:
-  /// **'After this long without use, {appName} closes the wallet and forgets its password. Unlock it again to carry on.'**
+  /// **'After this long without use, {appName} locks the wallet. Unlock it to continue.'**
   String desktopAutoLockDescription(String appName);
-
-  /// No description provided for @securityKeysIntroBodyDesktop.
-  ///
-  /// In en, this message translates to:
-  /// **'Require your password and a YubiKey with its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this computer cannot be decrypted, even by someone who knows your password.'**
-  String get securityKeysIntroBodyDesktop;
 
   /// No description provided for @securityKeysRequirementsLinux.
   ///
   /// In en, this message translates to:
-  /// **'Works with YubiKey 5 series keys and YubiKey Bio plugged into this computer. Each key needs a FIDO2 PIN. Uses the system\'s libfido2, which most Linux systems already have.'**
+  /// **'Works with most FIDO2 capable hardware security keys. Needs libfido2, which most Linux systems already have.'**
   String get securityKeysRequirementsLinux;
 
   /// No description provided for @securityKeysRequirementsWindows.
   ///
   /// In en, this message translates to:
-  /// **'Works with FIDO2 security keys such as the YubiKey 5 series, plugged into this computer. Needs Windows 11, version 22H2 or later. Windows asks for the key\'s PIN itself. On a PC with a TPM, the wallet\'s files open only on this PC: on another computer, restore the wallet from its recovery phrase.'**
+  /// **'Works with most FIDO2 capable hardware security keys. Needs Windows 11 (22H2 or later).'**
   String get securityKeysRequirementsWindows;
 
   /// No description provided for @securityKeysTurnOffBodyDesktop.
   ///
   /// In en, this message translates to:
-  /// **'Your password alone opens the wallet again, without a key.'**
+  /// **'Your password alone will open the wallet again.'**
   String get securityKeysTurnOffBodyDesktop;
 
   /// No description provided for @securityKeyConnectBodyDesktop.
   ///
   /// In en, this message translates to:
-  /// **'Plug your YubiKey into this computer and touch it when it blinks.'**
+  /// **'Plug your security key into this computer and touch it when it blinks.'**
   String get securityKeyConnectBodyDesktop;
 
   /// No description provided for @securityKeyConnectBodyWindows.
   ///
   /// In en, this message translates to:
-  /// **'Windows asks for your security key, its PIN or fingerprint, and a touch.'**
+  /// **'Windows asks for your security key, its PIN, and a touch.'**
   String get securityKeyConnectBodyWindows;
 
   /// No description provided for @securityKeyPinBodyDesktop.
   ///
   /// In en, this message translates to:
-  /// **'The PIN you set for this YubiKey. It is not your wallet password.'**
+  /// **'This is your security key\'s PIN, not your wallet password.'**
   String get securityKeyPinBodyDesktop;
 
   /// No description provided for @securityKeyWindowsPromptTitle.
@@ -924,13 +900,13 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyWindowsPromptBody.
   ///
   /// In en, this message translates to:
-  /// **'Enter your key\'s PIN or use its fingerprint, then touch the key.'**
+  /// **'Enter your security key\'s PIN, then touch the key.'**
   String get securityKeyWindowsPromptBody;
 
   /// No description provided for @securityKeyWindowsPromptEnrollBody.
   ///
   /// In en, this message translates to:
-  /// **'Windows asks twice: once to register the key and once to read it back. Each time, enter the key\'s PIN or use its fingerprint, then touch the key.'**
+  /// **'Windows will ask twice. Each time, enter your security key\'s PIN, then touch the key.'**
   String get securityKeyWindowsPromptEnrollBody;
 
   /// No description provided for @securityKeyWindowsWaiting.
@@ -966,7 +942,7 @@ abstract class FhseLocalizations {
   /// No description provided for @advancedSecurityPasswordBody.
   ///
   /// In en, this message translates to:
-  /// **'Advanced Security can turn security keys off. Enter the password you unlock {appName} with.'**
+  /// **'Enter the password you use to unlock {appName}.'**
   String advancedSecurityPasswordBody(String appName);
 
   /// No description provided for @advancedSecurityPasswordLabel.
@@ -978,7 +954,7 @@ abstract class FhseLocalizations {
   /// No description provided for @advancedSecurityPasswordWrong.
   ///
   /// In en, this message translates to:
-  /// **'That password isn\'t right.'**
+  /// **'Incorrect password.'**
   String get advancedSecurityPasswordWrong;
 
   /// No description provided for @advancedSecurityContinue.

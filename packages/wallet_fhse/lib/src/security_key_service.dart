@@ -125,8 +125,10 @@ class SecurityKeyInfo {
   /// The key was touched to select it (wired keys that support it).
   final bool touched;
 
-  /// Whether the next step can skip the PIN.
-  bool get canUseFingerprint => fingerprintReady && (fingerprintRetries ?? 1) > 0;
+  /// Whether the next step can skip the PIN. Only on a key whose PIN is set:
+  /// on one without, whoever holds the key could set a PIN and use it in
+  /// place of the fingerprint, so such a key gets a PIN first.
+  bool get canUseFingerprint => pinSet && fingerprintReady && (fingerprintRetries ?? 1) > 0;
 }
 
 /// The FIDO2 key, through whatever reaches it on this platform

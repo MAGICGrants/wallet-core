@@ -4,7 +4,6 @@ import 'package:wallet_ui/wallet_ui.dart';
 
 import '../fhse_vault.dart' show FhseSetup, SecurityKeyRecord;
 import '../l10n/fhse_localizations.dart';
-import 'platform_copy.dart';
 import 'security_key_flow.dart';
 import 'security_keys_app.dart';
 
@@ -121,26 +120,13 @@ class _SecurityKeySetupScreenState extends State<SecurityKeySetupScreen> {
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Advanced Security already explained the keys; this says what to
+          // do here, and when setting up again, what happens to a key left out.
           BrandCard(
             padding: const EdgeInsets.all(BrandSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _again ? i18n.securityKeysSetupAgainNote : i18n.introBody,
-                  style: BrandText.body,
-                ),
-                const SizedBox(height: BrandSpacing.md),
-                Text(
-                  i18n.requirements,
-                  style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
-                ),
-                const SizedBox(height: BrandSpacing.sm),
-                Text(
-                  i18n.securityKeysSuggestTwo,
-                  style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
-                ),
-              ],
+            child: Text(
+              _again ? i18n.securityKeysSetupAgainNote : i18n.securityKeysSetupNote,
+              style: BrandText.body,
             ),
           ),
           if (keys.isNotEmpty) ...[

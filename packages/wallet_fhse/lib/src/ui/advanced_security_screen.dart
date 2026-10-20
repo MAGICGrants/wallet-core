@@ -325,15 +325,10 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
             children: [
               Text(i18n.securityKeysIntroTitle, style: BrandText.listTitle),
               const SizedBox(height: BrandSpacing.sm),
-              Text(i18n.introBody, style: BrandText.body),
+              Text(i18n.securityKeysIntroBody, style: BrandText.body),
               const SizedBox(height: BrandSpacing.md),
               Text(
                 i18n.requirements,
-                style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
-              ),
-              const SizedBox(height: BrandSpacing.sm),
-              Text(
-                i18n.securityKeysSuggestTwo,
                 style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
               ),
               const SizedBox(height: BrandSpacing.sm),

@@ -21,15 +21,15 @@ class BackupLocalizationsPt extends BackupLocalizations {
 
   @override
   String get backupSecurityNote =>
-      'Os arquivos de backup são protegidos com criptografia resistente a computadores quânticos. Eles derivam da sua frase de recuperação, então você pode restaurar qualquer backup com ela. Se você guardar seus backups num serviço de nuvem, ele não pode ver o conteúdo, mas pode ver certos metadados que você talvez considere sensíveis.';
+      'Os arquivos de backup são protegidos com criptografia resistente a computadores quânticos. Eles são criptografados com chaves derivadas da sua frase de recuperação, então você pode restaurar qualquer backup com ela. Se você guardar seus backups num serviço de nuvem, ele não pode ver o conteúdo, mas pode ver certos metadados que você talvez considere sensíveis.';
 
   @override
   String get backupLegacySeed =>
-      'O backup não está disponível para sementes de 25 palavras. Para usá-lo, crie uma carteira nova com uma semente de 16 palavras e envie seus fundos para ela.';
+      'O backup não está disponível para frases de recuperação de 25 palavras. Para usá-lo, crie uma carteira nova com uma frase de recuperação de 16 palavras e envie seus fundos para ela.';
 
   @override
   String get backupUnsupportedPassphrase =>
-      'O backup ainda não está disponível para sementes com senha de deslocamento.';
+      'O backup ainda não está disponível para frases de recuperação com senha de deslocamento.';
 
   @override
   String get backupLocked => 'Desbloqueie a carteira para ver o backup.';

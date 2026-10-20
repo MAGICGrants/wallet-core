@@ -109,7 +109,7 @@ void main() {
       await tester.enterText(find.byType(TextField), 'wrong');
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
-      expect(find.text("That password isn't right."), findsOneWidget);
+      expect(find.text('Incorrect password.'), findsOneWidget);
       expect(find.text('advanced security'), findsNothing);
       expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
 

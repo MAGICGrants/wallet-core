@@ -8,12 +8,6 @@ import '../l10n/fhse_localizations.dart';
 extension FhsePlatformCopy on FhseLocalizations {
   static bool get _typesPassword => Platform.isLinux || Platform.isWindows;
 
-  String get introBody => Platform.isMacOS
-      ? securityKeysIntroBodyMac
-      : _typesPassword
-      ? securityKeysIntroBodyDesktop
-      : securityKeysIntroBody;
-
   String get requirements => Platform.isMacOS
       ? securityKeysRequirementsMac
       : Platform.isLinux
@@ -22,11 +16,8 @@ extension FhsePlatformCopy on FhseLocalizations {
       ? securityKeysRequirementsWindows
       : securityKeysRequirements;
 
-  String get turnOffBody => Platform.isMacOS
-      ? securityKeysTurnOffBodyMac
-      : _typesPassword
-      ? securityKeysTurnOffBodyDesktop
-      : securityKeysTurnOffBody;
+  String get turnOffBody =>
+      _typesPassword ? securityKeysTurnOffBodyDesktop : securityKeysTurnOffBody;
 
   String get connectBody => Platform.isMacOS
       ? securityKeyConnectBodyMac

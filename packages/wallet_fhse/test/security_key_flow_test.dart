@@ -283,10 +283,64 @@ void main() {
     );
     await tap(tester, 'Connect key');
     expect(find.text("Enter your key's PIN"), findsOneWidget);
-    expect(
-      find.text("The fingerprint reader on this key is locked. Enter the key's PIN instead."),
-      findsOneWidget,
+    expect(find.text('Fingerprint is locked on this key. Enter its PIN instead.'), findsOneWidget);
+  });
+
+  testWidgets('a Bio without a PIN gets one, then is enrolled with the PIN', (tester) async {
+    inspectResult = _key(pinSet: false, fingerprint: true);
+    KeyVerification? used;
+    await pumpFlow(
+      tester,
+      enrolling: true,
+      useKey: (v, _) {
+        used = v;
+        return Completer<SecurityKeyRecord?>().future;
+      },
     );
+    await tap(tester, 'Connect key');
+    expect(used, isNull);
+    expect(find.text('Create a PIN for this key'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).at(0), '123456');
+    await tester.enterText(find.byType(TextField).at(1), '123456');
+    await tap(tester, 'Set PIN');
+    expect(calls.last.method, 'setPin');
+    expect(used?.isBuiltIn, isFalse);
+    expect(used?.pin, '123456');
+  });
+
+  testWidgets('a fingerprint refused for want of a PIN leads to a new PIN', (tester) async {
+    inspectResult = _key(fingerprint: true);
+    final attempts = <KeyVerification>[];
+    await pumpFlow(
+      tester,
+      enrolling: true,
+      useKey: (v, _) {
+        attempts.add(v);
+        // What each platform answers when the fingerprint is asked of a key
+        // with no PIN.
+        return Future.error(const SecurityKeyException(SecurityKeyFailure.pinNotSet));
+      },
+    );
+    await tap(tester, 'Connect key');
+    expect(attempts.single.isBuiltIn, isTrue);
+    expect(find.text('Create a PIN for this key'), findsOneWidget);
+  });
+
+  testWidgets('unlocking with a Bio that has no PIN uses neither', (tester) async {
+    inspectResult = _key(pinSet: false, fingerprint: true);
+    var used = false;
+    await pumpFlow(
+      tester,
+      enrolling: false,
+      useKey: (_, _) async {
+        used = true;
+        return null;
+      },
+    );
+    await tap(tester, 'Connect key');
+    expect(find.text("This key isn't set up for this wallet."), findsOneWidget);
+    expect(used, isFalse);
   });
 
   testWidgets('unlocking with a key that has no PIN stops before any PIN', (tester) async {
@@ -301,7 +355,7 @@ void main() {
       },
     );
     await tap(tester, 'Connect key');
-    expect(find.text('This key is not set up for this wallet.'), findsOneWidget);
+    expect(find.text("This key isn't set up for this wallet."), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
     expect(used, isFalse);
   });
@@ -387,7 +441,7 @@ void main() {
         useKey: (_, _) async => null,
       );
       await tap(tester, 'Connect key');
-      expect(find.text('This key is not set up for this wallet.'), findsOneWidget);
+      expect(find.text("This key isn't set up for this wallet."), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
     });
 
@@ -428,9 +482,7 @@ void main() {
       await tester.enterText(find.byType(TextField), '123456');
       await tap(tester, 'Continue');
       expect(
-        find.text(
-          'That is a different key from the one you touched. Start again with the key you want to use.',
-        ),
+        find.text("This isn't the key you touched. Start again with the key you want to use."),
         findsOneWidget,
       );
       expect(find.text('Try again'), findsOneWidget);

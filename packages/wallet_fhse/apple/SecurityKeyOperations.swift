@@ -894,7 +894,8 @@ actor SecurityKeyOperations {
   }
 
   /// Checks, before any token is asked for, that the key can verify the user
-  /// the way `verification` says.
+  /// the way `verification` says. A fingerprint also needs the PIN set: on a
+  /// key without one, whoever holds it could set a PIN and use that instead.
   private static func requireUsable(
     _ info: CTAP2.GetInfo.Response,
     for verification: SecurityKeyVerification
@@ -907,6 +908,7 @@ actor SecurityKeyOperations {
         throw SecurityKeyError.unsupported("This security key does not accept a PIN for this.")
       }
     case .uv:
+      guard info.options.clientPin == true else { throw SecurityKeyError.pinNotSet }
       switch info.options.userVerification {
       case .none:
         throw SecurityKeyError(.uvNotConfigured, "This security key has no fingerprint reader.")

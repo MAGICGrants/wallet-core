@@ -5,9 +5,9 @@
   "advancedSecurityOff": "Off",
   "advancedSecurityKeyCount": "{count, plural, =1{1 key} other{{count} keys}}",
   "advancedSecurityNeedsAttention": "Needs attention",
-  "securityKeysUnreadableTitle": "Your security-key data can't be read here",
-  "securityKeysUnreadableBody": "This happens after moving to a new phone. Your wallet is safe, and your recovery phrase still opens it. Set up your keys again to use them on this phone, or turn security keys off.",
-  "securityKeysLoadFailed": "Couldn't load your security-key settings.",
+  "securityKeysUnreadableTitle": "Set up your security keys again",
+  "securityKeysUnreadableBody": "This happens after moving to a new phone. Your wallet is safe and your recovery phrase still opens it. Set up your keys again, or turn security keys off.",
+  "securityKeysLoadFailed": "Couldn't load your security key settings.",
   "@advancedSecurityKeyCount": {
     "placeholders": {
       "count": {
@@ -15,13 +15,11 @@
       }
     }
   },
-  "securityKeysSection": "Security keys",
   "securityKeysIntroTitle": "Protect this wallet with a security key",
-  "securityKeysIntroBody": "Require a YubiKey and its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this phone cannot be decrypted, even by someone who can unlock the phone.",
-  "securityKeysRequirements": "Works with YubiKey 5 series keys over NFC or USB-C, and with YubiKey Bio over USB-C on Android. On iPhone, USB-C needs YubiKey firmware 5.8 or later. Each key needs a FIDO2 PIN.",
-  "securityKeysSuggestTwo": "Set up two or more keys and keep one somewhere safe. Your recovery phrase still restores the wallet if you lose them all.",
+  "securityKeysIntroBody": "Advanced Security is another layer of protection for your wallet beyond the App Lock. When enabled, your wallet can only be opened with your security key and its PIN.",
+  "securityKeysRequirements": "Works with most FIDO2 capable hardware security keys over NFC. Over USB, only YubiKeys work for now (on iPhone, with firmware 5.8 or later).",
   "securityKeysSetUpButton": "Set up security keys",
-  "securityKeysUnavailable": "Security keys need a wallet created or restored with this version of {appName}.",
+  "securityKeysUnavailable": "Security keys only work with a wallet created or restored in this version of {appName}.",
   "securityKeysYourKeys": "Your keys",
   "securityKeysAdded": "Added {date}",
   "@securityKeysAdded": {
@@ -31,22 +29,22 @@
       }
     }
   },
-  "securityKeysOneKeyWarning": "You have one key. If you lose it, you will need your recovery phrase to open this wallet. Add a second key as a backup.",
+  "securityKeysOneKeyWarning": "You have only one key. Add a second one as a backup. Without a key, you'll need your recovery phrase.",
   "securityKeysAddButton": "Add a security key",
   "securityKeysManageSection": "Manage",
   "securityKeysRemoveTitle": "Remove a key",
-  "securityKeysRemoveSubtitle": "Set up again with only the keys you keep",
+  "securityKeysRemoveSubtitle": "Set up again without that key",
   "securityKeysRemoveLink": "Set up",
-  "securityKeysRemoveExplain": "To remove a key, set up your keys again with only the keys you want to keep. Any key you leave out stops working for this wallet. Have every key you keep with you.",
+  "securityKeysRemoveExplain": "To remove a key, set up again with only the keys you want to keep. Any key you leave out stops working. Have all the keys you're keeping with you.",
   "securityKeysRemoveConfirm": "Set up again",
   "securityKeysTurnOff": "Turn off security keys",
-  "securityKeysTurnOffBody": "The wallet password goes back into this phone's secure storage, and the wallet opens without a key.",
+  "securityKeysTurnOffBody": "Your wallet will open without a security key again.",
   "securityKeysTurnOffConfirm": "Turn off",
   "securityKeysTurnedOff": "Security keys are off",
   "securityKeysTurnedOn": "Security keys are on",
   "securityKeysLockSection": "Lock",
   "securityKeysFullLockLabel": "Fully lock after",
-  "securityKeysFullLockDescription": "After this long in the background, {appName} locks the wallet and forgets its password and spending keys. Opening it again needs a security key.",
+  "securityKeysFullLockDescription": "After this long in the background, {appName} fully locks the wallet. You'll need a security key to open it again.",
   "securityKeysMinutes": "{count, plural, =1{1 minute} other{{count} minutes}}",
   "@securityKeysMinutes": {
     "placeholders": {
@@ -63,18 +61,22 @@
       }
     }
   },
-  "securityKeysBackgroundNote": "Background sync keeps working with view-only access, which can see your payments but cannot spend.",
+  "securityKeysBackgroundNote": "While locked, the wallet keeps syncing and can show new payments, but it can't spend.",
   "securityKeysSetupTitle": "Set up security keys",
   "securityKeysSetupAgainTitle": "Set up keys again",
-  "securityKeysSetupAgainNote": "Add only the keys you want to keep. Any key you leave out will no longer open this wallet.",
+  "securityKeysSetupAgainNote": "Add only the keys you want to keep. Any key you leave out stops working.",
+  "securityKeysSetupNote": "Add each security key you want to use, then tap Finish.",
+  "@securityKeysSetupNote": {
+    "description": "Set up security keys screen, first setup: the one line above the keys added so far."
+  },
   "securityKeysAddFirst": "Add your first key",
   "securityKeysAddAnother": "Add another key",
   "securityKeysFinish": "Finish",
-  "securityKeysOneKeyTitle": "Finish with one key?",
-  "securityKeysOneKeyBody": "We suggest two or more. If you lose your only key, you will need your recovery phrase to open this wallet.",
-  "securityKeysFinishAnyway": "Finish anyway",
+  "securityKeysOneKeyTitle": "Use only one key?",
+  "securityKeysOneKeyBody": "We recommend at least two. If you lose your only key, you'll need your recovery phrase.",
+  "securityKeysFinishAnyway": "Use one key",
   "securityKeysNameLabel": "Key name",
-  "securityKeysNameDefault": "YubiKey {number}",
+  "securityKeysNameDefault": "Security key {number}",
   "@securityKeysNameDefault": {
     "placeholders": {
       "number": {
@@ -88,7 +90,7 @@
   "securityKeysNewPinLabel": "New PIN",
   "securityKeysConfirmPinLabel": "Confirm PIN",
   "securityKeysSetPinButton": "Set PIN",
-  "securityKeysPinMismatch": "The PINs do not match.",
+  "securityKeysPinMismatch": "The PINs don't match.",
   "securityKeysErrorPinInvalid": "Incorrect PIN. {count} attempts left before the key locks.",
   "@securityKeysErrorPinInvalid": {
     "placeholders": {
@@ -98,11 +100,11 @@
     }
   },
   "securityKeysErrorPinInvalidUnknown": "Incorrect PIN.",
-  "securityKeysErrorPinBlocked": "This key's PIN is blocked. The key must be reset, which removes it from every wallet it protects.",
-  "securityKeysErrorPinAuthBlocked": "Too many wrong PINs in a row. Remove the key and connect it again.",
-  "securityKeysErrorPinPolicy": "The key did not accept that PIN. Some keys need at least 6 characters.",
-  "securityKeysErrorNotEnrolled": "This key is not set up for this wallet.",
-  "securityKeysErrorNotThisWallet": "Your security-key data doesn't match this wallet. Open it with your recovery phrase, then set up your keys again.",
+  "securityKeysErrorPinBlocked": "This key is locked after too many wrong PINs. It can only be reset, and a reset key no longer opens any wallet.",
+  "securityKeysErrorPinAuthBlocked": "Too many wrong PINs. Disconnect the key and connect it again.",
+  "securityKeysErrorPinPolicy": "The key didn't accept that PIN. Some keys need 6 or more characters.",
+  "securityKeysErrorNotEnrolled": "This key isn't set up for this wallet.",
+  "securityKeysErrorNotThisWallet": "Your security key settings don't match this wallet. Open it with your recovery phrase, then set up your keys again.",
   "securityKeysErrorAlreadyAdded": "This key is already set up for this wallet.",
   "securityKeysErrorUnsupported": "This key cannot be used here: {reason}",
   "@securityKeysErrorUnsupported": {
@@ -113,7 +115,7 @@
     }
   },
   "securityKeysErrorTimeout": "No key was found. Try again.",
-  "securityKeysErrorTransport": "The connection to the key was lost. Try again.",
+  "securityKeysErrorTransport": "Lost the connection to your key. Try again.",
   "securityKeysErrorGeneric": "Something went wrong: {reason}",
   "@securityKeysErrorGeneric": {
     "placeholders": {
@@ -125,24 +127,24 @@
   "securityKeyUnlockTitle": "Unlock with your security key",
   "securityKeyUnlockButton": "Unlock",
   "securityKeyLostKeys": "Lost your keys?",
-  "securityKeyLostKeysBody": "Your recovery phrase can open this wallet. Then set up new keys in Settings.",
+  "securityKeyLostKeysBody": "Open the wallet with your recovery phrase, then set up new keys in Settings.",
   "securityKeyUseRecoveryPhrase": "Use recovery phrase",
   "securityKeyRecoveryPhraseHint": "Enter your recovery phrase",
-  "securityKeyRecoveryWrongPhrase": "That recovery phrase is not this wallet's.",
-  "securityKeyRecoveryNotPossible": "This wallet came from a 25-word seed, so its phrase cannot open it here. Delete the wallet and restore it from the phrase.",
+  "securityKeyRecoveryWrongPhrase": "That recovery phrase doesn't match this wallet.",
+  "securityKeyRecoveryNotPossible": "This wallet was restored from a 25-word recovery phrase, which can't unlock it here. Delete the wallet, then restore it from that phrase.",
   "securityKeyRecoveredToast": "Unlocked with your recovery phrase. Set up your keys again in Settings.",
   "securityKeyConnectTitle": "Connect your security key",
-  "securityKeyConnectBodyAndroid": "Plug your YubiKey into the USB-C port and touch it when it blinks, or hold it flat against the back of your phone.",
-  "securityKeyConnectBodyIos": "Hold your YubiKey near the top of your iPhone, or plug it in and touch it when it blinks.",
+  "securityKeyConnectBodyAndroid": "Plug in your security key and touch it when it blinks, or hold it flat against the back of your phone.",
+  "securityKeyConnectBodyIos": "Hold your security key near the top of your iPhone, or plug it in and touch it when it blinks.",
   "securityKeyConnectButton": "Connect key",
   "securityKeyTryAgain": "Try again",
   "securityKeyWaiting": "Waiting for your key…",
-  "securityKeyTalkingToKey": "Talking to your key…",
+  "securityKeyTalkingToKey": "Connecting to your key…",
   "securityKeyKeyBlinking": "Your key is blinking",
   "securityKeyTouchToSelect": "Touch your key",
-  "securityKeyTouchBody": "Touch the gold contact on your key while it blinks.",
+  "securityKeyTouchBody": "Touch your security key while it blinks.",
   "securityKeyPinTitle": "Enter your key's PIN",
-  "securityKeyPinBody": "The PIN you set for this YubiKey. It is not your phone's passcode.",
+  "securityKeyPinBody": "This is your security key's PIN, not your phone's passcode.",
   "securityKeyPinAttemptsLeft": "{count, plural, =1{1 attempt left before the key locks.} other{{count} attempts left before the key locks.}}",
   "@securityKeyPinAttemptsLeft": {
     "placeholders": {
@@ -154,15 +156,11 @@
   "securityKeyUseAnotherKey": "Use a different key",
   "securityKeyUseFingerprint": "Use fingerprint instead",
   "securityKeyUsePin": "Use PIN instead",
-  "securityKeysNewPinBodyCount": "This key has no PIN yet. Choose one with at least {count} characters. {appName} requires it, so a key found by someone else cannot open your wallet.",
+  "securityKeysNewPinBodyCount": "This key doesn't have a PIN yet. Choose one with at least {count} characters, so someone who finds your key can't use it.",
   "@securityKeysNewPinBodyCount": {
     "placeholders": {
       "count": {
         "type": "int"
-      },
-      "appName": {
-        "type": "String",
-        "example": "Skylight"
       }
     }
   },
@@ -176,7 +174,7 @@
   },
   "securityKeyCheckingPin": "Checking your PIN…",
   "securityKeyWorking": "One moment…",
-  "securityKeyKeepHolding": "Keep your key against the phone.",
+  "securityKeyKeepHolding": "Keep holding your key to the phone.",
   "securityKeyHoldAgain": "Hold your key to your phone again",
   "securityKeyConnectAgain": "Connect your key again",
   "securityKeyTouchToConfirm": "Touch your key to confirm",
@@ -185,7 +183,7 @@
   "securityKeyFingerprintToConfirm": "Touch the fingerprint sensor",
   "securityKeyFingerprintOnceMore": "Touch the sensor once more",
   "securityKeyFingerprintToUnlock": "Touch the sensor to unlock",
-  "securityKeyFingerprintBody": "Use a finger you enrolled on this YubiKey Bio.",
+  "securityKeyFingerprintBody": "Use a finger you added to this security key.",
   "securityKeyTouchCount": "Touch {current} of {total}",
   "@securityKeyTouchCount": {
     "placeholders": {
@@ -200,8 +198,8 @@
   "securityKeyAddedTitle": "Key added",
   "securityKeyNameBody": "Give it a name so you can tell your keys apart.",
   "securityKeySaveName": "Save",
-  "securityKeysErrorKeyUnsupported": "This key cannot protect a wallet. Use a YubiKey 5 series key or a YubiKey Bio.",
-  "securityKeysErrorPinChangeRequired": "This key wants a new PIN first. Change it in the Yubico Authenticator app, then try again.",
+  "securityKeysErrorKeyUnsupported": "This security key isn't supported. Try a different one.",
+  "securityKeysErrorPinChangeRequired": "This security key needs a new PIN first. Change it with the key maker's app, then try again.",
   "securityKeysErrorUvInvalid": "{count, plural, =1{Fingerprint not recognized. 1 try left.} other{Fingerprint not recognized. {count} tries left.}}",
   "@securityKeysErrorUvInvalid": {
     "placeholders": {
@@ -211,7 +209,7 @@
     }
   },
   "securityKeysErrorUvInvalidUnknown": "Fingerprint not recognized.",
-  "securityKeysErrorUvBlocked": "The fingerprint reader on this key is locked. Enter the key's PIN instead.",
+  "securityKeysErrorUvBlocked": "Fingerprint is locked on this key. Enter its PIN instead.",
   "securityKeysErrorUvNotConfigured": "This key has no fingerprint set up. Enter its PIN instead.",
   "securityKeyPinTitleNamed": "Enter the PIN for {name}",
   "@securityKeyPinTitleNamed": {
@@ -229,9 +227,9 @@
       }
     }
   },
-  "securityKeysErrorDifferentKey": "That is a different key from the one you touched. Start again with the key you want to use.",
+  "securityKeysErrorDifferentKey": "This isn't the key you touched. Start again with the key you want to use.",
   "securityKeysErrorMultipleKeys": "More than one security key is plugged in. Unplug the others, then try again.",
-  "unlockBoundToAnotherPc": "This wallet's files are tied to the PC they were made on, and this PC cannot open them. If this is that PC, restart it and try again. Otherwise, restore the wallet from its recovery phrase as a new wallet.",
+  "unlockBoundToAnotherPc": "This wallet can't be opened on this PC. If you created it on this PC, restart the PC and try again. Otherwise, restore the wallet from its recovery phrase.",
   "@unlockBoundToAnotherPc": {
     "description": "Linux/Windows unlock: the wallet files are bound to a PC's TPM that this PC cannot use (another computer, or a cleared TPM)."
   },
@@ -239,13 +237,13 @@
   "@securityKeysCancel": {
     "description": "Cancel button in the security key sheets."
   },
-  "securityKeysPinEmpty": "This field cannot be empty.",
+  "securityKeysPinEmpty": "Enter your PIN.",
   "@securityKeysPinEmpty": {
     "description": "Shown when the PIN field is submitted empty."
   },
-  "securityKeysSharedPhraseWarning": "Using this recovery phrase in another wallet app too? Protect that app as well. Once unlocked, either app can show the phrase, so it is only as safe as the less protected one.",
+  "securityKeysSharedPhraseWarning": "Your wallet is only as strong as the weakest protection. Make sure your recovery phrase is saved safely, and if you use the same wallet on multiple devices, make sure to set up Advanced Security there too.",
   "@securityKeysSharedPhraseWarning": {
-    "description": "Advanced Security: the same recovery phrase in two apps is only as protected as the weaker app."
+    "description": "Advanced Security: the wallet is only as safe as its least protected copy, so protect the recovery phrase and every device that has the wallet."
   },
   "@securityKeysUnavailable": {
     "placeholders": {
@@ -263,13 +261,11 @@
       }
     }
   },
-  "securityKeysIntroBodyMac": "Require a YubiKey and its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this Mac cannot be decrypted, even by someone who can log in to it.",
-  "securityKeysRequirementsMac": "Works with YubiKey 5 series keys and YubiKey Bio plugged into this Mac. Each key needs a FIDO2 PIN.",
-  "securityKeysTurnOffBodyMac": "The wallet password goes back into this Mac's keychain, and the wallet opens without a key.",
-  "securityKeyConnectBodyMac": "Plug your YubiKey into this Mac and touch it when it blinks.",
-  "securityKeyPinBodyMac": "The PIN you set for this YubiKey. It is not your Mac's password.",
+  "securityKeysRequirementsMac": "Works with most FIDO2 capable hardware security keys.",
+  "securityKeyConnectBodyMac": "Plug your security key into this Mac and touch it when it blinks.",
+  "securityKeyPinBodyMac": "This is your security key's PIN, not your Mac's password.",
   "desktopAutoLockLabel": "Lock after",
-  "desktopAutoLockDescription": "After this long without use, {appName} closes the wallet and forgets its password. Unlock it again to carry on.",
+  "desktopAutoLockDescription": "After this long without use, {appName} locks the wallet. Unlock it to continue.",
   "@desktopAutoLockDescription": {
     "placeholders": {
       "appName": {
@@ -278,22 +274,21 @@
       }
     }
   },
-  "securityKeysIntroBodyDesktop": "Require your password and a YubiKey with its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this computer cannot be decrypted, even by someone who knows your password.",
-  "securityKeysRequirementsLinux": "Works with YubiKey 5 series keys and YubiKey Bio plugged into this computer. Each key needs a FIDO2 PIN. Uses the system's libfido2, which most Linux systems already have.",
-  "securityKeysRequirementsWindows": "Works with FIDO2 security keys such as the YubiKey 5 series, plugged into this computer. Needs Windows 11, version 22H2 or later. Windows asks for the key's PIN itself. On a PC with a TPM, the wallet's files open only on this PC: on another computer, restore the wallet from its recovery phrase.",
-  "securityKeysTurnOffBodyDesktop": "Your password alone opens the wallet again, without a key.",
-  "securityKeyConnectBodyDesktop": "Plug your YubiKey into this computer and touch it when it blinks.",
-  "securityKeyConnectBodyWindows": "Windows asks for your security key, its PIN or fingerprint, and a touch.",
-  "securityKeyPinBodyDesktop": "The PIN you set for this YubiKey. It is not your wallet password.",
+  "securityKeysRequirementsLinux": "Works with most FIDO2 capable hardware security keys. Needs libfido2, which most Linux systems already have.",
+  "securityKeysRequirementsWindows": "Works with most FIDO2 capable hardware security keys. Needs Windows 11 (22H2 or later).",
+  "securityKeysTurnOffBodyDesktop": "Your password alone will open the wallet again.",
+  "securityKeyConnectBodyDesktop": "Plug your security key into this computer and touch it when it blinks.",
+  "securityKeyConnectBodyWindows": "Windows asks for your security key, its PIN, and a touch.",
+  "securityKeyPinBodyDesktop": "This is your security key's PIN, not your wallet password.",
   "securityKeyWindowsPromptTitle": "Continue in Windows Security",
-  "securityKeyWindowsPromptBody": "Enter your key's PIN or use its fingerprint, then touch the key.",
-  "securityKeyWindowsPromptEnrollBody": "Windows asks twice: once to register the key and once to read it back. Each time, enter the key's PIN or use its fingerprint, then touch the key.",
+  "securityKeyWindowsPromptBody": "Enter your security key's PIN, then touch the key.",
+  "securityKeyWindowsPromptEnrollBody": "Windows will ask twice. Each time, enter your security key's PIN, then touch the key.",
   "securityKeyWindowsWaiting": "Waiting for Windows Security…",
   "securityKeyUseButton": "Use security key",
   "advancedSecurityAuthReason": "Confirm it's you to open Advanced Security",
   "advancedSecurityAuthFailed": "Couldn't confirm it's you.",
   "advancedSecurityPasswordTitle": "Enter your password",
-  "advancedSecurityPasswordBody": "Advanced Security can turn security keys off. Enter the password you unlock {appName} with.",
+  "advancedSecurityPasswordBody": "Enter the password you use to unlock {appName}.",
   "@advancedSecurityPasswordBody": {
     "placeholders": {
       "appName": {
@@ -302,7 +297,7 @@
     }
   },
   "advancedSecurityPasswordLabel": "Password",
-  "advancedSecurityPasswordWrong": "That password isn't right.",
+  "advancedSecurityPasswordWrong": "Incorrect password.",
   "advancedSecurityContinue": "Continue",
   "appLockLabel": "App Lock",
   "appLockImmediately": "Immediately",

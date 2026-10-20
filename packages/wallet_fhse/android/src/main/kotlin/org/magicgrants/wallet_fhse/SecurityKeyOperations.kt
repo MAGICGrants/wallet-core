@@ -818,7 +818,8 @@ class SecurityKeyOperations(
     /**
      * Checks the key can verify the user as [verification] asks: a PIN that is
      * set and need not be changed first, or built-in UV that is set up and
-     * hands out PIN/UV auth tokens.
+     * hands out PIN/UV auth tokens. Built-in UV also needs the PIN set: on a
+     * key without one, whoever holds it could set a PIN and use that instead.
      */
     private fun requireVerification(info: Ctap2Session.InfoData, verification: Verification) {
         when (verification) {
@@ -831,8 +832,10 @@ class SecurityKeyOperations(
                     )
                 }
             }
-            Verification.BuiltInUv ->
+            Verification.BuiltInUv -> {
+                requirePinSet(info)
                 if (info.options["uv"] != true || !ClientPin.isTokenSupported(info)) throw uvNotConfigured()
+            }
         }
     }
 

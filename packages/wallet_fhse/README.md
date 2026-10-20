@@ -107,8 +107,10 @@ How each part fits:
   getAssertion carries a PIN/UV token, so the key returns its with-UV
   hmac-secret. The token comes from the key's PIN, or from a YubiKey Bio's
   fingerprint reader (`KeyVerification`); both set CTAP's UV flag, so a key
-  enrolled with one opens with the other. See the platform halves:
-  this plugin's `android/src/main/kotlin/.../SecurityKeyOperations.kt` and
+  enrolled with one opens with the other. The fingerprint is used only on a
+  key whose PIN is set: on a key without one, whoever holds it could set a
+  PIN and use that instead, so such a key gets a PIN first. See the platform
+  halves: this plugin's `android/src/main/kotlin/.../SecurityKeyOperations.kt` and
   `apple/SecurityKeyOperations.swift`.
 - **Every key's answer is checked once, in Dart.** Each platform reaches the
   key its own way, but returns what the key sent, authenticator data included,

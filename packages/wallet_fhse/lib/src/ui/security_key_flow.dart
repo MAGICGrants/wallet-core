@@ -15,7 +15,6 @@ import '../fhse_vault.dart'
 import '../l10n/fhse_localizations.dart';
 import '../security_key_service.dart';
 import 'platform_copy.dart';
-import 'security_keys_app.dart' show SecurityKeysUi;
 
 /// A security-key or vault failure as one sentence for the user, or null when
 /// there is nothing to say (the user cancelled).
@@ -68,7 +67,8 @@ enum _Step { connect, pin, newPin, confirm, name }
 ///
 /// 1. **Connect.** Plug the key in and touch it, or hold it to the phone.
 /// 2. **Verify.** The key's PIN, or a new one if it has none. A YubiKey Bio
-///    with a fingerprint skips this; its sensor verifies in the next step.
+///    with a fingerprint and a PIN skips this; its sensor verifies in the
+///    next step. A Bio without a PIN gets one here first.
 /// 3. **Confirm.** Touch the key again: once to unlock, twice to add a key
 ///    (one touch creates the credential, the other reads its secret).
 /// 4. **Name** (adding only).
@@ -432,10 +432,7 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
       ),
       _Step.newPin => (
         title: i18n.securityKeysNewPinTitle,
-        body: i18n.securityKeysNewPinBodyCount(
-          _info?.minPinLength ?? 4,
-          SecurityKeysUi.config.appName,
-        ),
+        body: i18n.securityKeysNewPinBodyCount(_info?.minPinLength ?? 4),
       ),
       _Step.confirm => _confirmCopy(i18n),
       _Step.name => (title: i18n.securityKeyAddedTitle, body: i18n.securityKeyNameBody),

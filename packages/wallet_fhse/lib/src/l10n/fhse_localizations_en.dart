@@ -32,39 +32,32 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get advancedSecurityNeedsAttention => 'Needs attention';
 
   @override
-  String get securityKeysUnreadableTitle => 'Your security-key data can\'t be read here';
+  String get securityKeysUnreadableTitle => 'Set up your security keys again';
 
   @override
   String get securityKeysUnreadableBody =>
-      'This happens after moving to a new phone. Your wallet is safe, and your recovery phrase still opens it. Set up your keys again to use them on this phone, or turn security keys off.';
+      'This happens after moving to a new phone. Your wallet is safe and your recovery phrase still opens it. Set up your keys again, or turn security keys off.';
 
   @override
-  String get securityKeysLoadFailed => 'Couldn\'t load your security-key settings.';
-
-  @override
-  String get securityKeysSection => 'Security keys';
+  String get securityKeysLoadFailed => 'Couldn\'t load your security key settings.';
 
   @override
   String get securityKeysIntroTitle => 'Protect this wallet with a security key';
 
   @override
   String get securityKeysIntroBody =>
-      'Require a YubiKey and its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this phone cannot be decrypted, even by someone who can unlock the phone.';
+      'Advanced Security is another layer of protection for your wallet beyond the App Lock. When enabled, your wallet can only be opened with your security key and its PIN.';
 
   @override
   String get securityKeysRequirements =>
-      'Works with YubiKey 5 series keys over NFC or USB-C, and with YubiKey Bio over USB-C on Android. On iPhone, USB-C needs YubiKey firmware 5.8 or later. Each key needs a FIDO2 PIN.';
-
-  @override
-  String get securityKeysSuggestTwo =>
-      'Set up two or more keys and keep one somewhere safe. Your recovery phrase still restores the wallet if you lose them all.';
+      'Works with most FIDO2 capable hardware security keys over NFC. Over USB, only YubiKeys work for now (on iPhone, with firmware 5.8 or later).';
 
   @override
   String get securityKeysSetUpButton => 'Set up security keys';
 
   @override
   String securityKeysUnavailable(String appName) {
-    return 'Security keys need a wallet created or restored with this version of $appName.';
+    return 'Security keys only work with a wallet created or restored in this version of $appName.';
   }
 
   @override
@@ -77,7 +70,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get securityKeysOneKeyWarning =>
-      'You have one key. If you lose it, you will need your recovery phrase to open this wallet. Add a second key as a backup.';
+      'You have only one key. Add a second one as a backup. Without a key, you\'ll need your recovery phrase.';
 
   @override
   String get securityKeysAddButton => 'Add a security key';
@@ -89,14 +82,14 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysRemoveTitle => 'Remove a key';
 
   @override
-  String get securityKeysRemoveSubtitle => 'Set up again with only the keys you keep';
+  String get securityKeysRemoveSubtitle => 'Set up again without that key';
 
   @override
   String get securityKeysRemoveLink => 'Set up';
 
   @override
   String get securityKeysRemoveExplain =>
-      'To remove a key, set up your keys again with only the keys you want to keep. Any key you leave out stops working for this wallet. Have every key you keep with you.';
+      'To remove a key, set up again with only the keys you want to keep. Any key you leave out stops working. Have all the keys you\'re keeping with you.';
 
   @override
   String get securityKeysRemoveConfirm => 'Set up again';
@@ -105,8 +98,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysTurnOff => 'Turn off security keys';
 
   @override
-  String get securityKeysTurnOffBody =>
-      'The wallet password goes back into this phone\'s secure storage, and the wallet opens without a key.';
+  String get securityKeysTurnOffBody => 'Your wallet will open without a security key again.';
 
   @override
   String get securityKeysTurnOffConfirm => 'Turn off';
@@ -125,7 +117,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String securityKeysFullLockDescription(String appName) {
-    return 'After this long in the background, $appName locks the wallet and forgets its password and spending keys. Opening it again needs a security key.';
+    return 'After this long in the background, $appName fully locks the wallet. You\'ll need a security key to open it again.';
   }
 
   @override
@@ -152,7 +144,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get securityKeysBackgroundNote =>
-      'Background sync keeps working with view-only access, which can see your payments but cannot spend.';
+      'While locked, the wallet keeps syncing and can show new payments, but it can\'t spend.';
 
   @override
   String get securityKeysSetupTitle => 'Set up security keys';
@@ -162,7 +154,10 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get securityKeysSetupAgainNote =>
-      'Add only the keys you want to keep. Any key you leave out will no longer open this wallet.';
+      'Add only the keys you want to keep. Any key you leave out stops working.';
+
+  @override
+  String get securityKeysSetupNote => 'Add each security key you want to use, then tap Finish.';
 
   @override
   String get securityKeysAddFirst => 'Add your first key';
@@ -174,21 +169,21 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysFinish => 'Finish';
 
   @override
-  String get securityKeysOneKeyTitle => 'Finish with one key?';
+  String get securityKeysOneKeyTitle => 'Use only one key?';
 
   @override
   String get securityKeysOneKeyBody =>
-      'We suggest two or more. If you lose your only key, you will need your recovery phrase to open this wallet.';
+      'We recommend at least two. If you lose your only key, you\'ll need your recovery phrase.';
 
   @override
-  String get securityKeysFinishAnyway => 'Finish anyway';
+  String get securityKeysFinishAnyway => 'Use one key';
 
   @override
   String get securityKeysNameLabel => 'Key name';
 
   @override
   String securityKeysNameDefault(int number) {
-    return 'YubiKey $number';
+    return 'Security key $number';
   }
 
   @override
@@ -210,7 +205,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysSetPinButton => 'Set PIN';
 
   @override
-  String get securityKeysPinMismatch => 'The PINs do not match.';
+  String get securityKeysPinMismatch => 'The PINs don\'t match.';
 
   @override
   String securityKeysErrorPinInvalid(int count) {
@@ -222,22 +217,22 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get securityKeysErrorPinBlocked =>
-      'This key\'s PIN is blocked. The key must be reset, which removes it from every wallet it protects.';
+      'This key is locked after too many wrong PINs. It can only be reset, and a reset key no longer opens any wallet.';
 
   @override
   String get securityKeysErrorPinAuthBlocked =>
-      'Too many wrong PINs in a row. Remove the key and connect it again.';
+      'Too many wrong PINs. Disconnect the key and connect it again.';
 
   @override
   String get securityKeysErrorPinPolicy =>
-      'The key did not accept that PIN. Some keys need at least 6 characters.';
+      'The key didn\'t accept that PIN. Some keys need 6 or more characters.';
 
   @override
-  String get securityKeysErrorNotEnrolled => 'This key is not set up for this wallet.';
+  String get securityKeysErrorNotEnrolled => 'This key isn\'t set up for this wallet.';
 
   @override
   String get securityKeysErrorNotThisWallet =>
-      'Your security-key data doesn\'t match this wallet. Open it with your recovery phrase, then set up your keys again.';
+      'Your security key settings don\'t match this wallet. Open it with your recovery phrase, then set up your keys again.';
 
   @override
   String get securityKeysErrorAlreadyAdded => 'This key is already set up for this wallet.';
@@ -251,7 +246,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysErrorTimeout => 'No key was found. Try again.';
 
   @override
-  String get securityKeysErrorTransport => 'The connection to the key was lost. Try again.';
+  String get securityKeysErrorTransport => 'Lost the connection to your key. Try again.';
 
   @override
   String securityKeysErrorGeneric(String reason) {
@@ -269,7 +264,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get securityKeyLostKeysBody =>
-      'Your recovery phrase can open this wallet. Then set up new keys in Settings.';
+      'Open the wallet with your recovery phrase, then set up new keys in Settings.';
 
   @override
   String get securityKeyUseRecoveryPhrase => 'Use recovery phrase';
@@ -278,11 +273,11 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeyRecoveryPhraseHint => 'Enter your recovery phrase';
 
   @override
-  String get securityKeyRecoveryWrongPhrase => 'That recovery phrase is not this wallet\'s.';
+  String get securityKeyRecoveryWrongPhrase => 'That recovery phrase doesn\'t match this wallet.';
 
   @override
   String get securityKeyRecoveryNotPossible =>
-      'This wallet came from a 25-word seed, so its phrase cannot open it here. Delete the wallet and restore it from the phrase.';
+      'This wallet was restored from a 25-word recovery phrase, which can\'t unlock it here. Delete the wallet, then restore it from that phrase.';
 
   @override
   String get securityKeyRecoveredToast =>
@@ -293,11 +288,11 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get securityKeyConnectBodyAndroid =>
-      'Plug your YubiKey into the USB-C port and touch it when it blinks, or hold it flat against the back of your phone.';
+      'Plug in your security key and touch it when it blinks, or hold it flat against the back of your phone.';
 
   @override
   String get securityKeyConnectBodyIos =>
-      'Hold your YubiKey near the top of your iPhone, or plug it in and touch it when it blinks.';
+      'Hold your security key near the top of your iPhone, or plug it in and touch it when it blinks.';
 
   @override
   String get securityKeyConnectButton => 'Connect key';
@@ -309,7 +304,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeyWaiting => 'Waiting for your key…';
 
   @override
-  String get securityKeyTalkingToKey => 'Talking to your key…';
+  String get securityKeyTalkingToKey => 'Connecting to your key…';
 
   @override
   String get securityKeyKeyBlinking => 'Your key is blinking';
@@ -318,14 +313,13 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeyTouchToSelect => 'Touch your key';
 
   @override
-  String get securityKeyTouchBody => 'Touch the gold contact on your key while it blinks.';
+  String get securityKeyTouchBody => 'Touch your security key while it blinks.';
 
   @override
   String get securityKeyPinTitle => 'Enter your key\'s PIN';
 
   @override
-  String get securityKeyPinBody =>
-      'The PIN you set for this YubiKey. It is not your phone\'s passcode.';
+  String get securityKeyPinBody => 'This is your security key\'s PIN, not your phone\'s passcode.';
 
   @override
   String securityKeyPinAttemptsLeft(int count) {
@@ -348,8 +342,8 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeyUsePin => 'Use PIN instead';
 
   @override
-  String securityKeysNewPinBodyCount(int count, String appName) {
-    return 'This key has no PIN yet. Choose one with at least $count characters. $appName requires it, so a key found by someone else cannot open your wallet.';
+  String securityKeysNewPinBodyCount(int count) {
+    return 'This key doesn\'t have a PIN yet. Choose one with at least $count characters, so someone who finds your key can\'t use it.';
   }
 
   @override
@@ -364,7 +358,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeyWorking => 'One moment…';
 
   @override
-  String get securityKeyKeepHolding => 'Keep your key against the phone.';
+  String get securityKeyKeepHolding => 'Keep holding your key to the phone.';
 
   @override
   String get securityKeyHoldAgain => 'Hold your key to your phone again';
@@ -391,7 +385,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeyFingerprintToUnlock => 'Touch the sensor to unlock';
 
   @override
-  String get securityKeyFingerprintBody => 'Use a finger you enrolled on this YubiKey Bio.';
+  String get securityKeyFingerprintBody => 'Use a finger you added to this security key.';
 
   @override
   String securityKeyTouchCount(int current, int total) {
@@ -409,11 +403,11 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get securityKeysErrorKeyUnsupported =>
-      'This key cannot protect a wallet. Use a YubiKey 5 series key or a YubiKey Bio.';
+      'This security key isn\'t supported. Try a different one.';
 
   @override
   String get securityKeysErrorPinChangeRequired =>
-      'This key wants a new PIN first. Change it in the Yubico Authenticator app, then try again.';
+      'This security key needs a new PIN first. Change it with the key maker\'s app, then try again.';
 
   @override
   String securityKeysErrorUvInvalid(int count) {
@@ -431,7 +425,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get securityKeysErrorUvBlocked =>
-      'The fingerprint reader on this key is locked. Enter the key\'s PIN instead.';
+      'Fingerprint is locked on this key. Enter its PIN instead.';
 
   @override
   String get securityKeysErrorUvNotConfigured =>
@@ -449,7 +443,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get securityKeysErrorDifferentKey =>
-      'That is a different key from the one you touched. Start again with the key you want to use.';
+      'This isn\'t the key you touched. Start again with the key you want to use.';
 
   @override
   String get securityKeysErrorMultipleKeys =>
@@ -457,84 +451,68 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get unlockBoundToAnotherPc =>
-      'This wallet\'s files are tied to the PC they were made on, and this PC cannot open them. If this is that PC, restart it and try again. Otherwise, restore the wallet from its recovery phrase as a new wallet.';
+      'This wallet can\'t be opened on this PC. If you created it on this PC, restart the PC and try again. Otherwise, restore the wallet from its recovery phrase.';
 
   @override
   String get securityKeysCancel => 'Cancel';
 
   @override
-  String get securityKeysPinEmpty => 'This field cannot be empty.';
+  String get securityKeysPinEmpty => 'Enter your PIN.';
 
   @override
   String get securityKeysSharedPhraseWarning =>
-      'Using this recovery phrase in another wallet app too? Protect that app as well. Once unlocked, either app can show the phrase, so it is only as safe as the less protected one.';
+      'Your wallet is only as strong as the weakest protection. Make sure your recovery phrase is saved safely, and if you use the same wallet on multiple devices, make sure to set up Advanced Security there too.';
 
   @override
-  String get securityKeysIntroBodyMac =>
-      'Require a YubiKey and its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this Mac cannot be decrypted, even by someone who can log in to it.';
-
-  @override
-  String get securityKeysRequirementsMac =>
-      'Works with YubiKey 5 series keys and YubiKey Bio plugged into this Mac. Each key needs a FIDO2 PIN.';
-
-  @override
-  String get securityKeysTurnOffBodyMac =>
-      'The wallet password goes back into this Mac\'s keychain, and the wallet opens without a key.';
+  String get securityKeysRequirementsMac => 'Works with most FIDO2 capable hardware security keys.';
 
   @override
   String get securityKeyConnectBodyMac =>
-      'Plug your YubiKey into this Mac and touch it when it blinks.';
+      'Plug your security key into this Mac and touch it when it blinks.';
 
   @override
-  String get securityKeyPinBodyMac =>
-      'The PIN you set for this YubiKey. It is not your Mac\'s password.';
+  String get securityKeyPinBodyMac => 'This is your security key\'s PIN, not your Mac\'s password.';
 
   @override
   String get desktopAutoLockLabel => 'Lock after';
 
   @override
   String desktopAutoLockDescription(String appName) {
-    return 'After this long without use, $appName closes the wallet and forgets its password. Unlock it again to carry on.';
+    return 'After this long without use, $appName locks the wallet. Unlock it to continue.';
   }
 
   @override
-  String get securityKeysIntroBodyDesktop =>
-      'Require your password and a YubiKey with its PIN, or the fingerprint on a YubiKey Bio, to open this wallet. Without one of your keys, the wallet files on this computer cannot be decrypted, even by someone who knows your password.';
-
-  @override
   String get securityKeysRequirementsLinux =>
-      'Works with YubiKey 5 series keys and YubiKey Bio plugged into this computer. Each key needs a FIDO2 PIN. Uses the system\'s libfido2, which most Linux systems already have.';
+      'Works with most FIDO2 capable hardware security keys. Needs libfido2, which most Linux systems already have.';
 
   @override
   String get securityKeysRequirementsWindows =>
-      'Works with FIDO2 security keys such as the YubiKey 5 series, plugged into this computer. Needs Windows 11, version 22H2 or later. Windows asks for the key\'s PIN itself. On a PC with a TPM, the wallet\'s files open only on this PC: on another computer, restore the wallet from its recovery phrase.';
+      'Works with most FIDO2 capable hardware security keys. Needs Windows 11 (22H2 or later).';
 
   @override
-  String get securityKeysTurnOffBodyDesktop =>
-      'Your password alone opens the wallet again, without a key.';
+  String get securityKeysTurnOffBodyDesktop => 'Your password alone will open the wallet again.';
 
   @override
   String get securityKeyConnectBodyDesktop =>
-      'Plug your YubiKey into this computer and touch it when it blinks.';
+      'Plug your security key into this computer and touch it when it blinks.';
 
   @override
   String get securityKeyConnectBodyWindows =>
-      'Windows asks for your security key, its PIN or fingerprint, and a touch.';
+      'Windows asks for your security key, its PIN, and a touch.';
 
   @override
   String get securityKeyPinBodyDesktop =>
-      'The PIN you set for this YubiKey. It is not your wallet password.';
+      'This is your security key\'s PIN, not your wallet password.';
 
   @override
   String get securityKeyWindowsPromptTitle => 'Continue in Windows Security';
 
   @override
-  String get securityKeyWindowsPromptBody =>
-      'Enter your key\'s PIN or use its fingerprint, then touch the key.';
+  String get securityKeyWindowsPromptBody => 'Enter your security key\'s PIN, then touch the key.';
 
   @override
   String get securityKeyWindowsPromptEnrollBody =>
-      'Windows asks twice: once to register the key and once to read it back. Each time, enter the key\'s PIN or use its fingerprint, then touch the key.';
+      'Windows will ask twice. Each time, enter your security key\'s PIN, then touch the key.';
 
   @override
   String get securityKeyWindowsWaiting => 'Waiting for Windows Security…';
@@ -553,14 +531,14 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String advancedSecurityPasswordBody(String appName) {
-    return 'Advanced Security can turn security keys off. Enter the password you unlock $appName with.';
+    return 'Enter the password you use to unlock $appName.';
   }
 
   @override
   String get advancedSecurityPasswordLabel => 'Password';
 
   @override
-  String get advancedSecurityPasswordWrong => 'That password isn\'t right.';
+  String get advancedSecurityPasswordWrong => 'Incorrect password.';
 
   @override
   String get advancedSecurityContinue => 'Continue';

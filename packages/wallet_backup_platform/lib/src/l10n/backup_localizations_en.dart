@@ -13,7 +13,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
 
   @override
   String get backupSeedWarningBold =>
-      'This does NOT back up your seed, which you still need to do separately or you could lose your funds.';
+      'This does NOT back up your recovery phrase, which you still need to do separately or you could lose your funds.';
 
   @override
   String get backupSeedWarning =>
@@ -21,15 +21,15 @@ class BackupLocalizationsEn extends BackupLocalizations {
 
   @override
   String get backupSecurityNote =>
-      'The backup files are secure with quantum resistant encryption. They are backed up from your seed, so you can restore any backups with your seed. If you store your backups on a cloud service, they cannot see the contents of the backups, but they can see certain metadata which you may consider sensitive.';
+      'The backup files are secure with quantum resistant encryption. They are encrypted with keys derived from your recovery phrase, so you can restore any backups with it. If you store your backups on a cloud service, they cannot see the contents of the backups, but they can see certain metadata which you may consider sensitive.';
 
   @override
   String get backupLegacySeed =>
-      'Backup isn\'t available for 25-word seeds. To use it, create a new wallet with a 16-word seed and send your funds to it.';
+      'Backup isn\'t available for 25-word recovery phrases. To use it, create a new wallet with a 16-word recovery phrase and send your funds to it.';
 
   @override
   String get backupUnsupportedPassphrase =>
-      'Backup isn\'t available for seeds with an offset passphrase yet.';
+      'Backup isn\'t available yet for recovery phrases with an offset passphrase.';
 
   @override
   String get backupLocked => 'Unlock your wallet to see its backup.';

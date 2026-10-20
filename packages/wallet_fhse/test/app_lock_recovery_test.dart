@@ -82,7 +82,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'legal winner thank year');
     await tester.tap(find.text('Unlock'));
     await tester.pumpAndSettle();
-    expect(find.text("That recovery phrase is not this wallet's."), findsOneWidget);
+    expect(find.text("That recovery phrase doesn't match this wallet."), findsOneWidget);
     expect(manager.opens, 0);
   });
 
