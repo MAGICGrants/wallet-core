@@ -935,6 +935,10 @@ class WalletManager with ChangeNotifier {
     // never read, since startup loads one only when a wallet exists, and the
     // next onboarding replaces it.
     await store.saveCopy(walletPassword, typed: typed);
+    // The guard's own record goes next, for the same reason: a restore cut
+    // short after the coin files would otherwise leave a wallet the guard can
+    // never serve.
+    if (guarded) await guard.keepForNewWallet(walletPassword);
 
     for (final w in _visibleWallets) {
       w.setCachePassword(walletPassword);
@@ -950,7 +954,6 @@ class WalletManager with ChangeNotifier {
     // (iOS), so a record from a wallet that was here before must not carry over.
     await SeedCheckStore.delete();
 
-    if (guarded) await guard.walletCreated(walletPassword);
     _setPassword(walletPassword, guarded ? _PasswordSource.guard : _passwordSource);
 
     for (final w in _visibleWallets) {

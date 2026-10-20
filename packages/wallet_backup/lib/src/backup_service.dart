@@ -293,8 +293,12 @@ class MetadataBackupService extends ChangeNotifier
   /// Payment files held back from delayed locations until this time.
   final Map<String, DateTime> _notBefore = {};
 
-  /// Files handed to a location this session, not yet reported uploaded.
+  /// Files handed to a location, not yet reported uploaded.
   final Map<String, Set<String>> _awaiting = {};
+
+  /// Locations whose files have been checked for upload once this session:
+  /// nothing here remembers what an earlier session handed over.
+  final Set<String> _uploadChecked = {};
 
   final Map<String, LocationStatus> _locationStatus = {};
   final Map<String, bool> _enabled = {};
@@ -482,6 +486,7 @@ class MetadataBackupService extends ChangeNotifier
     await _locations.firstWhere((c) => c.location.id == id).location.deleteFolder(folder);
     _rejected.remove(id);
     _awaiting.remove(id);
+    _uploadChecked.remove(id);
     _locationStatus[id] = LocationStatus(id: id, enabled: await isLocationEnabled(id));
     notifyListeners();
   });
@@ -676,7 +681,8 @@ class MetadataBackupService extends ChangeNotifier
       syncing = true;
       try {
         listings[id] = await _ingest(config.location);
-        if (_locationStatus[id]?.available != true) readAll = false;
+        final read = _locationStatus[id];
+        if (read?.available != true || read?.lastError != null) readAll = false;
       } catch (e) {
         readAll = false;
         _setLocationError(id, e);
@@ -728,10 +734,27 @@ class MetadataBackupService extends ChangeNotifier
     final known = _hashedNames.values.toSet();
     final rejected = _rejected[id] ??= {};
 
+    Object? readError;
     for (final name in names) {
       if (known.contains(name) || rejected.contains(name)) continue;
       if (!BackupNames.isHashedName(name)) continue; // not ours
-      final bytes = await location.read(folder, name);
+      final Uint8List? bytes;
+      try {
+        bytes = await location.read(folder, name);
+      } on BackupFileTooLarge {
+        // No backup file is this large: rejected like a malformed one, never
+        // read into memory, and the rest are read.
+        rejected.add(name);
+        _failed.add(FailedFile(id, name, 'too large'));
+        continue;
+      } catch (e) {
+        // Possibly passing (a download that timed out): skipped this time and
+        // tried again at the next sync. The rest are still read, but the
+        // location does not count as read in full (the error in its status),
+        // so the address book does not join against it yet.
+        readError ??= e;
+        continue;
+      }
       if (bytes == null) continue; // removed since the listing; not an error
       final BackupFileBody body;
       try {
@@ -761,6 +784,7 @@ class MetadataBackupService extends ChangeNotifier
       fileCount: names.length,
       bytes: location is FolderLocation ? await location.totalBytes() : null,
       lastUpload: _locationStatus[id]?.lastUpload,
+      lastError: readError == null ? null : 'A backup file could not be read: $readError',
     );
     return names;
   }
@@ -1181,6 +1205,10 @@ class MetadataBackupService extends ChangeNotifier
           uploaded++;
         }
 
+        // After a restart, a file an earlier session handed over may still not
+        // be uploaded, so every file there is checked once per session; one
+        // confirmed uploaded is not asked about again.
+        if (_uploadChecked.add(id)) (_awaiting[id] ??= {}).addAll(there);
         final awaiting = _awaiting[id] ?? {};
         for (final name in awaiting.toList()) {
           final up = await location.isUploaded(folder, name);
@@ -1197,6 +1225,8 @@ class MetadataBackupService extends ChangeNotifier
           awaitingConfirmation: awaiting.length,
           bytes: location is FolderLocation ? await location.totalBytes() : previous?.bytes,
           lastUpload: uploaded > 0 ? now : previous?.lastUpload,
+          // What this sync's read found stays shown until a read finds none.
+          lastError: previous?.lastError,
         );
       } catch (e) {
         _setLocationError(id, e);
@@ -1437,6 +1467,7 @@ class MetadataBackupService extends ChangeNotifier
     _failed.clear();
     _notBefore.clear();
     _awaiting.clear();
+    _uploadChecked.clear();
     _locationStatus.clear();
     _lastRestore = null;
     _lastSync = null;
@@ -1455,6 +1486,7 @@ class MetadataBackupService extends ChangeNotifier
     _failed.clear();
     _notBefore.clear();
     _awaiting.clear();
+    _uploadChecked.clear();
     _locationStatus.clear();
   }
 

@@ -272,6 +272,9 @@ Future<bool> _runTxNotifier({
     // The app is about to open its own: open nothing.
     if (release.asked) return true;
     await walletManager.openAll();
+    // Asked again after each slow step (the open, Tor, connecting): the app
+    // may have asked meanwhile, and waits until these wallets are closed.
+    if (release.asked) return true;
 
     final wallets = walletManager.activeWallets;
     if (wallets.isEmpty) return true;
@@ -282,6 +285,7 @@ Future<bool> _runTxNotifier({
 
     if (wallets.any((w) => w.usingTor)) {
       await BackgroundSync.ensureTorConnected?.call();
+      if (release.asked) return true;
     }
 
     // Kick each wallet's daemon connection (starts the scan thread).
@@ -295,6 +299,7 @@ Future<bool> _runTxNotifier({
         }
       }),
     );
+    if (release.asked) return true;
 
     await _waitForWallets(
       wallets,

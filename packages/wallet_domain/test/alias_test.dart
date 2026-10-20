@@ -117,6 +117,31 @@ void main() {
       expect(written, isNot(contains('donate.example.org')), reason: 'the payee is fingerprinted');
     });
 
+    test('the alias is kept out of the log in every form the resolver quotes it', () async {
+      await torOnPort('9150');
+      installResolver(
+        throws: Exception(
+          'no record for Donate@Example.org; lookup of oa2pay.donate.example.org. failed; '
+          'xn--bcher-kva.example: DNSSEC chain is broken',
+        ),
+      );
+      final wallet = FakeAliasWallet('XMR', network: 'xmr');
+      addTearDown(wallet.dispose);
+
+      await expectLater(wallet.resolveAlias('donate@example.org'), throwsA(isA<Exception>()));
+
+      final written = (await logged()).toLowerCase();
+      expect(written, contains('dnssec chain is broken'), reason: 'the reason is kept');
+      for (final part in ['donate', 'example', 'oa2pay', 'xn--']) {
+        expect(written, isNot(contains(part)));
+      }
+    });
+
+    test('text without a domain name is logged as it is', () {
+      expect(withoutDomainNames('Tor proxy unavailable (v0.26.3)', 'a@b.org'), contains('v0.26.3'));
+      expect(withoutDomainNames('no record', 'a@b.org'), 'no record');
+    });
+
     test('the proxy port reaches the resolver', () async {
       await torOnPort('9150');
       installResolver(result: const ResolvedAlias(address: address));

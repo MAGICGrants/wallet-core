@@ -33,6 +33,7 @@ class ICloudLocation extends BackupLocation {
       return await _channel.invokeMethod<T>(method, args);
     } on PlatformException catch (e) {
       if (e.code == 'conflict') throw BackupNameConflict(e.message ?? '');
+      if (e.code == 'too_large') throw BackupFileTooLarge(e.message ?? '');
       throw ICloudException(e.code, e.message ?? '');
     }
   }

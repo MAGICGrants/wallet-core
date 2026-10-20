@@ -93,21 +93,29 @@ int fhse_cbor_field(fhse_cbor_t* self, const char* name, fhse_memory_t const* me
 struct fhse_cbor_bound
 {
   size_t remaining;
+  size_t declared; // elements declared so far, by every definite container
+  size_t length;
   bool fits;
 };
 
+// Every element of every container is its own item and starts on its own
+// byte, so the elements all containers declare cannot outnumber the bytes.
 static void fhse_cbor_bound_array(void* context, uint64_t count)
 {
   struct fhse_cbor_bound* bound = context;
-  if (bound->remaining < count)
+  if (bound->remaining < count || bound->length - bound->declared < count)
     bound->fits = false;
+  else
+    bound->declared += count;
 }
 
 static void fhse_cbor_bound_map(void* context, uint64_t count)
 {
   struct fhse_cbor_bound* bound = context;
-  if (bound->remaining / 2 < count)
+  if (bound->remaining / 2 < count || (bound->length - bound->declared) / 2 < count)
     bound->fits = false;
+  else
+    bound->declared += 2 * count;
 }
 
 cbor_item_t* fhse_cbor_load(fhse_cview_t source, struct cbor_load_result* result)
@@ -129,7 +137,7 @@ cbor_item_t* fhse_cbor_load(fhse_cview_t source, struct cbor_load_result* result
   callbacks.array_start = fhse_cbor_bound_array;
   callbacks.map_start = fhse_cbor_bound_map;
 
-  struct fhse_cbor_bound bound = {0, true};
+  struct fhse_cbor_bound bound = {0, 0, source.length, true};
   size_t offset = 0;
   while (offset < source.length && bound.fits)
   {

@@ -21,7 +21,7 @@ class _EngagedGuard extends WalletPasswordGuard {
   Future<String> passwordForNewWallet(SeedSource seed) async => _password;
 
   @override
-  Future<void> walletCreated(String password) async {}
+  Future<void> keepForNewWallet(String password) async {}
 
   @override
   Future<bool> isEngaged() async => true;

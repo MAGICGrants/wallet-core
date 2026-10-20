@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'crypto.dart';
+import 'padding.dart' show maxFileSize;
 
 /// Somewhere the backup's files can live: anything that can
 /// create, read, list and delete a file.
@@ -31,6 +32,17 @@ abstract class BackupLocation {
   /// Whether the provider reports [name] as uploaded, or null when it cannot
   /// say (a local folder; a sync app that only takes files over).
   Future<bool?> isUploaded(String folder, String name) async => null;
+}
+
+/// A file at a location larger than any backup file can be ([maxFileSize]).
+/// Not read, so it cannot exhaust memory; rejected like a malformed file.
+class BackupFileTooLarge implements Exception {
+  const BackupFileTooLarge(this.name);
+
+  final String name;
+
+  @override
+  String toString() => 'BackupFileTooLarge: $name';
 }
 
 class BackupNameConflict implements Exception {
@@ -73,6 +85,7 @@ class FolderLocation extends BackupLocation {
   Future<Uint8List?> read(String folder, String name) async {
     final f = File('${(await _dir(folder)).path}/$name');
     try {
+      if (await f.length() > maxFileSize) throw BackupFileTooLarge(name);
       return await f.readAsBytes();
     } on PathNotFoundException {
       return null;

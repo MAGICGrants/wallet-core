@@ -47,7 +47,7 @@ void main() {
 
   Future<String> createWallet(SeedSource seed) async {
     final password = await FhseVault.passwordForNewWallet(seed);
-    await FhseVault.walletCreated(password);
+    await FhseVault.keepForNewWallet(password);
     return password;
   }
 

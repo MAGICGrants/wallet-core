@@ -188,7 +188,7 @@ class FhseVault {
   /// [endSession] on a full lock.
   static FhseSecret? _session;
 
-  /// `s_f` between [passwordForNewWallet] and [walletCreated].
+  /// `s_f` between [passwordForNewWallet] and [keepForNewWallet].
   static Uint8List? _pendingSeed;
 
   static Future<File> _file(String name) async => File('${(await getAppDir()).path}/$name');
@@ -211,10 +211,11 @@ class FhseVault {
     return FhseSecret.rootZ85ForSeed(sf);
   }
 
-  /// Persists the FHSE seed under the wallet's [password].
-  static Future<void> walletCreated(String password) async {
+  /// Persists the FHSE seed under the wallet's [password], before any wallet
+  /// file is written ([WalletPasswordGuard.keepForNewWallet]).
+  static Future<void> keepForNewWallet(String password) async {
     final sf = _pendingSeed;
-    if (sf == null) throw StateError('walletCreated without passwordForNewWallet');
+    if (sf == null) throw StateError('keepForNewWallet without passwordForNewWallet');
     try {
       await _writeSeed(sf, password);
     } finally {
@@ -695,7 +696,7 @@ class FhseWalletGuard extends WalletPasswordGuard {
   Future<String> passwordForNewWallet(SeedSource seed) => FhseVault.passwordForNewWallet(seed);
 
   @override
-  Future<void> walletCreated(String password) => FhseVault.walletCreated(password);
+  Future<void> keepForNewWallet(String password) => FhseVault.keepForNewWallet(password);
 
   @override
   Future<bool> isEngaged() => FhseVault.isEngaged();

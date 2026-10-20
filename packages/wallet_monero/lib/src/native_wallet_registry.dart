@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:wallet_domain/wallet_domain.dart' show WalletIsolate;
@@ -28,6 +29,9 @@ import 'monero_backend.dart';
 /// service close theirs themselves.
 abstract final class NativeWalletRegistry {
   static const fileName = 'native_wallets.json';
+
+  /// Random per isolate (statics are), for [_write]'s temporary file.
+  static final String _isolateSuffix = Random.secure().nextInt(1 << 32).toRadixString(16);
 
   /// Off except on Android, where a process outlives the app's isolate.
   @visibleForTesting
@@ -106,9 +110,11 @@ abstract final class NativeWalletRegistry {
   }
 
   /// Written beside it and renamed over it, so a reader never sees half a list.
+  /// The temporary name is this isolate's own: with one name per process, two
+  /// isolates writing at once could rename each other's half-written file.
   static void _write(String path, List<_Entry> entries) {
     try {
-      final tmp = File('$path.${processId()}.tmp');
+      final tmp = File('$path.${processId()}.$_isolateSuffix.tmp');
       tmp.writeAsStringSync(
         jsonEncode({
           'pid': processId(),

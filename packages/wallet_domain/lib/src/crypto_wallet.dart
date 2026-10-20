@@ -26,6 +26,17 @@ const int txDirectionOutgoing = 1;
 /// notification plugin.
 typedef IncomingTxNotifier = void Function(TxDetails tx, String coinSymbol);
 
+/// [message] with every domain name in it replaced by [alias]'s fingerprint
+/// ([Redact.id]), for logging why an alias lookup failed. The resolver's errors
+/// can quote the alias in any form it queried (as typed, with `@` as a dot,
+/// prefixed `oa2pay.`, in punycode, with a trailing dot), so every name is
+/// redacted rather than the spellings this side knows.
+@visibleForTesting
+String withoutDomainNames(String message, String alias) => message.replaceAll(
+  RegExp(r'(?:[a-z0-9_-]+[.@])+[a-z][a-z0-9-]+\.?', caseSensitive: false),
+  Redact.id(alias),
+);
+
 /// Coin-agnostic base for a single-currency wallet.
 ///
 /// Subclasses implement the abstract hooks to talk to a specific chain;
@@ -326,7 +337,10 @@ abstract class CryptoWallet with ChangeNotifier {
       // exists. Rethrown, because a failed lookup must never read as "no
       // record": that is the difference between a payment not being sent and a
       // payment being sent to nobody.
-      walletLog(LogLevel.warn, 'alias: resolve failed for ${Redact.id(alias)}: $e');
+      walletLog(
+        LogLevel.warn,
+        'alias: resolve failed for ${Redact.id(alias)}: ${withoutDomainNames('$e', alias)}',
+      );
       rethrow;
     }
     if (resolved == null) {

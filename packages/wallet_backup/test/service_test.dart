@@ -67,6 +67,32 @@ class Device {
       service.open(seed, wallets: [wallet], restored: restored);
 }
 
+/// iCloud as it can be: holding files it has not uploaded yet.
+class UploadingLocation extends MemoryLocation {
+  UploadingLocation(super.id);
+
+  bool uploading = true;
+
+  @override
+  Future<bool?> isUploaded(String folder, String name) async => !uploading;
+}
+
+/// A location whose files can fail to read: [failing] as a passing error (a
+/// download that timed out), [tooLarge] as no backup file can be.
+class FlakyLocation extends MemoryLocation {
+  FlakyLocation(super.id);
+
+  final Set<String> failing = {};
+  final Set<String> tooLarge = {};
+
+  @override
+  Future<Uint8List?> read(String folder, String name) async {
+    if (tooLarge.contains(name)) throw BackupFileTooLarge(name);
+    if (failing.contains(name)) throw const SocketException('iCloud did not answer in time');
+    return super.read(folder, name);
+  }
+}
+
 /// The backup and these locations turned on, as a user who opted in has them.
 Future<void> turnOn(Iterable<String> locations) async {
   await SharedPreferencesService.set<bool>(MetadataBackupService.enabledPrefKey, true);
@@ -246,6 +272,75 @@ void main() {
 
     await a.service.close();
     await b.service.close();
+  });
+
+  test('a file not uploaded yet is not "up to date" after a restart', () async {
+    final icloud = UploadingLocation('icloud');
+    final first = Device(Directory('${tmp.path}/a'), icloud)
+      ..setContacts([
+        const Contact(id: 'alice', name: 'Alice', addresses: {'XMR': recipient}),
+      ]);
+    await first.open(const PolyseedSeed(raven));
+    expect(first.service.statusOf('icloud').awaitingConfirmation, greaterThan(0));
+    await first.service.close();
+
+    // The app restarts before iCloud has uploaded anything.
+    final again = Device(Directory('${tmp.path}/a'), icloud)..contacts = first.contacts;
+    await again.open(const PolyseedSeed(raven));
+    expect(again.service.statusOf('icloud').awaitingConfirmation, greaterThan(0));
+
+    icloud.uploading = false;
+    await again.service.sync();
+    expect(again.service.statusOf('icloud').awaitingConfirmation, 0);
+    await again.service.close();
+  });
+
+  group('a file that cannot be read', () {
+    Future<(Device, FlakyLocation)> restoredWith(Device a) async {
+      final flaky = FlakyLocation('icloud')..folders.addAll(cloud.folders);
+      final b = Device(Directory('${tmp.path}/b'), flaky);
+      return (b, flaky);
+    }
+
+    test('one that times out is skipped, shown, and read at the next sync', () async {
+      final a = device('a')
+        ..setContacts([
+          const Contact(id: 'alice', name: 'Alice', addresses: {'XMR': recipient}),
+        ]);
+      await a.open(const PolyseedSeed(raven));
+      final (b, flaky) = await restoredWith(a);
+      flaky.failing.addAll(cloud.folders[a.service.folderName]!.keys);
+
+      await b.open(const PolyseedSeed(raven), restored: true);
+      expect(b.service.statusOf('icloud').lastError, contains('could not be read'));
+      expect(b.contactList, isEmpty, reason: 'no join against a location not read in full');
+
+      flaky.failing.clear();
+      await b.service.sync();
+      expect(b.service.statusOf('icloud').lastError, isNull);
+      expect(b.contactList.map((c) => c.name), ['Alice']);
+      await a.service.close();
+      await b.service.close();
+    });
+
+    test('one too large is rejected, and the rest are read', () async {
+      final a = device('a')
+        ..setContacts([
+          const Contact(id: 'alice', name: 'Alice', addresses: {'XMR': recipient}),
+        ]);
+      await a.open(const PolyseedSeed(raven));
+      final (b, flaky) = await restoredWith(a);
+      final hostile = 'b' * 26; // shaped like one of ours
+      flaky.folders[a.service.folderName]![hostile] = Uint8List(8);
+      flaky.tooLarge.add(hostile);
+
+      await b.open(const PolyseedSeed(raven), restored: true);
+      expect(b.contactList.map((c) => c.name), ['Alice']);
+      expect(b.service.failedFiles.map((f) => f.reason), contains('too large'));
+      expect(b.service.statusOf('icloud').lastError, isNull);
+      await a.service.close();
+      await b.service.close();
+    });
   });
 
   // A change from the backup that this device could not store must not count

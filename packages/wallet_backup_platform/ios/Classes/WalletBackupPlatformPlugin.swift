@@ -84,6 +84,7 @@ public class WalletBackupPlatformPlugin: NSObject, FlutterPlugin {
     case conflict(String)
     case badArgs(String)
     case timeout
+    case tooLarge(String)
 
     var flutterError: FlutterError {
       switch self {
@@ -96,6 +97,8 @@ public class WalletBackupPlatformPlugin: NSObject, FlutterPlugin {
         return FlutterError(code: "bad_args", message: message, details: nil)
       case .timeout:
         return FlutterError(code: "timeout", message: "iCloud did not answer in time", details: nil)
+      case .tooLarge(let name):
+        return FlutterError(code: "too_large", message: name, details: nil)
       }
     }
   }
@@ -185,6 +188,11 @@ public class WalletBackupPlatformPlugin: NSObject, FlutterPlugin {
     return found
   }
 
+  /// The largest backup file there is (wallet_backup's `maxFileSize`). A
+  /// larger one is not ours to read: it is refused before it is downloaded
+  /// when iCloud knows its size, and never read past this either way.
+  private static let maxFileBytes = 64 * 1024
+
   private func read(_ container: String, _ folder: String, _ name: String) throws
     -> FlutterStandardTypedData?
   {
@@ -195,16 +203,28 @@ public class WalletBackupPlatformPlugin: NSObject, FlutterPlugin {
         || isUbiquitous(url)
     else { return nil }
 
+    if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
+      size > Self.maxFileBytes
+    {
+      throw PluginError.tooLarge(name)
+    }
     try ensureDownloaded(url)
 
     var data: Data?
+    var tooLarge = false
     var readError: Error?
     var coordinatorError: NSError?
     NSFileCoordinator(filePresenter: nil).coordinate(
       readingItemAt: url, options: [], error: &coordinatorError
     ) { readURL in
-      do { data = try Data(contentsOf: readURL) } catch { readError = error }
+      do {
+        let handle = try FileHandle(forReadingFrom: readURL)
+        defer { try? handle.close() }
+        let bytes = try handle.read(upToCount: Self.maxFileBytes + 1) ?? Data()
+        if bytes.count > Self.maxFileBytes { tooLarge = true } else { data = bytes }
+      } catch { readError = error }
     }
+    if tooLarge { throw PluginError.tooLarge(name) }
     if let error = coordinatorError ?? readError {
       // Removed since the listing (another device compacted): not an error.
       if !fm.fileExists(atPath: url.path) { return nil }

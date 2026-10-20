@@ -21,7 +21,7 @@ class _Guard extends WalletPasswordGuard {
   Future<String> passwordForNewWallet(SeedSource seed) async => 'from-guard';
 
   @override
-  Future<void> walletCreated(String password) async => created = password;
+  Future<void> keepForNewWallet(String password) async => created = password;
 
   @override
   Future<bool> isEngaged() async => engaged;
@@ -372,6 +372,8 @@ void main() {
       ..useGeneratedPassword();
     await expectLater(restore(m), throwsStateError);
     expect(await readKeystoreWalletPassword(), 'from-guard', reason: 'stored before any file');
+    expect(guard.created, 'from-guard', reason: "the guard's record, before any file too");
+    guard.created = null;
     await restore(m);
     expect(m.passwordForGuard, 'from-guard');
     expect(guard.created, 'from-guard');

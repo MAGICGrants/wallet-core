@@ -211,6 +211,33 @@ void main() {
       expect(IsolateNameServer.lookupPortByName(WalletHolders.periodicRunName), isNull);
     });
 
+    test('asked while Tor starts: the run closes them without connecting', () async {
+      final r = _Registry([const WalletSpec('BTC', tor: true)]);
+      BackgroundSync.coins = r.build;
+      Future<Object?>? answer;
+      BackgroundSync.ensureTorConnected = () async {
+        // The app asks while the run waits for Tor; the run answers once closed.
+        answer = WalletHolders.ask(
+          WalletHolders.periodicRunName,
+          SyncMessage.hello,
+          timeout: const Duration(seconds: 10),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        return true;
+      };
+      expect(
+        await runTxNotifier(
+          budget: const Duration(seconds: 30),
+          pollInterval: const Duration(milliseconds: 5),
+          anotherHolderHasWallets: () async => false,
+        ),
+        isTrue,
+      );
+      expect(await answer, SyncMessage.released);
+      expect(r.last('BTC').calls, isNot(contains('connectToDaemon')));
+      expect(r.last('BTC').isLoaded, isFalse);
+    });
+
     test('every run closes its wallets at the end: none outlives it in the process', () async {
       final r = await runPass([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
       expect(r.last('BTC').isLoaded, isFalse);

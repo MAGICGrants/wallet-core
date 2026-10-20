@@ -165,6 +165,16 @@ still see:
 - **A saved backup file** shows the same through its size, wherever it is
   kept.
 
+A location can also **withhold files**: leave some out, or show an older set.
+The seal stops it forging or changing a file, but a device that restores or
+joins from it then misses what those files held: payments, and newer versions
+of contacts, so its address book can show an older version of a contact, or
+one deleted since. The restore report shows some of it: a file missing from
+the middle of a device's run (a sequence gap), or past the last one here that
+another device's files show it saw. Files a location withholds from the end,
+before anyone saw them, cannot be told from files never written; a second
+location holding the same files is the remedy.
+
 ## Not yet supported
 
 - **Compaction.** The backups can be periodically compacted to reduce storage use.

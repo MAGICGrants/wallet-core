@@ -260,6 +260,17 @@ key: set up, unlock, add, set up again, recovery phrase, turn off, delete.
   between the app and the key. Someone who recorded that exchange (over NFC or
   USB) and later has a large quantum computer could recover the hmac-secret,
   and with it `k_p`. CTAP offers no alternative today.
+- **The Windows PC binding is not post-quantum.** Its TPM key is RSA-2048,
+  and the binding secret is an HMAC keyed by that key's deterministic
+  signature. Whoever can factor the modulus stored on disk (with a large
+  quantum computer, or on a TPM with the ROCA weakness) can compute that
+  secret. What that gives them depends on security keys:
+  - **Off:** only the typed password is left, which they can then guess
+    offline.
+  - **On:** nothing that opens the wallet. The files stay quantum-resistant,
+    because opening them still needs the key's hmac-secret, which is
+    symmetric, unless an exchange with the key was recorded (the bullet
+    above).
 - **The Bitcoin xpub kept for unattended runs** gives the public key of every
   address in the account, used or not. Today that reveals only the history;
   against a future quantum computer, a public key is what an attacker needs to
@@ -271,11 +282,17 @@ key: set up, unlock, add, set up again, recovery phrase, turn off, delete.
   typed.
 - **A key reset** (too many wrong PINs) removes the key from every wallet it
   protects. Use another enrolled key or the recovery phrase.
-- **Not erased from memory:** PINs and the z85 password, as Dart strings, and
-  on Android and Apple the PIN as the platform's own string too. The
+- **Not erased from memory:** whatever is held as a Dart string, which
+  cannot be wiped: PINs, the recovery phrase, the FHSE seed as encoded for
+  storage, FHSE's outer password, the typed password and its `pc1:` form,
+  the z85 wallet password, the Ethereum key in hex and the view keys. On
+  Android and Apple the PIN is the platform's own string too. The
   hmac-secret output is wiped where this code holds it, but the platform's
   channel encoding makes copies of its own that are freed without being
-  wiped. Future hardening here is desirable.
+  wiped. FHSE's locked memory (`sodium_mlock` on `malloc`'d buffers) is
+  page-granular and not reference-counted, so unlocking one buffer can
+  unlock a page another still shares, and its `MADV_DONTDUMP` fails on an
+  address that is not page-aligned. Future hardening here is desirable.
 - **Several keys plugged in** (a computer, or a phone through a USB hub):
   each one blinks and the one touched is used, and the requests after it go
   to that key alone, so a PIN cannot reach another. A key swapped in after

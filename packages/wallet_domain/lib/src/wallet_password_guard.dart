@@ -27,9 +27,12 @@ abstract class WalletPasswordGuard {
   /// Called before any wallet file is written.
   Future<String> passwordForNewWallet(SeedSource seed);
 
-  /// The wallet now exists, encrypted with [password]. Persist whatever the
-  /// guard needs to engage later.
-  Future<void> walletCreated(String password);
+  /// The new wallet's files are about to be written, encrypted with
+  /// [password]. Persist whatever the guard needs to engage later. Called
+  /// before any wallet file, as the keystore copy is, so a restore cut short
+  /// never leaves a wallet the guard cannot serve; what it keeps for a wallet
+  /// that never got written is replaced by the next onboarding.
+  Future<void> keepForNewWallet(String password);
 
   /// True when the guard, not the keystore, holds the password.
   Future<bool> isEngaged();
