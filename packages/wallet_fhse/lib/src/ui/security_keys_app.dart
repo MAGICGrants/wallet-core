@@ -4,7 +4,15 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:wallet_domain/wallet_domain.dart' show AppSession, SeedSource, WalletManager;
 import 'package:wallet_infra/wallet_infra.dart'
-    show BiometricAuth, SettingsKeys, SharedPreferencesService, WalletSecrets;
+    show
+        BiometricAuth,
+        BiometricAuthResult,
+        BoundToAnotherPcException,
+        LogLevel,
+        SettingsKeys,
+        SharedPreferencesService,
+        WalletSecrets,
+        log;
 
 import '../fhse_native.dart';
 import '../fhse_vault.dart';
@@ -370,13 +378,108 @@ final bool isDesktopAutoLockPlatform = Platform.isMacOS || Platform.isLinux || P
 ///
 /// False when no password could be put back (the keystore has no copy, or a
 /// full lock took it meanwhile): the wallet is not open, and App Lock stays.
-Future<bool> reopenAfterAppLock(BuildContext context) async {
-  final manager = _manager(context);
+Future<bool> reopenAfterAppLock(BuildContext context) => _reopenAfterAppLock(_manager(context));
+
+Future<bool> _reopenAfterAppLock(WalletManager manager) async {
   await _awaitLocks();
   if (!manager.hasPassword) await manager.loadStoredPassword();
   if (!manager.hasPassword) return false;
   if (manager.isSpendLocked) unawaited(manager.unlockSpend());
   return true;
+}
+
+/// Where App Lock's unlock screen goes next ([unlockAppLockWithDevice],
+/// [unlockAppLockWithPassword]). The screen only shows it: what each outcome
+/// means is decided here, once for both apps.
+enum AppLockUnlock {
+  /// Past App Lock with nothing more to ask: the session is unlocked
+  /// ([AppSession.markUnlocked]) and the wallet opening behind the home.
+  unlocked,
+
+  /// Past App Lock; with security keys on and the wallet closed, a key comes
+  /// next.
+  needsKey,
+
+  /// The owner turned the device's prompt down. Stay quiet: the unlock button
+  /// asks again.
+  declined,
+
+  /// The device could not confirm its owner (a lockout), or did but the wallet
+  /// password could not be put back (no keystore copy): offer the recovery
+  /// phrase ([showAppLockRecoveryPhrase]). With the typed password, the unlock
+  /// failed for a reason other than the password.
+  failed,
+
+  /// The typed password is not the wallet's.
+  wrongPassword,
+
+  /// The wallet's files are bound to another PC's TPM (Windows).
+  boundToAnotherPc,
+}
+
+/// App Lock at the unlock screen where the device's own prompt is App Lock
+/// (Android, iOS, macOS): asks with [reason], then waits for a lock still
+/// closing the wallets, and either hands over to a security key or puts the
+/// keystore password back and reopens the wallet ([reopenAfterAppLock]).
+Future<AppLockUnlock> unlockAppLockWithDevice(
+  BuildContext context, {
+  required String reason,
+}) async {
+  final manager = _manager(context);
+  // Always asks (App Lock is always on); a device with no lock at all has
+  // nothing to ask and passes, and Settings warns about it.
+  final result = await BiometricAuth.confirmOwner(reason: reason);
+  if (result == BiometricAuthResult.failed) return AppLockUnlock.declined;
+  if (result == BiometricAuthResult.error) return AppLockUnlock.failed;
+  // A full lock still closing the wallets decides what comes next.
+  await _awaitLocks();
+  // With security keys on and the wallet closed, a key comes next.
+  if (!manager.hasPassword && await manager.isPasswordGuarded()) return AppLockUnlock.needsKey;
+  if (!await _reopenAfterAppLock(manager)) {
+    unawaited(log(LogLevel.error, 'App Lock passed but no wallet password came back'));
+    return AppLockUnlock.failed;
+  }
+  AppSession.markUnlocked();
+  return AppLockUnlock.unlocked;
+}
+
+/// App Lock at the unlock screen where the wallet password is typed (Linux,
+/// Windows). After a time without use the wallet stayed open, so [password]
+/// is only checked again ([WalletManager.checkTypedPassword]); otherwise it
+/// opens the wallet, or, with security keys on, a key comes next. Never
+/// throws: every failure is an outcome the screen can show.
+Future<AppLockUnlock> unlockAppLockWithPassword(BuildContext context, String password) async {
+  final manager = _manager(context);
+  // A lock still closing the wallets finishes first, so it cannot drop the
+  // password this unlock is about to set.
+  await _awaitLocks();
+  final bool stayedOpen;
+  try {
+    stayedOpen = manager.hasPassword;
+    final right = stayedOpen
+        ? await manager.checkTypedPassword(password)
+        : await manager.unlockWithTypedPassword(password);
+    if (!right) return AppLockUnlock.wrongPassword;
+  } on BoundToAnotherPcException {
+    return AppLockUnlock.boundToAnotherPc;
+  } catch (e) {
+    unawaited(log(LogLevel.error, 'Unlocking with the typed password failed: ${e.runtimeType}'));
+    return AppLockUnlock.failed;
+  }
+  if (!stayedOpen) {
+    // With security keys on, the password was right and a key comes next.
+    if (!manager.hasPassword) return AppLockUnlock.needsKey;
+    // The cached balances first, for the home to show, then the wallets open
+    // behind it, as after App Lock on a phone.
+    try {
+      await manager.loadCachedDisplayState();
+    } catch (e) {
+      unawaited(log(LogLevel.warn, 'Cached balances not loaded: ${e.runtimeType}'));
+    }
+    unawaited(manager.unlockSpend());
+  }
+  AppSession.markUnlocked();
+  return AppLockUnlock.unlocked;
 }
 
 /// Whether "Lock after" has anything to do on a desktop OS: the wallet is open

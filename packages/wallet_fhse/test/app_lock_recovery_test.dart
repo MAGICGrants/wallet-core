@@ -39,6 +39,7 @@ void main() {
 
   setUp(() {
     manager = _Manager();
+    AppSession.lock();
     SecurityKeysUi.install(
       SecurityKeysUiConfig(
         appName: 'Test Wallet',
@@ -49,7 +50,10 @@ void main() {
     );
   });
 
-  tearDown(SecurityKeysUi.resetForTesting);
+  tearDown(() {
+    SecurityKeysUi.resetForTesting();
+    AppSession.resetForTesting();
+  });
 
   Future<List<bool>> open(WidgetTester tester) async {
     final results = <bool>[];
@@ -84,6 +88,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text("That recovery phrase doesn't match this wallet."), findsOneWidget);
     expect(manager.opens, 0);
+    expect(AppSession.isUnlocked, isFalse);
   });
 
   testWidgets("the wallet's phrase opens it", (tester) async {
@@ -93,6 +98,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(results, [true]);
     expect(manager.opens, 1);
+    expect(AppSession.isUnlocked, isTrue);
     expect(find.byType(TextField), findsNothing);
   });
 
@@ -119,5 +125,6 @@ void main() {
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
     expect(results, [false]);
+    expect(AppSession.isUnlocked, isFalse);
   });
 }

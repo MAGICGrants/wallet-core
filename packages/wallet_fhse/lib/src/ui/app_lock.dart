@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:wallet_domain/wallet_domain.dart' show AppSession;
 import 'package:wallet_infra/wallet_infra.dart'
     show
         BiometricAuth,
@@ -316,9 +317,10 @@ class _AppLockTileState extends State<AppLockTile> {
 }
 
 /// App Lock's "Use recovery phrase", offered when the device cannot confirm
-/// its owner: the sheet, through [unlockAppLockWithRecoveryPhrase]. Returns
-/// true once the wallet is open; the caller marks the session unlocked and
-/// moves on.
+/// its owner ([AppLockUnlock.failed]): the sheet, through
+/// [unlockAppLockWithRecoveryPhrase]. Returns true once past App Lock: the
+/// wallet is open and the session unlocked ([AppSession.markUnlocked]), and
+/// the caller moves on as for [AppLockUnlock.unlocked].
 Future<bool> showAppLockRecoveryPhrase(BuildContext context) async {
   final i18n = FhseLocalizations.of(context);
   var keysRecovered = false;
@@ -329,10 +331,10 @@ Future<bool> showAppLockRecoveryPhrase(BuildContext context) async {
       keysRecovered = await unlockAppLockWithRecoveryPhrase(sheetContext, phrase);
     },
   );
-  if (opened && keysRecovered && context.mounted) {
-    showBrandToast(context, i18n.securityKeyRecoveredToast);
-  }
-  return opened;
+  if (!opened) return false;
+  AppSession.markUnlocked();
+  if (keysRecovered && context.mounted) showBrandToast(context, i18n.securityKeyRecoveredToast);
+  return true;
 }
 
 /// Asks for the recovery phrase and opens the wallet with it through [unlock],

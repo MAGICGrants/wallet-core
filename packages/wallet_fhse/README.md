@@ -166,6 +166,14 @@ How each part fits:
   password on Linux and Windows. The security key is not asked for again:
   with keys on, opening the wallet already needed one. If a way to open it
   without a key is ever added, these screens need revisiting.
+- **App Lock's unlock screen decides here, once for both apps.**
+  `unlockAppLockWithDevice` (Android, iOS, macOS) and
+  `unlockAppLockWithPassword` (Linux, Windows) wait for a lock still closing,
+  put the password back or check it, hand over to a security key when one is
+  needed, and mark the session unlocked; each returns an `AppLockUnlock` the
+  app's screen only shows. When the device cannot confirm its owner, or no
+  password comes back, the outcome is `failed` and the screen offers the
+  recovery phrase (`showAppLockRecoveryPhrase`).
 
 ## Layout
 
