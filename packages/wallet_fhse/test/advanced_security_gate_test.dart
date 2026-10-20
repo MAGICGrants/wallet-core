@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_domain/wallet_domain.dart';
 import 'package:wallet_fhse/security_keys_ui.dart';
-import 'package:wallet_infra/wallet_infra.dart' show BiometricAuthResult;
+import 'package:wallet_infra/wallet_infra.dart' show WalletSecrets;
 
-/// Advanced Security asks who it is every time it opens: the device's own
-/// authentication where App Lock exists, the wallet password on Linux and
-/// Windows. The screen itself is stood in for by a text.
+/// Advanced Security needs a passing App Lock every time it opens: the device's
+/// own prompt where the keystore holds the password, the wallet password on
+/// Linux and Windows. The screen itself is stood in for by a text. (The gate
+/// itself, a device with no lock included, is tested in app_lock_gate_test.)
 
 class _Manager extends WalletManager {
   _Manager() : super(coins: () => const []);
@@ -19,6 +21,8 @@ class _Manager extends WalletManager {
     return password == 'right';
   }
 }
+
+const _localAuth = MethodChannel('plugins.flutter.io/local_auth');
 
 void main() {
   late _Manager manager;
@@ -35,14 +39,31 @@ void main() {
     );
   });
 
-  tearDown(SecurityKeysUi.resetForTesting);
+  tearDown(() {
+    SecurityKeysUi.resetForTesting();
+    WalletSecrets.resetForTesting();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      _localAuth,
+      null,
+    );
+  });
 
+  /// [typesPassword]: Linux and Windows. Otherwise the device's prompt answers
+  /// [device] (an [Exception] is thrown).
   Future<void> open(
     WidgetTester tester, {
     bool typesPassword = false,
-    BiometricAuthResult device = BiometricAuthResult.authenticated,
-    bool deviceHasLock = true,
+    Object? device = true,
   }) async {
+    WalletSecrets.holdsWalletPassword = !typesPassword;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      _localAuth,
+      (call) async => switch (call.method) {
+        'authenticate' => device is Exception ? throw device : device,
+        'isDeviceSupported' => true,
+        _ => null,
+      },
+    );
     tester.view.physicalSize = const Size(1170, 2532);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -56,12 +77,8 @@ void main() {
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute<void>(
-                  builder: (_) => GuardedAdvancedSecurityScreen(
-                    typesPassword: typesPassword,
-                    authenticate: (_) async => device,
-                    deviceCanAuthenticate: () async => deviceHasLock,
-                    child: const Text('advanced security'),
-                  ),
+                  builder: (_) =>
+                      const GuardedAdvancedSecurityScreen(child: Text('advanced security')),
                 ),
               ),
               child: const Text('settings'),
@@ -81,22 +98,17 @@ void main() {
     });
 
     testWidgets('a declined prompt goes back, the screen never shown', (tester) async {
-      await open(tester, device: BiometricAuthResult.failed);
+      await open(tester, device: false);
       expect(find.text('advanced security'), findsNothing);
       expect(find.text('settings'), findsOneWidget);
     });
 
     testWidgets('a device that is locked out goes back and says so', (tester) async {
-      await open(tester, device: BiometricAuthResult.error);
+      await open(tester, device: PlatformException(code: 'LockedOut'));
       expect(find.text('advanced security'), findsNothing);
       expect(find.text('settings'), findsOneWidget);
       expect(find.text("Couldn't confirm it's you."), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
-    });
-
-    testWidgets('a device with no lock at all has nothing to ask: it opens', (tester) async {
-      await open(tester, device: BiometricAuthResult.error, deviceHasLock: false);
-      expect(find.text('advanced security'), findsOneWidget);
     });
   });
 
@@ -120,9 +132,9 @@ void main() {
       expect(manager.tried, ['wrong', 'right']);
     });
 
-    testWidgets('going back never shows the screen', (tester) async {
+    testWidgets('closing the password sheet goes back, the screen never shown', (tester) async {
       await open(tester, typesPassword: true);
-      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.tapAt(const Offset(20, 20));
       await tester.pumpAndSettle();
       expect(find.text('advanced security'), findsNothing);
       expect(find.text('settings'), findsOneWidget);

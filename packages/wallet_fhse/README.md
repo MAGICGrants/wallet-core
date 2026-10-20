@@ -157,6 +157,15 @@ How each part fits:
   has no per-app part), and either app's `k_p`
   opens its `master_seed` and so the phrase. A phrase used in two apps is only
   as protected as the less protected one; Advanced Security says so.
+- **Secrets and settings need a passing App Lock**, asked again however
+  recently it last passed: the recovery phrase, secret and view keys, Advanced
+  Security, and a longer lock. Screens are routed through `AppLockGate`; a
+  desktop sheet or an action calls `passAppLock` first. The platform decides
+  what App Lock is, never the caller: the device's own prompt where the
+  keystore holds the wallet password (Android, iOS, macOS), the typed wallet
+  password on Linux and Windows. The security key is not asked for again:
+  with keys on, opening the wallet already needed one. If a way to open it
+  without a key is ever added, these screens need revisiting.
 
 ## Layout
 

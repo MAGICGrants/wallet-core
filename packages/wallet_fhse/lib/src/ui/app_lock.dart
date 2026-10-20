@@ -21,23 +21,27 @@ String appLockLabel(FhseLocalizations i18n, int minutes) => minutes == 0
     ? i18n.securityKeysHours(minutes ~/ 60)
     : i18n.securityKeysMinutes(minutes);
 
-/// Before a lock is made to wait longer (App Lock's time, the desktop "Lock
-/// after"): the owner confirms, as for Advanced Security. The device's own
-/// prompt where App Lock uses it ([BiometricAuth.confirmOwner], which passes on
-/// a device with no lock), the wallet password on Linux and Windows. A shorter
-/// time needs nothing: it only locks sooner.
+/// App Lock, passed again now, however recently it last was: what every screen
+/// or action that needs a passing App Lock asks for. Screens are routed through
+/// [AppLockGate]; a sheet or an action calls this first. True once passed.
 ///
-/// A phone or computer left unlocked must not be enough to make the next lock
-/// come later.
-Future<bool> confirmOwnerToLockLater(
+/// The platform decides what App Lock is, so callers never do: the device's
+/// own prompt where the keystore holds the wallet password (face, fingerprint
+/// or passcode on Android and iOS, Touch ID or the Mac's password on macOS;
+/// [BiometricAuth.confirmOwner], which passes on a device with no lock),
+/// asking with [reason]; the wallet password on Linux and Windows
+/// ([WalletManager.checkTypedPassword]), with [passwordBody] under the title.
+///
+/// A phone or computer left unlocked must not be enough.
+Future<bool> passAppLock(
   BuildContext context, {
+  required String reason,
+  String? passwordBody,
   @visibleForTesting Future<BiometricAuthResult> Function(String reason)? authenticate,
   @visibleForTesting bool? typesPassword,
 }) async {
   final i18n = FhseLocalizations.of(context);
-  final appName = SecurityKeysUi.config.appName;
   if (!(typesPassword ?? !WalletSecrets.holdsWalletPassword)) {
-    final reason = i18n.lockLaterAuthReason(appName);
     final result = await (authenticate ?? _confirmOwner)(reason);
     if (result == BiometricAuthResult.authenticated) return true;
     if (result == BiometricAuthResult.error && context.mounted) {
@@ -45,12 +49,35 @@ Future<bool> confirmOwnerToLockLater(
     }
     return false;
   }
+  final body = passwordBody ?? i18n.advancedSecurityPasswordBody(SecurityKeysUi.config.appName);
   final ok = await showBrandSheet<bool>(
     context: context,
     isScrollControlled: true,
-    builder: (_) => _PasswordSheet(body: i18n.lockLaterPasswordBody(appName)),
+    builder: (_) => _PasswordSheet(body: body),
   );
   return ok ?? false;
+}
+
+/// Before a lock is made to wait longer (App Lock's time, the desktop "Lock
+/// after"): App Lock is passed again ([passAppLock]). A shorter time needs
+/// nothing: it only locks sooner.
+///
+/// A phone or computer left unlocked must not be enough to make the next lock
+/// come later.
+Future<bool> confirmOwnerToLockLater(
+  BuildContext context, {
+  @visibleForTesting Future<BiometricAuthResult> Function(String reason)? authenticate,
+  @visibleForTesting bool? typesPassword,
+}) {
+  final i18n = FhseLocalizations.of(context);
+  final appName = SecurityKeysUi.config.appName;
+  return passAppLock(
+    context,
+    reason: i18n.lockLaterAuthReason(appName),
+    passwordBody: i18n.lockLaterPasswordBody(appName),
+    authenticate: authenticate,
+    typesPassword: typesPassword,
+  );
 }
 
 Future<BiometricAuthResult> _confirmOwner(String reason) =>
