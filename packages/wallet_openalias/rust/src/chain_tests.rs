@@ -5,12 +5,23 @@
 //! leaves 127.0.0.1.
 //!
 //! The forgeries all come from someone who controls the answers and owns one
-//! honestly delegated, signed zone (`attacker.com.`), for a record and for a
-//! denial that there is one. The zone signs them directly, or through a key it
-//! vouches for with a DS record, so that the signer on the record itself looks
-//! like the right zone. Every one must be refused: the wallet relies on
-//! hickory's validation for this (RFC 4035 §5.3.1, from 0.26.2), and hickory
-//! before 0.26.2 accepted the DS forms.
+//! honestly delegated, signed zone (`attacker.com.`, or a sibling of the
+//! recipient's), for a record and for a denial that there is one. The zone
+//! signs them directly, or through a key it vouches for with a DS record, so
+//! that the signer on the record itself looks like the right zone. Every one
+//! must be refused.
+//!
+//! Two layers refuse them. hickory's validation (RFC 4035 §5.3.1, from 0.26.2)
+//! refuses a signer that does not contain the record it signs; hickory before
+//! 0.26.2 accepted the DS forms. But hickory 0.26.3 still takes an NSEC as a
+//! denial of the name asked about when the attacker's zone signed it over a
+//! name of its own and its next name spans the asked one, as long as the answer
+//! carries no SOA, or the real zone's, replayed: nothing ties an NSEC to the
+//! zone the SOA names. The same NSEC lets a zone's signed wildcard stand at a
+//! name that has a record of its own. So the wallet requires every signer over
+//! a denial, and over the record, to be a zone containing the name that was
+//! asked (`denial_signers_enclose`, `secure_txt_answers`). Each test below that
+//! only this check stops says so.
 
 use super::secure_txt;
 
@@ -20,8 +31,10 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hickory_proto::dnssec::crypto::Ed25519SigningKey;
-use hickory_proto::dnssec::rdata::{DNSSECRData, SigInput, DNSKEY, DS, NSEC, RRSIG};
-use hickory_proto::dnssec::{Algorithm, DigestType, PublicKeyBuf, SigningKey, TrustAnchors, TBS};
+use hickory_proto::dnssec::rdata::{DNSSECRData, SigInput, DNSKEY, DS, NSEC, NSEC3, RRSIG};
+use hickory_proto::dnssec::{
+    Algorithm, DigestType, Nsec3HashAlgorithm, PublicKeyBuf, SigningKey, TrustAnchors, TBS,
+};
 use hickory_proto::op::{Message, OpCode, ResponseCode};
 use hickory_proto::rr::rdata::{SOA, TXT};
 use hickory_proto::rr::{DNSClass, Name, RData, Record, RecordType, SerialNumber};
@@ -33,8 +46,12 @@ use tokio::net::TcpListener;
 
 /// The name the wallet asks first for the OA2 alias `donate.example.org`.
 const N: &str = "_openalias-payment.donate.example.org.";
+/// The alias itself, where an OA1 record lives.
+const N1: &str = "donate.example.org.";
 const HONEST: &str = "oa_version=2; network=xmr; address=888honest;";
 const FORGED: &str = "oa_version=2; network=xmr; address=888forged;";
+/// A catch-all a zone owner might publish at `*.example.org.`.
+const WILDCARD: &str = "oa1:xmr recipient_address=888catchall;";
 
 fn name(s: &str) -> Name {
     Name::from_utf8(s).unwrap()
@@ -103,6 +120,7 @@ fn sign(rrset: &[Record], owner: &Name, rtype: RecordType, signer: &Zone) -> Rec
 /// authority section proves there are none.
 #[derive(Default)]
 struct Response {
+    rcode: ResponseCode,
     answers: Vec<Record>,
     authorities: Vec<Record>,
 }
@@ -123,12 +141,24 @@ fn signed(rrset: Vec<Record>, signer: &Zone) -> Vec<Record> {
 /// Answers `rrset`, signed by `signer`, replacing any earlier response.
 fn put(store: &mut Store, rrset: Vec<Record>, signer: &Zone) {
     let key = (rrset[0].name.to_lowercase(), rrset[0].record_type());
-    store.insert(key, Response { answers: signed(rrset, signer), authorities: Vec::new() });
+    store.insert(key, Response { answers: signed(rrset, signer), ..Response::default() });
 }
 
 /// Answers the `rtype` question at `owner` with no records and `authorities`.
 fn deny(store: &mut Store, owner: &str, rtype: RecordType, authorities: Vec<Record>) {
-    store.insert((name(owner).to_lowercase(), rtype), Response { answers: Vec::new(), authorities });
+    store.insert((name(owner).to_lowercase(), rtype), Response { authorities, ..Response::default() });
+}
+
+/// Answers the `rtype` question at `owner` with NXDOMAIN and `authorities`.
+fn nxdomain(store: &mut Store, owner: &str, rtype: RecordType, authorities: Vec<Record>) {
+    let response = Response { rcode: ResponseCode::NXDomain, authorities, ..Response::default() };
+    store.insert((name(owner).to_lowercase(), rtype), response);
+}
+
+/// Answers the `rtype` question at `owner` with `answers` and `authorities`,
+/// exactly as given.
+fn answer(store: &mut Store, owner: &str, rtype: RecordType, answers: Vec<Record>, authorities: Vec<Record>) {
+    store.insert((name(owner).to_lowercase(), rtype), Response { answers, authorities, ..Response::default() });
 }
 
 /// A zone's SOA record.
@@ -144,8 +174,51 @@ fn nsec(owner: &str, next: &str) -> Record {
     Record::from_rdata(name(owner), 300, RData::DNSSEC(DNSSECRData::NSEC(nsec)))
 }
 
+/// An NSEC that `zone` really signs, owned by `owner` inside it, whose next name
+/// is `zzzz.`. In canonical order that spans every name after `owner` up to a
+/// top-level `zzzz`: from `a.attacker.com.` it covers `N`, the alias, and the
+/// wildcards that could have produced either (`com` < `org` < `zzzz`).
+fn spanning_nsec(owner: &str, zone: &Zone) -> Vec<Record> {
+    signed(vec![nsec(owner, "zzzz.")], zone)
+}
+
+/// The NSEC3 owner name for `n` in `zone`: the base32hex SHA-1 of `n`, with no
+/// salt and no extra iterations.
+fn nsec3_owner(n: &str, zone: &str) -> String {
+    let hash = Nsec3HashAlgorithm::SHA1.hash(&[], &name(n), 0).unwrap();
+    // NSEC3 writes its next hashed owner name the way an owner label is
+    // written, so this borrows that encoding instead of repeating it.
+    let encoded = NSEC3::new(Nsec3HashAlgorithm::SHA1, false, 0, Vec::new(), hash.as_ref().to_vec(), []);
+    format!("{}.{zone}", encoded.next_hashed_owner_name_base32().unwrap())
+}
+
+/// An NSEC3 record at `owner` saying its name holds an A record and nothing
+/// else.
+fn nsec3(owner: &str) -> Record {
+    let next = Nsec3HashAlgorithm::SHA1.hash(&[], &name("zz.example.org."), 0).unwrap();
+    let nsec3 = NSEC3::new(
+        Nsec3HashAlgorithm::SHA1,
+        false,
+        0,
+        Vec::new(),
+        next.as_ref().to_vec(),
+        [RecordType::A, RecordType::RRSIG],
+    );
+    Record::from_rdata(name(owner), 300, RData::DNSSEC(DNSSECRData::NSEC3(nsec3)))
+}
+
 fn txt(owner: &str, text: &str) -> Record {
     Record::from_rdata(name(owner), 300, RData::TXT(TXT::new(vec![text.to_string()])))
+}
+
+/// `example.org.`'s `*.example.org.` TXT record and its signature, served at
+/// `N`. A wildcard's signed data is valid at any name it could have produced;
+/// the signature's label count, two, is what marks it as an expansion.
+fn wildcard_at_n(example: &Zone) -> Vec<Record> {
+    let wildcard = vec![txt("*.example.org.", WILDCARD)];
+    let mut rrsig = sign(&wildcard, &name("*.example.org."), RecordType::TXT, example);
+    rrsig.name = name(N);
+    vec![txt(N, WILDCARD), rrsig]
 }
 
 struct World {
@@ -203,6 +276,7 @@ async fn serve(store: Store) -> u16 {
                     response.add_query(query.clone());
                     match store.get(&(query.name().to_lowercase(), query.query_type())) {
                         Some(found) => {
+                            response.metadata.response_code = found.rcode;
                             for record in &found.answers {
                                 response.add_answer(record.clone());
                             }
@@ -248,10 +322,15 @@ fn resolver(port: u16, root: &Zone) -> Resolver<TokioRuntimeProvider> {
 
 /// What `secure_txt` makes of `N` in `world`.
 fn lookup(world: World) -> Result<Vec<String>, String> {
+    lookup_at(world, N)
+}
+
+/// What `secure_txt` makes of `at` in `world`.
+fn lookup_at(world: World, at: &'static str) -> Result<Vec<String>, String> {
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async move {
         let port = serve(world.store).await;
-        secure_txt(N, &resolver(port, &world.root)).await
+        secure_txt(at, &resolver(port, &world.root)).await
     })
 }
 
@@ -320,7 +399,24 @@ fn refuses_a_foreign_signature_beside_one_from_the_zone() {
     let mut answers = forged.clone();
     answers.push(sign(&honest, &owner, RecordType::TXT, &example));
     answers.push(sign(&forged, &owner, RecordType::TXT, &attacker));
-    world.store.insert((owner.to_lowercase(), RecordType::TXT), Response { answers, authorities: Vec::new() });
+    answer(&mut world.store, N, RecordType::TXT, answers, Vec::new());
+    assert_refused(lookup(world));
+}
+
+#[test]
+fn refuses_a_record_carrying_a_foreign_signature_beside_the_zones() {
+    // The zone's own record and signature, plus attacker.com.'s signature over
+    // the same record. hickory 0.26.3 skips the foreign one, so the zone's is
+    // what counts, but which signature counts is hickory's choice: the wallet
+    // refuses any answer where a foreign one could have. Refusing it costs a
+    // lookup that someone able to add a signature could have dropped anyway.
+    // Only the wallet's check stops this.
+    let (mut world, example, attacker) = honest_world();
+    let owner = name(N);
+    let record = vec![txt(N, HONEST)];
+    let mut answers = signed(record.clone(), &example);
+    answers.push(sign(&record, &owner, RecordType::TXT, &attacker));
+    answer(&mut world.store, N, RecordType::TXT, answers, Vec::new());
     assert_refused(lookup(world));
 }
 
@@ -345,6 +441,47 @@ fn a_signed_denial_proves_there_is_no_record() {
     authorities.extend(signed(vec![nsec(N, "zz.example.org.")], &example));
     deny(&mut world.store, N, RecordType::TXT, authorities);
     assert_eq!(lookup(world), Ok(Vec::new()));
+}
+
+#[test]
+fn an_nsec3_denial_proves_there_is_no_record() {
+    // An NSEC3 is owned by a hashed label under the apex, never by the name it
+    // denies, so what places it in the zone is its signer.
+    let (mut world, example, _attacker) = honest_world();
+    let mut authorities = signed(vec![soa("example.org.")], &example);
+    authorities.extend(signed(vec![nsec3(&nsec3_owner(N, "example.org."))], &example));
+    deny(&mut world.store, N, RecordType::TXT, authorities);
+    assert_eq!(lookup(world), Ok(Vec::new()));
+}
+
+#[test]
+fn a_denial_from_a_zone_further_up_proves_there_is_no_record() {
+    // With no zone cut at example.org., org. holds N and signs that it has no
+    // TXT record. The signer has to contain N, not be the closest zone to it.
+    let root = Zone::new(".");
+    let org = Zone::new("org.");
+    let mut store = Store::new();
+    put(&mut store, vec![root.dnskey_record()], &root);
+    put(&mut store, vec![org.dnskey_record()], &org);
+    put(&mut store, vec![org.ds_record()], &root);
+    let mut authorities = signed(vec![soa("org.")], &org);
+    authorities.extend(signed(vec![nsec(N, "zz.example.org.")], &org));
+    deny(&mut store, N, RecordType::TXT, authorities);
+    assert_eq!(lookup(World { root, store }), Ok(Vec::new()));
+}
+
+#[test]
+fn a_record_from_the_zones_wildcard_resolves() {
+    // example.org. publishes `*.example.org. TXT` and no name under donate, so
+    // N is produced from the wildcard, and the zone's NSEC from `*` to `www`
+    // proves no closer name exists. Aliases served this way keep working.
+    let (mut world, example, _attacker) = honest_world();
+    let types = [RecordType::TXT, RecordType::RRSIG, RecordType::NSEC];
+    let next = NSEC::new(name("www.example.org."), types);
+    let wildcard_nsec =
+        Record::from_rdata(name("*.example.org."), 300, RData::DNSSEC(DNSSECRData::NSEC(next)));
+    answer(&mut world.store, N, RecordType::TXT, wildcard_at_n(&example), signed(vec![wildcard_nsec], &example));
+    assert_eq!(lookup(world), Ok(vec![WILDCARD.to_string()]));
 }
 
 #[test]
@@ -375,5 +512,118 @@ fn refuses_a_denial_taken_from_another_zone() {
     let mut authorities = signed(vec![soa("attacker.com.")], &attacker);
     authorities.extend(signed(vec![nsec("a.attacker.com.", "z.attacker.com.")], &attacker));
     deny(&mut world.store, N, RecordType::TXT, authorities);
+    assert_refused(lookup(world));
+}
+
+#[test]
+fn refuses_a_foreign_denial_spanning_the_name() {
+    // The gap in hickory 0.26.3 (2026-10-20 audit, L-16): attacker.com. signs
+    // an NSEC over a name in its own zone, so hickory marks it Secure, and its
+    // next name spans N. With no SOA there is no zone to hold it to, and hickory
+    // takes it as proof that N does not exist, which is what moves the wallet
+    // from OA2 to OA1. Only the wallet's check stops this.
+    let (mut world, _example, attacker) = honest_world();
+    nxdomain(&mut world.store, N, RecordType::TXT, spanning_nsec("a.attacker.com.", &attacker));
+    assert_refused(lookup(world));
+}
+
+#[test]
+fn refuses_a_foreign_denial_of_the_alias_itself() {
+    // The same, at the OA1 name. Only the wallet's check stops this.
+    let (mut world, _example, attacker) = honest_world();
+    nxdomain(&mut world.store, N1, RecordType::TXT, spanning_nsec("a.attacker.com.", &attacker));
+    assert_refused(lookup_at(world, N1));
+}
+
+#[test]
+fn refuses_a_foreign_denial_beside_the_zones_own_soa() {
+    // example.org.'s SOA and its signature are public, so they can be replayed.
+    // hickory checks that the SOA's zone contains N, not that the NSEC comes
+    // from that zone. Only the wallet's check stops this.
+    let (mut world, example, attacker) = honest_world();
+    let mut authorities = signed(vec![soa("example.org.")], &example);
+    authorities.extend(spanning_nsec("a.attacker.com.", &attacker));
+    nxdomain(&mut world.store, N, RecordType::TXT, authorities);
+    assert_refused(lookup(world));
+}
+
+#[test]
+fn refuses_a_foreign_denial_behind_an_unsigned_soa_for_the_zone() {
+    // An SOA for example.org. that nobody signed names no zone: hickory ignores
+    // it, so the denial is from whoever signed the NSEC. Only the wallet's check
+    // stops this.
+    let (mut world, _example, attacker) = honest_world();
+    let mut authorities = vec![soa("example.org.")];
+    authorities.extend(spanning_nsec("a.attacker.com.", &attacker));
+    nxdomain(&mut world.store, N, RecordType::TXT, authorities);
+    assert_refused(lookup(world));
+}
+
+#[test]
+fn refuses_a_foreign_denial_from_a_sibling_zone() {
+    // `a.example.org.` is honestly delegated, shares a parent with N, and sorts
+    // before it, so an NSEC at its apex can span N. Only the wallet's check
+    // stops this.
+    let (mut world, example, _attacker) = honest_world();
+    let sibling = Zone::new("a.example.org.");
+    put(&mut world.store, vec![sibling.dnskey_record()], &sibling);
+    put(&mut world.store, vec![sibling.ds_record()], &example);
+    nxdomain(&mut world.store, N, RecordType::TXT, spanning_nsec("a.example.org.", &sibling));
+    assert_refused(lookup(world));
+}
+
+#[test]
+fn refuses_a_foreign_denial_proving_a_wildcard_expansion() {
+    // N publishes HONEST, and example.org. also publishes `*.example.org. TXT`.
+    // RFC 4035 §5.3.4 lets the wildcard's data stand at N only where an NSEC
+    // proves no closer name exists, and the zone has no such NSEC, so the
+    // attacker supplies one from its own zone and replaces HONEST with the
+    // catch-all. Only the wallet's check stops this.
+    let (mut world, example, attacker) = honest_world();
+    let proof = spanning_nsec("a.attacker.com.", &attacker);
+    answer(&mut world.store, N, RecordType::TXT, wildcard_at_n(&example), proof);
+    assert_refused(lookup(world));
+}
+
+#[test]
+fn refuses_a_denial_carrying_a_foreign_signature_beside_the_zones() {
+    // The zone's own denial, with attacker.com.'s signature over the same NSEC
+    // beside the zone's. As for a record, which signature counts is hickory's
+    // choice, so the wallet refuses any denial where a foreign one could have.
+    // Only the wallet's check stops this.
+    let (mut world, example, attacker) = honest_world();
+    let denial = vec![nsec(N, "zz.example.org.")];
+    let mut authorities = signed(vec![soa("example.org.")], &example);
+    authorities.extend(signed(denial.clone(), &example));
+    authorities.push(sign(&denial, &name(N), RecordType::NSEC, &attacker));
+    deny(&mut world.store, N, RecordType::TXT, authorities);
+    assert_refused(lookup(world));
+}
+
+#[test]
+fn refuses_a_spanning_denial_with_the_attackers_own_soa() {
+    // hickory refuses this one itself: the SOA's zone must contain N.
+    let (mut world, _example, attacker) = honest_world();
+    let mut authorities = signed(vec![soa("attacker.com.")], &attacker);
+    authorities.extend(spanning_nsec("a.attacker.com.", &attacker));
+    nxdomain(&mut world.store, N, RecordType::TXT, authorities);
+    assert_refused(lookup(world));
+}
+
+#[test]
+fn refuses_a_spanning_nsec_as_proof_that_a_name_has_no_txt_record() {
+    // An answer saying N exists without a TXT record needs an NSEC at N itself;
+    // one that only spans N proves nothing about it. hickory refuses this one
+    // itself.
+    let (mut world, _example, attacker) = honest_world();
+    deny(&mut world.store, N, RecordType::TXT, spanning_nsec("a.attacker.com.", &attacker));
+    assert_refused(lookup(world));
+}
+
+#[test]
+fn refuses_a_wildcard_record_with_no_proof_that_the_name_is_absent() {
+    // hickory refuses this one itself.
+    let (mut world, example, _attacker) = honest_world();
+    answer(&mut world.store, N, RecordType::TXT, wildcard_at_n(&example), Vec::new());
     assert_refused(lookup(world));
 }
