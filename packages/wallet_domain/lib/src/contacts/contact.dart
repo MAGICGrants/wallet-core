@@ -15,6 +15,13 @@ class Contact {
 
   String? addressFor(String coinSymbol) => addresses[coinSymbol.toUpperCase()];
 
+  /// Whether [address] is this contact's address for [coinSymbol]'s chain.
+  ///
+  /// A contact's name vouches for that one address. Shown beside any other (a
+  /// pasted or scanned one, or an address changed after the contact was
+  /// picked), it would label someone else's address as the contact's.
+  bool ownsAddress(String coinSymbol, String address) => addressFor(coinSymbol) == address;
+
   Map<String, dynamic> toJson() => {'id': id, 'name': name, 'addresses': addresses};
 
   /// Reads both the multi-address form and the single-address form earlier

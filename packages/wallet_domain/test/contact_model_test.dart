@@ -186,6 +186,18 @@ void main() {
     });
   });
 
+  group('ownsAddress', () {
+    const alice = Contact(id: '1', name: 'Alice', addresses: {'XMR': '4alice', 'ETH': '0xalice'});
+
+    test('is true only for the contact\'s address on that chain', () {
+      expect(alice.ownsAddress('XMR', '4alice'), isTrue);
+      expect(alice.ownsAddress('xmr', '4alice'), isTrue, reason: 'symbols are case-insensitive');
+      expect(alice.ownsAddress('XMR', '4mallory'), isFalse);
+      expect(alice.ownsAddress('ETH', '4alice'), isFalse, reason: 'another chain\'s address');
+      expect(alice.ownsAddress('BTC', 'bc1qalice'), isFalse, reason: 'no address on that chain');
+    });
+  });
+
   group('the stored format both apps share', () {
     test('a legacy single-address entry reads as a Monero contact', () async {
       // What earlier Skylight builds wrote. It predates any other chain being
