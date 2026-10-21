@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -279,7 +280,9 @@ void main() {
     });
 
     testWidgets('with Continuous Sync on, the wallets keep watching view-only', (tester) async {
-      await SharedPreferencesService.set<bool>(SettingsKeys.foregroundSyncEnabled, true);
+      syncFrequencyPlatform = 'android';
+      addTearDown(() => syncFrequencyPlatform = Platform.operatingSystem);
+      await saveSyncFrequency(SyncFrequency.continuous);
       final context = await rootContext(tester);
       await fullyLockWallet(context);
       expect(manager.locks, ['lockSpend']);

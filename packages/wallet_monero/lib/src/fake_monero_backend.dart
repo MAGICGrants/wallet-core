@@ -118,6 +118,11 @@ class FakeMoneroBackend extends MoneroBackend {
   /// What the one-shot [refresh] answers.
   bool refreshResult = true;
 
+  /// What a [refresh] leaves in the error string, as LWSF does: its refresh
+  /// sets the string from the outcome, so `''` is a refresh that succeeded and
+  /// cleared it. Null leaves the string alone.
+  String? refreshErrorString;
+
   int _nextId = 1;
   int _newId() => _nextId++;
 
@@ -163,6 +168,7 @@ class FakeMoneroBackend extends MoneroBackend {
     setCaFilePathResult = true;
     connectToDaemonResult = true;
     connectToDaemonError = null;
+    refreshErrorString = null;
     refreshResult = true;
     createTransactionRequests.clear();
     txKeyRequests.clear();
@@ -519,6 +525,14 @@ class FakeMoneroBackend extends MoneroBackend {
   @override
   Future<bool> refresh(NativeHandle wallet) async {
     _record('refresh');
+    final error = refreshErrorString;
+    if (error != null) {
+      if (error.isEmpty) {
+        errorStrings.remove(wallet.id);
+      } else {
+        errorStrings[wallet.id] = error;
+      }
+    }
     return refreshResult;
   }
 

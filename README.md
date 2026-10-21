@@ -36,13 +36,13 @@ sanitization, per-coin address validation, and a Tor gate that fails closed.
 drag a Rust toolchain into every consumer. `AliasResolver` is the seam; the app
 installs `resolveOpenAlias` in `main()`.
 
-Anything that runs without the user is view-only: the periodic Background sync,
-Android's always-on Continuous sync and the notification check open Monero's
-view-only background copy (or ask its light-wallet server with the view key),
-a Bitcoin account xpub or an Ethereum address, never the wallet password, the
-seed or a spend key. When the spend wallet locks, the app's own wallets drop
-their spending keys the same way. `packages/wallet_background/README.md` has
-the details.
+Anything that runs without the user is view-only: a Periodic run and Android's
+Continuous Sync (the "Sync Frequency" setting) open Monero's view-only
+background copy (or ask its light-wallet server with the view key), a Bitcoin
+account xpub or an Ethereum address, never the wallet password, the seed or a
+spend key. When the spend wallet locks, the app's own wallets drop their
+spending keys the same way. `packages/wallet_background/README.md` has what
+each Sync Frequency runs, per platform and per coin, and the details.
 
 Logging is a privacy surface. Seeds, keys and raw server payloads never reach a
 log; addresses and transaction ids only as salted fingerprints; amounts only as

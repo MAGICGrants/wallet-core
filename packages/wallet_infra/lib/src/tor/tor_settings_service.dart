@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import '../logging.dart';
 import '../storage/preferences.dart';
 import 'tor_service.dart';
@@ -57,7 +59,25 @@ class TorSettingsService {
     if (useOrbotValue != null) _useOrbot = useOrbotValue;
   }
 
+  /// Starts and stops the built-in Tor for [save]. Replaced in tests, where
+  /// the real one is a native daemon.
+  @visibleForTesting
+  Future<void> Function() startBuiltIn = TorService.sharedInstance.start;
+  @visibleForTesting
+  Future<void> Function() stopBuiltIn = TorService.sharedInstance.disable;
+
+  /// Persists the settings, and runs the built-in Tor only while it is the
+  /// chosen mode.
+  ///
+  /// It used to start only at launch, so choosing Built-in left it off until
+  /// the next one, and whatever waited on it (the connection form's "Starting
+  /// Tor...") waited until then. Switching away stops it, rather than leaving
+  /// a daemon running that nothing routes through; coming back starts it again
+  /// in the same process. The start is not awaited: a bootstrap takes a while,
+  /// and the screen that saved should not.
   Future<void> save({required TorMode torMode, String? socksPort, bool? useOrbot}) async {
+    await ensureLoaded();
+    final previous = _torMode;
     _torMode = torMode;
     await SharedPreferencesService.set<String>(
       InfraPreferenceKeys.torMode,
@@ -72,6 +92,20 @@ class TorSettingsService {
     if (useOrbot != null) {
       _useOrbot = useOrbot;
       await SharedPreferencesService.set<bool>(InfraPreferenceKeys.torUseOrbot, useOrbot);
+    }
+
+    if (torMode == TorMode.builtIn) {
+      unawaited(
+        startBuiltIn().catchError(
+          (Object e) => log(LogLevel.warn, 'Built-in Tor start failed: $e'),
+        ),
+      );
+    } else if (previous == TorMode.builtIn) {
+      try {
+        await stopBuiltIn();
+      } catch (e) {
+        log(LogLevel.warn, 'Built-in Tor stop failed: $e');
+      }
     }
   }
 
@@ -112,6 +146,8 @@ class TorSettingsService {
     _socksPort = '9050';
     _useOrbot = false;
     _loaded = null;
+    startBuiltIn = TorService.sharedInstance.start;
+    stopBuiltIn = TorService.sharedInstance.disable;
   }
 
   static String torModeToString(TorMode mode) => switch (mode) {

@@ -270,7 +270,7 @@ class WalletManager with ChangeNotifier {
 
   /// Keeps the view-only material ([prepareViewOnlyAll]) in step with what runs
   /// without the user: kept while any unattended run is on
-  /// ([unattendedRunsEnabled]: either sync, or notifications) or security keys
+  /// ([unattendedRunsEnabled]: any Sync Frequency but off) or security keys
   /// are (an unattended run there has nothing else), forgotten otherwise. Runs
   /// after every open with the password; best effort.
   ///
@@ -293,7 +293,7 @@ class WalletManager with ChangeNotifier {
     }
   }
 
-  /// After the user changes a sync or notifications toggle: sets up or removes
+  /// After the user changes Sync Frequency: sets up or removes
   /// Monero's view-only background copy ([applyBackgroundSyncSettingAll]) and
   /// the other coins' view-only material ([applyViewOnlySetting]) now, so the
   /// next background run finds them, rather than at the next launch.
@@ -457,8 +457,7 @@ class WalletManager with ChangeNotifier {
       );
       await loadCachedDisplayState();
       if (displayOnly) return;
-      // Background sync, continuous sync and notification checks: whatever the
-      // configuration, only view-only material (see [isUnattendedRun]). A coin
+      // A Periodic run or Continuous Sync: whatever the configuration, only view-only material (see [isUnattendedRun]). A coin
       // without it is skipped.
       await _openViewOnly();
       return;
@@ -477,8 +476,8 @@ class WalletManager with ChangeNotifier {
     await _openWalletFiles();
   }
 
-  /// A run the user is not doing (background sync, continuous sync, a
-  /// notification check): its wallets were marked
+  /// A run the user is not doing (a Periodic run, Continuous Sync): its
+  /// wallets were marked
   /// [CryptoWallet.markUnattended] before opening. It holds view-only material
   /// only, whether or not security keys are on: it never loads the wallet
   /// password, never decrypts the seed store and never opens a wallet with its

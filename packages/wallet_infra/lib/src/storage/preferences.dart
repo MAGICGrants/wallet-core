@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Preference keys common to every app built on wallet-core. Shared so the two
@@ -22,9 +25,13 @@ class SettingsKeys {
   static const String openAliasMode = 'openAliasMode';
   // The unit the send screen's amount was last typed in: `coin` or `fiat`.
   static const String sendAmountUnit = 'sendAmountUnit';
+
+  /// Whether a background run announces the payments it finds. It decides
+  /// nothing about whether runs happen; [syncFrequency] does.
   static const String notificationsEnabled = 'notificationsEnabled';
-  static const String backgroundSyncEnabled = 'backgroundSyncEnabled';
-  static const String foregroundSyncEnabled = 'foregroundSyncEnabled';
+
+  /// "Sync Frequency": a [SyncFrequency] name.
+  static const String syncFrequency = 'syncFrequency';
   static const String backgroundSyncIntervalMinutes = 'backgroundSyncIntervalMinutes';
 
   /// The logging setting ("Diagnostic Logs"): logging on or off. Stored
@@ -134,21 +141,85 @@ class SharedPreferencesService {
   static Future<void> remove(String key) => store.remove(key);
 }
 
-/// Whether a sync that runs without the user is on: the periodic "Background
-/// sync" ([SettingsKeys.backgroundSyncEnabled]) or Android's always-on
-/// "Continuous sync" ([SettingsKeys.foregroundSyncEnabled]).
+/// How the wallets sync while nobody has the app open ("Sync Frequency").
 ///
-/// Both run with view-only material only (Monero's view-only background copy,
-/// the LWS view key, a Bitcoin xpub, an Ethereum address), so while either is
-/// on that material is kept ready, whether or not security keys are.
-Future<bool> unattendedSyncEnabled() async =>
-    (await SharedPreferencesService.get<bool>(SettingsKeys.backgroundSyncEnabled) ?? false) ||
-    (await SharedPreferencesService.get<bool>(SettingsKeys.foregroundSyncEnabled) ?? false);
+/// What each choice runs, per platform and per coin, is laid out in
+/// wallet_background's README.
+enum SyncFrequency {
+  /// Android only: the Continuous Sync foreground service keeps every coin with
+  /// a server connected and syncing, behind a persistent notification.
+  continuous,
 
-/// Whether anything runs without the user at all: either sync above, or the
-/// incoming-payment notifications ([SettingsKeys.notificationsEnabled]), whose
-/// periodic check opens every light coin (Monero LWS, Bitcoin, Ethereum)
-/// view-only. Those coins' view-only material is kept ready while this is on.
-Future<bool> unattendedRunsEnabled() async =>
-    await unattendedSyncEnabled() ||
-    (await SharedPreferencesService.get<bool>(SettingsKeys.notificationsEnabled) ?? false);
+  /// Scheduled background runs: light checks on any network, and full scans
+  /// (a Monero node) only while charging.
+  periodic,
+
+  /// Nothing runs without the user; wallets sync only while the app is open.
+  off;
+
+  /// The choices this platform offers, in the order the setting lists them.
+  /// Desktop has no background runs at all.
+  static List<SyncFrequency> get available => switch (syncFrequencyPlatform) {
+    'android' => values,
+    'ios' => const [periodic, off],
+    _ => const [off],
+  };
+}
+
+/// The platform [SyncFrequency.available] answers for. Tests run on a desktop
+/// host and set it to the phone they are modelling.
+@visibleForTesting
+String syncFrequencyPlatform = Platform.operatingSystem;
+
+/// The user's [SyncFrequency], or [SyncFrequency.periodic] when nothing is
+/// stored. A choice this platform cannot run (Continuous restored onto an
+/// iPhone, say) reads as the nearest one it can.
+Future<SyncFrequency> loadSyncFrequency() async {
+  final stored = await SharedPreferencesService.get<String>(SettingsKeys.syncFrequency);
+  final value = SyncFrequency.values.asNameMap()[stored] ?? SyncFrequency.periodic;
+  final available = SyncFrequency.available;
+  if (available.contains(value)) return value;
+  return available.contains(SyncFrequency.periodic) ? SyncFrequency.periodic : SyncFrequency.off;
+}
+
+Future<void> saveSyncFrequency(SyncFrequency frequency) =>
+    SharedPreferencesService.set<String>(SettingsKeys.syncFrequency, frequency.name);
+
+/// Moves the two old toggles (Background Sync and Continuous Sync, which lived
+/// on the Monero node setup screen) onto [SyncFrequency], once. Call at launch,
+/// before anything reads the setting.
+///
+/// Continuous Sync on becomes [SyncFrequency.continuous]; Background Sync or
+/// notifications on become [SyncFrequency.periodic]. An existing install with
+/// all of them off stays [SyncFrequency.off]: Periodic would start background
+/// connections to its servers that it never had. A fresh install gets the
+/// default, written down so a later launch (with a wallet by then) does not
+/// mistake it for an existing install with everything off.
+Future<void> migrateLegacySyncSettings({required bool existingInstall}) async {
+  const backgroundKey = 'backgroundSyncEnabled';
+  const continuousKey = 'foregroundSyncEnabled';
+  if (await SharedPreferencesService.get<String>(SettingsKeys.syncFrequency) == null) {
+    final background = await SharedPreferencesService.get<bool>(backgroundKey) ?? false;
+    final continuous = await SharedPreferencesService.get<bool>(continuousKey) ?? false;
+    final notifications =
+        await SharedPreferencesService.get<bool>(SettingsKeys.notificationsEnabled) ?? false;
+    await saveSyncFrequency(
+      continuous
+          ? SyncFrequency.continuous
+          : (background || notifications)
+          ? SyncFrequency.periodic
+          : existingInstall
+          ? SyncFrequency.off
+          : SyncFrequency.periodic,
+    );
+  }
+  await SharedPreferencesService.remove(backgroundKey);
+  await SharedPreferencesService.remove(continuousKey);
+}
+
+/// Whether anything runs without the user: any [SyncFrequency] but off.
+///
+/// Every such run is view-only (Monero's view-only background copy, the LWS
+/// view key, a Bitcoin xpub, an Ethereum address), so while this is on that
+/// material is kept ready, whether or not security keys are.
+Future<bool> unattendedRunsEnabled() async => await loadSyncFrequency() != SyncFrequency.off;

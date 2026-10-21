@@ -149,8 +149,8 @@ How each part fits:
   encrypted with it. So a multi-coin app (Spice) has one `wallet.fhse` and one
   key touch per unlock, and a coin added later bootstraps from `master_seed`
   under the same `k_p`.
-- **Every run without the user** (Background sync, Continuous sync, the
-  notification check) is view-only whether or not keys are on: it never loads
+- **Every run without the user** (a Periodic run, Continuous Sync) is
+  view-only whether or not keys are on: it never loads
   `k_p` or the seed store (`WalletManager.isUnattendedRun`), and each coin opens
   view-only (`CryptoWallet.prepareViewOnly` / `openViewOnly`) from what it keeps
   in the keystore while such a run is on, or keys are

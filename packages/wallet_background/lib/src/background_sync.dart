@@ -67,14 +67,20 @@ class BackgroundSync {
 }
 
 class PeriodicTasks {
+  /// Android's light job: checks the coins a server already scanned (Bitcoin,
+  /// Ethereum, Monero on a light-wallet server), on any network.
   static const txNotifier = 'txNotifier';
+
+  /// Android's full-scan job: everything [txNotifier] checks plus a full scan
+  /// (a Monero node), only while charging and on WiFi.
+  static const scan = 'scan';
 
   /// iOS BGAppRefreshTask: opportunistic, ~30s, iOS decides when. Only light
   /// clearnet wallets can do anything useful in it.
   static const iosRefresh = 'refresh';
 
-  /// iOS BGProcessingTask: minutes, while charging and idle, so there is room for Tor to
-  /// bootstrap. Still never a Monero node scan.
+  /// iOS BGProcessingTask: minutes, while charging and idle, so there is room
+  /// for a Tor bootstrap and a full scan (a Monero node).
   static const iosProcessing = 'processing';
 }
 
@@ -145,6 +151,22 @@ Future<bool> runTxNotifier({
   Duration pollInterval = _backgroundSyncPollInterval,
   @visibleForTesting Future<bool> Function()? anotherHolderHasWallets,
 }) async {
+  // Android's two jobs share a process and one name to answer on, so they
+  // take turns. The full-scan job also checks every light coin, so a light run
+  // that finds it holding has nothing left to do; the full-scan job asks a
+  // light run to let go, as the app does, and carries on in its place.
+  if (holdersShareProcess && await _peerRunHolds()) {
+    if (!allowNode) {
+      log(LogLevel.info, '[Background sync] the full-scan run holds the wallets; it checks these.');
+      return true;
+    }
+    await WalletHolders.ask(
+      WalletHolders.periodicRunName,
+      SyncMessage.hello,
+      timeout: const Duration(minutes: 1),
+    );
+  }
+
   // Registered before the app is asked, so an app that claims the wallets
   // right after answering finds this run and waits for it.
   final release = _ReleaseRequest();
@@ -194,11 +216,27 @@ Future<bool> _askOtherHolders() async {
   return false;
 }
 
-/// The app asking a run to let go ([WalletHolders.periodicRunName]).
+/// Whether another periodic run is registered and still answering.
+Future<bool> _peerRunHolds() async {
+  final answer = await WalletHolders.ask(
+    WalletHolders.periodicRunName,
+    WalletHolders.holdsQuery,
+    timeout: const Duration(seconds: 2),
+  );
+  return answer is Map && answer['holds'] == true;
+}
+
+/// The app, or the full-scan run, asking a run to let go
+/// ([WalletHolders.periodicRunName]); it answers "holds?" while it runs.
 class _ReleaseRequest {
   _ReleaseRequest() {
     port.listen((message) {
-      if (SyncMessage.opOf(message) == 'hello') _asked ??= message;
+      switch (SyncMessage.opOf(message)) {
+        case 'hello':
+          _asked ??= message;
+        case 'holds?':
+          WalletHolders.answer(message, {'op': 'holds', 'holds': true});
+      }
     });
   }
 
@@ -215,6 +253,52 @@ class _ReleaseRequest {
   }
 }
 
+/// The coins an unattended run in this window would sync, decided WITHOUT
+/// opening any wallet file: the persisted connections are loaded onto a probe
+/// manager, and each coin says what an unattended run of it would be. Opening
+/// a coin's file, a Monero wallet especially, is the expensive part, and a
+/// short iOS refresh must not pay it for coins it will skip.
+///
+/// Asked twice: by a run, to pick what to open, and by the scheduler, so a
+/// task that would find nothing is never registered at all. [scansOnly] asks
+/// whether any coin needs a full scan, which is what Android's full-scan job
+/// is registered for.
+Future<Set<String>> syncableCoins({
+  bool allowTor = true,
+  bool allowNode = true,
+  bool scansOnly = false,
+}) async {
+  final probe = WalletManager(coins: BackgroundSync.coins);
+  try {
+    if (!await probe.hasAnyExistingWallet()) return const {};
+    await probe.loadCachedDisplayState();
+
+    // Scheduling-window policy: the short iOS refresh takes neither Tor (a
+    // bootstrap can outlast the window) nor a scan (it cannot finish); the
+    // charging processing window allows Tor but still never a scan. BTC/ETH and
+    // Monero-LWS all report `check`, a server already did the work, so they
+    // always qualify.
+    //
+    // `allowNode` keeps its name and its meaning: it answers "can this *window*
+    // afford the work", which is a different question from "which mechanism
+    // does this coin use", and it stays true whatever key the scan holds. Native
+    // view-key sync removes the security objection to an unattended scan, not
+    // the battery and bandwidth one.
+    return probe.allWallets
+        .where(
+          (w) =>
+              w.backgroundSyncMode != BackgroundSyncMode.none &&
+              (allowNode || w.backgroundSyncMode != BackgroundSyncMode.scan) &&
+              (!scansOnly || w.backgroundSyncMode == BackgroundSyncMode.scan) &&
+              (allowTor || !w.usingTor),
+        )
+        .map((w) => w.coinSymbol)
+        .toSet();
+  } finally {
+    probe.dispose();
+  }
+}
+
 Future<bool> _runTxNotifier({
   required Duration budget,
   required bool allowTor,
@@ -222,36 +306,7 @@ Future<bool> _runTxNotifier({
   required Duration pollInterval,
   required _ReleaseRequest release,
 }) async {
-  // Decide what this window can sync WITHOUT opening any wallet file: load the
-  // persisted connections onto a probe manager and read what each coin says an
-  // unattended run of it would be. Opening a coin's file, a Monero wallet
-  // especially, is the expensive part, and a short iOS refresh must not pay it
-  // for coins it will skip.
-  final probe = WalletManager(coins: BackgroundSync.coins);
-  if (!await probe.hasAnyExistingWallet()) return true;
-  await probe.loadCachedDisplayState();
-
-  // Scheduling-window policy: the short iOS refresh takes neither Tor (a
-  // bootstrap can outlast the window) nor a scan (it cannot finish); the
-  // charging processing window allows Tor but still never a scan. BTC/ETH and
-  // Monero-LWS all report `check`, a server already did the work, so they
-  // always qualify.
-  //
-  // `allowNode` keeps its name and its meaning: it answers "can this *window*
-  // afford the work", which is a different question from "which mechanism does
-  // this coin use", and it stays true whatever key the scan holds. Native
-  // view-key sync removes the security objection to an unattended scan, not the
-  // battery and bandwidth one.
-  final syncableSymbols = probe.allWallets
-      .where(
-        (w) =>
-            w.backgroundSyncMode != BackgroundSyncMode.none &&
-            (allowNode || w.backgroundSyncMode != BackgroundSyncMode.scan) &&
-            (allowTor || !w.usingTor),
-      )
-      .map((w) => w.coinSymbol)
-      .toSet();
-  probe.dispose();
+  final syncableSymbols = await syncableCoins(allowTor: allowTor, allowNode: allowNode);
   if (syncableSymbols.isEmpty) return true;
 
   // Open ONLY the syncable coins; a filtered registry, so no other coin's file
@@ -414,87 +469,136 @@ Future<void> _waitForWallets(
 
 /// Routes a scheduled task to the right [runTxNotifier] window. The app's
 /// WorkManager `@pragma` entry calls this after bootstrapping the isolate.
+///
+/// Runs only under [SyncFrequency.periodic]. Changing the setting cancels the
+/// tasks, but one already handed to the isolate can still arrive.
 Future<bool> dispatchBackgroundTask(String task) async {
+  if (await loadSyncFrequency() != SyncFrequency.periodic) return true;
   switch (task) {
     // ~30s, whenever iOS feels like it: enough for a light server to report what
     // it already scanned, and nothing more.
     case PeriodicTasks.iosRefresh:
       return runTxNotifier(budget: _iosRefreshBudget, allowTor: false, allowNode: false);
 
-    // Charging and idle, so there is room for Tor to bootstrap first.
+    // Charging, idle and minutes long: room for a Tor bootstrap and a full scan.
     case PeriodicTasks.iosProcessing:
-      return runTxNotifier(allowNode: false);
+      return runTxNotifier();
 
+    // Registered to run only while charging and on WiFi.
+    case PeriodicTasks.scan:
+      return runTxNotifier();
+
+    // The light job, on any network; a task this build does not know is treated
+    // as it, since that is the one whose constraints any device state meets.
     case PeriodicTasks.txNotifier:
     default:
-      // A node scan is heavy, so only run it when Background Sync is on; light
-      // coins (LWS/Electrum/RPC) still notify on the Notifications toggle alone.
-      final backgroundSync =
-          await SharedPreferencesService.get<bool>(SettingsKeys.backgroundSyncEnabled) ?? false;
-      return runTxNotifier(allowNode: backgroundSync);
+      return runTxNotifier(allowNode: false);
   }
 }
 
-/// (Re)registers background work to match the current settings, or cancels it.
-/// Call after anything that changes the answer: the notifications toggle, the
-/// background-sync toggle, or a connection change.
+/// (Re)registers background work to match [SyncFrequency] and the configured
+/// coins, or cancels it. Call once a change has been applied: after the
+/// setting changes, after a saved connection has been applied (the wallet
+/// rebuilt for it), when the wallet home opens, and at launch.
+///
+/// Each task is registered only while some coin gives it work, using the same
+/// choice the run makes ([syncableCoins]), so a phone with nothing to check is
+/// never woken to find that out. The README lays out every case.
+///
+/// Not from a connection form's save: [syncableCoins] asks whether each wallet
+/// file exists, and a Monero wallet whose saved mode has no file yet (the node
+/// file a just-saved node connection is about to create) adopts the mode that
+/// has one, undoing the save.
+///
+/// A task that stays is updated in place, not replaced, so calling this often
+/// does not keep pushing its next run back.
 Future<void> applyBackgroundTaskRegistration() async {
   if (Platform.isIOS) return _applyIosBackgroundTasks();
   if (!Platform.isAndroid) return;
 
-  final backgroundSync =
-      await SharedPreferencesService.get<bool>(SettingsKeys.backgroundSyncEnabled) ?? false;
-  final notifications =
-      await SharedPreferencesService.get<bool>(SettingsKeys.notificationsEnabled) ?? false;
-
-  await Workmanager().cancelByUniqueName(PeriodicTasks.txNotifier);
-  if (!backgroundSync && !notifications) return;
+  final periodic = await loadSyncFrequency() == SyncFrequency.periodic;
+  // Light coins: a server already scanned, so any network will do.
+  final light = periodic && (await syncableCoins(allowNode: false)).isNotEmpty;
+  // A full scan (a Monero node) downloads and scans every block, so it waits
+  // for a charger and WiFi.
+  final scan = periodic && (await syncableCoins(scansOnly: true)).isNotEmpty;
 
   final minutes =
       await SharedPreferencesService.get<int>(SettingsKeys.backgroundSyncIntervalMinutes) ??
       _minSyncIntervalMinutes;
+  final frequency = Duration(
+    minutes: minutes < _minSyncIntervalMinutes ? _minSyncIntervalMinutes : minutes,
+  );
 
-  // A background scan is heavy (a Monero node in particular), so when background
-  // sync is on gate it on charging + WiFi; a notifications-only run is light and
-  // takes the looser constraint.
-  final constraints = backgroundSync
-      ? Constraints(networkType: NetworkType.unmetered, requiresCharging: true)
-      : Constraints(networkType: NetworkType.connected, requiresBatteryNotLow: true);
+  Future<void> apply(String task, {required bool wanted, required Constraints constraints}) =>
+      wanted
+      ? Workmanager().registerPeriodicTask(
+          task,
+          task,
+          frequency: frequency,
+          constraints: constraints,
+          existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
+        )
+      : Workmanager().cancelByUniqueName(task);
 
-  await Workmanager().registerPeriodicTask(
+  await apply(
     PeriodicTasks.txNotifier,
-    'Background sync',
-    frequency: Duration(
-      minutes: minutes < _minSyncIntervalMinutes ? _minSyncIntervalMinutes : minutes,
-    ),
-    constraints: constraints,
+    wanted: light,
+    constraints: Constraints(networkType: NetworkType.connected, requiresBatteryNotLow: true),
+  );
+  await apply(
+    PeriodicTasks.scan,
+    wanted: scan,
+    constraints: Constraints(networkType: NetworkType.unmetered, requiresCharging: true),
   );
 }
 
-/// iOS scheduling. Gated on the notifications toggle; the two windows exist to
-/// deliver incoming-tx notifications, not to advance a heavy scan. Which coins
-/// each window actually syncs is decided per-run in [runTxNotifier]: the short
-/// refresh takes light clearnet wallets, while the charging processing window
-/// additionally allows Tor. A Monero node is never background-scanned on iOS.
+/// iOS scheduling, under [SyncFrequency.periodic]. The short refresh takes the
+/// light coins that need no Tor; the charging processing window takes every
+/// coin, Tor and full scans (a Monero node) included. iOS cannot require WiFi,
+/// so that scan may run on cellular. iOS can also end a window early; a
+/// scanning wallet checkpoints every few minutes as it goes
+/// (`CryptoWallet.syncCheckpointInterval`), so little is lost.
 Future<void> _applyIosBackgroundTasks() async {
-  final notifications =
-      await SharedPreferencesService.get<bool>(SettingsKeys.notificationsEnabled) ?? false;
+  final periodic = await loadSyncFrequency() == SyncFrequency.periodic;
 
-  await Workmanager().cancelByUniqueName(_iosRefreshTaskId);
-  await Workmanager().cancelByUniqueName(_iosProcessingTaskId);
+  if (periodic && (await syncableCoins(allowTor: false, allowNode: false)).isNotEmpty) {
+    await Workmanager().registerPeriodicTask(
+      _iosRefreshTaskId,
+      PeriodicTasks.iosRefresh,
+      frequency: Duration(minutes: _minSyncIntervalMinutes),
+    );
+  } else {
+    await Workmanager().cancelByUniqueName(_iosRefreshTaskId);
+  }
+  if (periodic && (await syncableCoins()).isNotEmpty) {
+    await Workmanager().registerProcessingTask(
+      _iosProcessingTaskId,
+      PeriodicTasks.iosProcessing,
+      constraints: Constraints(networkType: NetworkType.connected, requiresCharging: true),
+    );
+  } else {
+    await Workmanager().cancelByUniqueName(_iosProcessingTaskId);
+  }
+}
 
-  if (!notifications) return;
-
-  await Workmanager().registerPeriodicTask(
-    _iosRefreshTaskId,
-    PeriodicTasks.iosRefresh,
-    frequency: Duration(minutes: _minSyncIntervalMinutes),
-  );
-  await Workmanager().registerProcessingTask(
-    _iosProcessingTaskId,
-    PeriodicTasks.iosProcessing,
-    constraints: Constraints(networkType: NetworkType.connected, requiresCharging: true),
-  );
+/// Moves the old Background Sync / Continuous Sync toggles onto
+/// [SyncFrequency] ([migrateLegacySyncSettings]), once. Call at launch after
+/// the app's wallet-core bootstrap, before anything reads the setting: the
+/// task registration, the Continuous Sync service, or a wallet open.
+///
+/// Whether this is an existing install is read from the wallet files, without
+/// opening any.
+Future<void> migrateSyncSettings() async {
+  if (await SharedPreferencesService.get<String>(SettingsKeys.syncFrequency) != null) {
+    return migrateLegacySyncSettings(existingInstall: true);
+  }
+  final probe = WalletManager(coins: BackgroundSync.coins);
+  try {
+    await migrateLegacySyncSettings(existingInstall: await probe.hasAnyExistingWallet());
+  } finally {
+    probe.dispose();
+  }
 }
 
 Future<void> registerPeriodicTasks() async {

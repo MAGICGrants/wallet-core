@@ -39,6 +39,18 @@ class MoneroPendingTransaction implements PendingTransaction {
   final BigInt feeBaseUnits;
 }
 
+/// What a light-wallet server is waiting for its operator to approve before it
+/// will serve this wallet ([MoneroWallet.lwsPendingApproval]).
+enum LwsPendingApproval {
+  /// The account itself: a server that approves new accounts by hand has not
+  /// approved this one yet, so it reports nothing for it.
+  account,
+
+  /// A rescan from the wallet's restore height. The account works, but history
+  /// before the server's own start height stays missing until approved.
+  restoreHeight,
+}
+
 /// Monero, over either a light-wallet server (LWSF) or a full node (wallet2).
 ///
 /// Several routines here look defensive or redundant. Each one exists because
@@ -73,6 +85,30 @@ class MoneroWallet extends CryptoWallet {
   /// successful login, it made every connect look failed, and the reconnect
   /// that followed re-ran `init`, which logs out again.
   bool _lwsSessionUp = false;
+
+  LwsPendingApproval? _lwsPendingApproval;
+
+  /// What the light-wallet server is waiting to approve, or null when nothing
+  /// is pending (or this wallet is not on a light-wallet server).
+  ///
+  /// Read from the library's error string after every login and refresh. LWSF
+  /// clears that string on the next request that succeeds, so this goes back
+  /// to null by itself once the operator approves.
+  LwsPendingApproval? get lwsPendingApproval => _lwsPendingApproval;
+
+  /// LWSF's own wording (lwsf `src/error.cpp`, `error::approval` and
+  /// `error::import_pending`); the library reports these only as text.
+  static LwsPendingApproval? _pendingApprovalFrom(String error) {
+    if (error.contains('Account needs approval')) return LwsPendingApproval.account;
+    if (error.contains('awaiting approval')) return LwsPendingApproval.restoreHeight;
+    return null;
+  }
+
+  void _setLwsPendingApproval(LwsPendingApproval? value) {
+    if (_lwsPendingApproval == value) return;
+    _lwsPendingApproval = value;
+    notifyListeners();
+  }
 
   int? _daemonTargetHeight;
 
@@ -141,6 +177,22 @@ class MoneroWallet extends CryptoWallet {
   @override
   String connectionAddressExampleForType(String connectionType) =>
       connectionType == 'node' ? 'node.example.com:18081' : 'lws.example.com:18090';
+
+  /// The LWS client prefixes a path onto every request (`/wallet/login`, ...).
+  /// wallet2 does not: it keeps only the host and port and sends `/json_rpc`
+  /// and the rest from the root, so a node behind a path would be missed
+  /// silently, while the connection test (built here, with the path) passed.
+  @override
+  bool connectionAllowsPath(String connectionType) => connectionType != 'node';
+
+  static bool _hasPath(String address) {
+    final uri = Uri.parse('http://$address');
+    return (uri.path.isNotEmpty && uri.path != '/') || uri.hasQuery;
+  }
+
+  static const _nodePathMessage =
+      "A Monero node is reached at the server's root, so its address can't "
+      'include a path. Remove the path.';
 
   /// A full node scans on-device, so the heavy stat reads must wait for it.
   /// LWS has the server do the scanning and needs no such deferral.
@@ -342,6 +394,10 @@ class MoneroWallet extends CryptoWallet {
 
     await loadPersistedSubaddressState();
     await loadPrimaryAddress();
+    // Deriving the persisted subaddress is local, so do it now rather than at
+    // the end of `load()`: that waits on the connection, and with no server
+    // reachable it never gets there, leaving the receive screen nothing to show.
+    await _refreshSubaddressCache();
     setIsLoaded(true);
 
     // With the main wallet open and its password in hand, bring the background
@@ -639,9 +695,9 @@ class MoneroWallet extends CryptoWallet {
   /// and rewrites the main keys file; tearing down deletes them and stops every
   /// subsequent `store()` paying for a second cache write.
   ///
-  /// Gated on either sync toggle ([unattendedSyncEnabled]): the periodic
-  /// Background sync and the always-on Continuous sync both open this copy, and
-  /// nothing else. With both off it costs nothing. Everything here is best-effort; a wallet that cannot
+  /// Gated on [unattendedRunsEnabled]: a Periodic node scan and Continuous
+  /// Sync both open this copy, and nothing else does. With Sync Frequency off it
+  /// costs nothing. Everything here is best-effort; a wallet that cannot
   /// configure background sync still syncs in the foreground rather than failing
   /// to open.
   @override
@@ -662,7 +718,7 @@ class MoneroWallet extends CryptoWallet {
     if (_isBackgroundWallet || _inBackgroundMode) return;
 
     try {
-      final enabled = await unattendedSyncEnabled();
+      final enabled = await unattendedRunsEnabled();
       final configured = await _backend.getBackgroundSyncType(wallet);
 
       if (enabled == (configured == MoneroBackgroundSyncType.customPassword)) {
@@ -1120,6 +1176,7 @@ class MoneroWallet extends CryptoWallet {
     _loadedKind = null;
     _daemonInitialised = false;
     _lwsSessionUp = false;
+    _lwsPendingApproval = null;
     _reportedSynchronized = false;
     _isBackgroundWallet = false;
     _inBackgroundMode = false;
@@ -1299,6 +1356,7 @@ class MoneroWallet extends CryptoWallet {
       _loadedKind = null;
       _daemonInitialised = false;
       _lwsSessionUp = false;
+      _lwsPendingApproval = null;
       // Same reasoning as above, applied to the two fields added since: both are
       // properties of the handle that was just freed.
       _isBackgroundWallet = false;
@@ -1340,6 +1398,7 @@ class MoneroWallet extends CryptoWallet {
     // Read once: the type can change while this awaits below, and an init whose
     // lightWallet flag disagrees with the open wallet's factory aborts.
     final nodeMode = _isNodeMode;
+    if (nodeMode && _hasPath(address)) throw Exception(_nodePathMessage);
 
     // There is no user SSL toggle: a routable clearnet host is forced to https; a
     // local or onion host, already confidential without TLS, stays http.
@@ -1397,6 +1456,7 @@ class MoneroWallet extends CryptoWallet {
     // refused login) only through its error string, so a failed connect is
     // always logged, with that reason when there is one.
     final error = await _backend.walletErrorString(wallet);
+    _setLwsPendingApproval(nodeMode ? null : _pendingApprovalFrom(error));
     if (!connected) {
       walletLog(
         LogLevel.warn,
@@ -1418,6 +1478,7 @@ class MoneroWallet extends CryptoWallet {
     if (isLocalHostRoutedThroughTor(Uri.parse('http://$address').host, viaTor: useTor)) {
       throw Exception(localHostOverTorMessage);
     }
+    if (isNode && _hasPath(address)) throw Exception(_nodePathMessage);
     final path = isNode ? '/get_height' : '/get_address_info';
     // Same derivation as the live connect: https for a routable host, plaintext
     // only for an onion or local one.
@@ -1566,6 +1627,7 @@ class MoneroWallet extends CryptoWallet {
 
     // LWS: the server does the scanning; this fetches what it found.
     _lwsSessionUp = await _backend.refresh(wallet);
+    _setLwsPendingApproval(_pendingApprovalFrom(await _backend.walletErrorString(wallet)));
   }
 
   @override

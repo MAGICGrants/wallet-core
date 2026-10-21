@@ -4,14 +4,18 @@ import '../design/action_button.dart';
 import '../design/brand.dart';
 
 /// The mobile home screen both apps share, as a column of optional sections in
-/// a fixed order: header, balance, actions, incoming payments, accounts, the
-/// balance chart, then the security checklist.
+/// a fixed order: header, a notice, balance, actions, incoming payments,
+/// accounts, the balance chart, then the security checklist.
 ///
 /// The apps differ only in what they put in the slots. Spice fills [accounts]
 /// with its chain cards and gives the balance an allocation bar; Skylight, with
 /// one coin, leaves those out. A null slot is skipped along with its spacing.
 class WalletHomeView extends StatelessWidget {
   final Widget header;
+
+  /// Something the user must act on (a server still waiting to approve the
+  /// wallet), above everything else.
+  final Widget? notice;
   final Widget? balance;
   final Widget actions;
   final Widget? incoming;
@@ -25,6 +29,7 @@ class WalletHomeView extends StatelessWidget {
     required this.header,
     required this.actions,
     required this.bottomNavigationBar,
+    this.notice,
     this.balance,
     this.incoming,
     this.accounts,
@@ -34,7 +39,7 @@ class WalletHomeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sections = [?balance, actions, ?incoming, ?accounts, ?chart, ?checklist];
+    final sections = [?notice, ?balance, actions, ?incoming, ?accounts, ?chart, ?checklist];
     return Scaffold(
       backgroundColor: BrandColors.paper,
       bottomNavigationBar: bottomNavigationBar,

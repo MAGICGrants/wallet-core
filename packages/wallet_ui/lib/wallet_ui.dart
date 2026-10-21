@@ -56,6 +56,7 @@ export 'src/wallet/open_alias_settings_sheet.dart';
 export 'src/wallet/receive_view.dart';
 export 'src/wallet/seed_verify_view.dart';
 export 'src/wallet/send_view.dart';
+export 'src/wallet/sync_frequency_sheet.dart';
 export 'src/wallet/tor_status_pill.dart';
 export 'src/wallet/tx_activity_row.dart';
 export 'src/wallet/tx_details_sheet.dart';

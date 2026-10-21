@@ -475,6 +475,24 @@ void main() {
         await wallet.connectToDaemonImpl(address: '192.168.1.50:50001');
         expect(fake.connections.single.useSsl, isFalse);
       });
+
+      test('an Electrum address with a path is refused: raw TCP has none', () async {
+        await restore();
+        expect(wallet.connectionAllowsPath(''), isFalse);
+        await expectLater(
+          wallet.connectToDaemonImpl(address: 'electrum.example.com:50002/wallet'),
+          throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('no path'))),
+        );
+        expect(fake.connections, isEmpty);
+      });
+
+      test('a Tailscale user\'s server connects in the clear', () async {
+        // A Tailscale IP (100.64/10) is a network the user controls, reached
+        // over WireGuard, so it is the LAN case.
+        await restore();
+        await wallet.connectToDaemonImpl(address: '100.101.102.103:50001');
+        expect(fake.connections.single.useSsl, isFalse);
+      });
     });
 
     group('testConnection fails closed rather than probing clearnet', () {

@@ -9,9 +9,10 @@ import 'package:wallet_infra/wallet_infra.dart'
         BiometricAuthResult,
         BoundToAnotherPcException,
         LogLevel,
-        SettingsKeys,
         SharedPreferencesService,
+        SyncFrequency,
         WalletSecrets,
+        loadSyncFrequency,
         log;
 
 import '../fhse_native.dart';
@@ -275,8 +276,7 @@ Future<void> _fullyLock(WalletManager manager) async {
     // With Continuous Sync on, the wallets keep watching for payments,
     // view-only ([WalletManager.lockSpend]); otherwise they close. Either way
     // the password and every spending key leave memory.
-    final keepWatching =
-        await SharedPreferencesService.get<bool>(SettingsKeys.foregroundSyncEnabled) ?? false;
+    final keepWatching = await loadSyncFrequency() == SyncFrequency.continuous;
     await (keepWatching ? manager.lockSpend() : manager.fullyLock());
   } finally {
     _fullLockInFlight = null;

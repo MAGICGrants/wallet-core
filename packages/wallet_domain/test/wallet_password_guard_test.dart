@@ -291,8 +291,8 @@ void main() {
     m.dispose();
   });
 
-  // Background sync, continuous sync and notification checks are view-only
-  // whatever the configuration: never the password, the seed or a spend key.
+  // A Periodic run and Continuous Sync are view-only whatever the
+  // configuration: never the password, the seed or a spend key.
   group('unattended runs', () {
     test('never load the kept password, keys off and a copy in the keystore', () async {
       await storeKeystoreWalletPassword('kept');
@@ -324,8 +324,15 @@ void main() {
   });
 
   group('view-only material follows what runs without the user', () {
-    Future<_ViewOnlyWallet> openWith({String? toggle, bool keys = false}) async {
-      if (toggle != null) await SharedPreferencesService.set<bool>(toggle, true);
+    // An Android phone with Sync Frequency off unless a test says otherwise.
+    setUp(() async {
+      syncFrequencyPlatform = 'android';
+      await saveSyncFrequency(SyncFrequency.off);
+    });
+    tearDown(() => syncFrequencyPlatform = Platform.operatingSystem);
+
+    Future<_ViewOnlyWallet> openWith({SyncFrequency? frequency, bool keys = false}) async {
+      if (frequency != null) await saveSyncFrequency(frequency);
       guard.engaged = keys;
       final w = _ViewOnlyWallet('XMR');
       final m = WalletManager(coins: () => [w])..setWalletPassword('pw');
@@ -339,28 +346,30 @@ void main() {
       expect((w.prepared, w.forgotten), (0, 1));
     });
 
-    for (final toggle in [
-      SettingsKeys.backgroundSyncEnabled,
-      SettingsKeys.foregroundSyncEnabled,
-      SettingsKeys.notificationsEnabled,
-    ]) {
-      test('$toggle on: kept, with security keys off', () async {
-        final w = await openWith(toggle: toggle);
+    for (final frequency in [SyncFrequency.periodic, SyncFrequency.continuous]) {
+      test('${frequency.name}: kept, with security keys off', () async {
+        final w = await openWith(frequency: frequency);
         expect((w.prepared, w.forgotten), (1, 0));
       });
     }
 
-    test('security keys on: kept even with every toggle off', () async {
+    test('notifications alone keep nothing: they run nothing', () async {
+      await SharedPreferencesService.set<bool>(SettingsKeys.notificationsEnabled, true);
+      final w = await openWith();
+      expect((w.prepared, w.forgotten), (0, 1));
+    });
+
+    test('security keys on: kept even with Sync Frequency off', () async {
       final w = await openWith(keys: true);
       expect((w.prepared, w.forgotten), (1, 0));
     });
 
-    test('a toggle switched on later takes effect at once', () async {
+    test('Sync Frequency switched on later takes effect at once', () async {
       final w = _ViewOnlyWallet('XMR');
       final m = WalletManager(coins: () => [w])..setWalletPassword('pw');
       addTearDown(m.dispose);
       await m.openAll();
-      await SharedPreferencesService.set<bool>(SettingsKeys.notificationsEnabled, true);
+      await saveSyncFrequency(SyncFrequency.periodic);
       await m.applySyncSettings();
       expect(w.prepared, 1);
     });

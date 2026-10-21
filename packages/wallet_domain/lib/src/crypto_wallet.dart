@@ -136,6 +136,13 @@ abstract class CryptoWallet with ChangeNotifier {
 
   String connectionAddressExampleForType(String connectionType) => connectionAddressExample;
 
+  /// Whether a connection address of [connectionType] may carry a path after
+  /// `host:port`: a server behind a reverse proxy at `/wallet`, an RPC
+  /// endpoint's `/v3/...`. True only where the client sends requests under
+  /// that path. A coin whose client would drop it says no, so the form refuses
+  /// the address rather than quietly connecting to the server's root.
+  bool connectionAllowsPath(String connectionType) => true;
+
   String get connectionType => _connectionType;
 
   int get requiredConfirmations;

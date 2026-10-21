@@ -216,6 +216,10 @@ class BitcoinChainWallet extends CryptoWallet {
   @override
   String get connectionAddressExample => _connectionAddressExample;
 
+  /// Electrum is raw TCP: there is no path to send requests under.
+  @override
+  bool connectionAllowsPath(String connectionType) => false;
+
   // ----- Persistence -----
 
   /// e.g. `${appDir}/mywallet_btc`.
@@ -960,6 +964,11 @@ class BitcoinChainWallet extends CryptoWallet {
   /// copies and one of them drifting would mean the setup form validating
   /// something different from what the wallet then dials.
   static (String host, int port) _splitHostPort(String address) {
+    if (address.contains('/')) {
+      throw FormatException(
+        'An Electrum server address is host:port, with no path (got "$address")',
+      );
+    }
     final parts = address.split(':');
     if (parts.length != 2) {
       throw FormatException('Electrum address must be host:port (got "$address")');

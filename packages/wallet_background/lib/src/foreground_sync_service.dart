@@ -252,13 +252,30 @@ Future<void> restartForegroundSyncIfRunning() async {
   await startForegroundSync();
 }
 
-/// Starts the service on launch if the user enabled it, so backgrounding keeps
-/// syncing.
+/// Starts the service on launch under [SyncFrequency.continuous], so
+/// backgrounding keeps syncing.
 Future<void> startForegroundSyncIfEnabled() async {
   if (!Platform.isAndroid) return;
-  final enabled =
-      await SharedPreferencesService.get<bool>(SettingsKeys.foregroundSyncEnabled) ?? false;
-  if (enabled) await startForegroundSync();
+  if (await loadSyncFrequency() == SyncFrequency.continuous) await startForegroundSync();
+}
+
+/// Saves [frequency] ("Sync Frequency") and brings everything in line with it:
+/// the view-only material a run opens, the Continuous Sync service, and the
+/// scheduled tasks. The settings screen calls this on save.
+///
+/// The material comes first: both a Periodic run and the service open only
+/// view-only copies, which must exist before either starts.
+Future<void> applySyncFrequency(WalletManager manager, SyncFrequency frequency) async {
+  final synced =
+      manager.activeWallets.isNotEmpty && manager.activeWallets.every(isWalletFullySynced);
+  await saveSyncFrequency(frequency);
+  await manager.applySyncSettings();
+  if (frequency == SyncFrequency.continuous) {
+    await startForegroundSync(synced: synced);
+  } else {
+    await stopForegroundSync();
+  }
+  await applyBackgroundTaskRegistration();
 }
 
 Future<void> stopSyncAndDeleteWallets(
@@ -268,10 +285,13 @@ Future<void> stopSyncAndDeleteWallets(
   // First: the running service's isolate must be gone before the files are.
   await stopForegroundSync();
 
-  await SharedPreferencesService.set<bool>(SettingsKeys.backgroundSyncEnabled, false);
-  await SharedPreferencesService.set<bool>(SettingsKeys.foregroundSyncEnabled, false);
+  // Back to the defaults a fresh install gets, written down so the next
+  // launch's migration does not take this for an existing install with
+  // everything off.
+  await saveSyncFrequency(SyncFrequency.periodic);
   await SharedPreferencesService.set<bool>(SettingsKeys.notificationsEnabled, false);
-  await applyBackgroundTaskRegistration();
 
   await manager.deleteAll(extraPrefKeys: extraPrefKeys);
+  // After the files are gone: with no wallet left, every task is cancelled.
+  await applyBackgroundTaskRegistration();
 }

@@ -38,9 +38,12 @@ void main() {
   late FakeMoneroBackend backend;
   late MoneroWallet wallet;
 
-  setUp(() {
+  setUp(() async {
     tmp = Directory.systemTemp.createTempSync('monero_background_sync');
     SharedPreferencesService.store = MemoryPreferenceStore();
+    // An Android phone with Sync Frequency off: each test turns on what it needs.
+    syncFrequencyPlatform = 'android';
+    await saveSyncFrequency(SyncFrequency.off);
     WalletSecrets.store = MemorySecretStore();
     WalletAppConfig.install(WalletAppConfig.skylight, directories: FixedDirectories(tmp));
     // Stands in for the packaged CA bundle, which needs a Flutter binding to load.
@@ -52,6 +55,7 @@ void main() {
 
   tearDown(() {
     wallet.dispose();
+    syncFrequencyPlatform = Platform.operatingSystem;
     WalletAppConfig.resetForTesting();
     CaBundle.resetForTesting();
     SharedPreferencesService.resetForTesting();
@@ -70,7 +74,7 @@ void main() {
   Future<String> pathFor(String type) => wallet.walletPathForType(type);
 
   Future<void> enableBackgroundSync({bool enabled = true}) =>
-      SharedPreferencesService.set<bool>(SettingsKeys.backgroundSyncEnabled, enabled);
+      saveSyncFrequency(enabled ? SyncFrequency.periodic : SyncFrequency.off);
 
   /// Opens the main wallet for [type], as the app does on unlock.
   Future<void> openMain(String type) async {
@@ -112,16 +116,16 @@ void main() {
     return run;
   }
 
-  // Background sync and Continuous sync both open only the view-only copy, so
-  // either toggle has the main wallet keep it.
-  group('either sync toggle sets the copy up', () {
-    test('Continuous sync alone is enough', () async {
-      await SharedPreferencesService.set<bool>(SettingsKeys.foregroundSyncEnabled, true);
+  // A Periodic node scan and Continuous Sync both open only the view-only copy,
+  // so either Sync Frequency has the main wallet keep it.
+  group('any Sync Frequency but off sets the copy up', () {
+    test('Continuous is enough', () async {
+      await saveSyncFrequency(SyncFrequency.continuous);
       await openMain('node');
       expect(backend.backgroundSyncSetups.single.type, MoneroBackgroundSyncType.customPassword);
     });
 
-    test('with both off it is never set up', () async {
+    test('with Sync Frequency off it is never set up', () async {
       await openMain('node');
       expect(backend.backgroundSyncSetups, isEmpty);
     });
@@ -251,7 +255,7 @@ void main() {
       expect(stored!.length, 32, reason: '128 bits, hex — genWalletPassword()');
     });
 
-    test('nothing is set up while the user has background sync off', () async {
+    test('nothing is set up while Sync Frequency is off', () async {
       await openMain('node');
 
       // Off by default, and not free: while the type is CustomPassword every
