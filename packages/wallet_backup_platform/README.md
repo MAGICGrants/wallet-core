@@ -46,8 +46,9 @@ nothing is written anywhere, on the device or off it.
     with the location(s) it was found in; otherwise a pop-up says none was
     found and OK returns to the same screen, nothing turned on.
   - *From a backup file:* imports a backup file: its contacts go into the
-    address book and its payment details into the payments the wallets have
-    synced. Nothing else is kept, and every automatic location stays off.
+    address book and its payment details into the wallets (for Monero, the
+    wallet file), synced yet or not. Nothing else is kept, and every automatic
+    location stays off.
   - *Skip:* nothing is kept until turned on in Settings > Backup.
 
   Never shown for a legacy 25-word Monero seed or a polyseed with an offset

@@ -556,6 +556,21 @@ class FakeMoneroBackend extends MoneroBackend {
     return true;
   }
 
+  /// The wallet file's cache attributes, kept across close and reopen like the
+  /// file itself.
+  final Map<String, String> cacheAttributes = {};
+
+  @override
+  Future<String> cacheAttribute(NativeHandle wallet, String key) async =>
+      cacheAttributes[key] ?? '';
+
+  @override
+  Future<bool> setCacheAttribute(NativeHandle wallet, String key, String value) async {
+    _record('setCacheAttribute');
+    cacheAttributes[key] = value;
+    return true;
+  }
+
   @override
   Future<BigInt> balance(NativeHandle wallet, {int accountIndex = 0}) async => balanceValue;
 

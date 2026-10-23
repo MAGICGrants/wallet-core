@@ -294,6 +294,11 @@ abstract class MoneroBackend {
 
   Future<bool> store(NativeHandle wallet);
 
+  /// A string the app keeps inside the wallet file (`Wallet_getCacheAttribute`),
+  /// or empty when there is none. Saved with the file by [store].
+  Future<String> cacheAttribute(NativeHandle wallet, String key);
+  Future<bool> setCacheAttribute(NativeHandle wallet, String key, String value);
+
   Future<BigInt> balance(NativeHandle wallet, {int accountIndex = 0});
   Future<BigInt> unlockedBalance(NativeHandle wallet, {int accountIndex = 0});
 

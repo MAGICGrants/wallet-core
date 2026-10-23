@@ -140,11 +140,13 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   (`u32 length ‖ file`, repeated; no names, no magic) for anywhere else;
   `importBundle` reads one back. With no location on, the copy they use lasts
   only for that step: turning the backup on records every past payment from
-  the wallets' history, so a saved file is complete, and after an import
-  `carryImportIntoWallets` reloads each wallet's history, so the payments it has
-  already synced take their destinations and keys, which the wallet cache then
-  keeps. Payments a wallet has not synced yet are not kept (see the TODO there:
-  a payment-details store, and `set_tx_key` in monero_c).
+  the wallets' history, so a saved file is complete. After an import,
+  `carryImportIntoWallets` hands every payment to each wallet to keep
+  (`CryptoWallet.keepPaymentDetails`): Monero keeps them in the wallet file as a
+  cache attribute (`magic.keptPayments`, txid -> key and destinations), in node
+  and LWS mode alike, and each payment shows them once the wallet has synced it.
+  A TODO there notes the next step: handing the keys to wallet2 itself with a
+  `set_tx_key` binding in monero_c.
 
 ## What a storage location can see
 

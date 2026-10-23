@@ -20,8 +20,8 @@ import '../setup.dart';
 /// deletes it (never the places' own copies, the wallets or the address book).
 /// With none on, saving a file builds the backup from the wallets and the
 /// address book and keeps nothing afterwards; importing one applies it to the
-/// address book and to the payments the wallets have synced, and keeps nothing
-/// either.
+/// address book and to the wallets (for Monero, the wallet file keeps its
+/// payment details), and keeps nothing either.
 class MetadataBackupScreen extends StatefulWidget {
   const MetadataBackupScreen({super.key, this.exportFile, this.pickFile});
 

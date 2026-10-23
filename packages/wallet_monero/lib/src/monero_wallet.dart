@@ -1185,6 +1185,7 @@ class MoneroWallet extends CryptoWallet {
     // and never clears it, which is one allocator reuse away from serving a
     // closed wallet's transaction keys.
     _txKeyCache.clear();
+    _keptPayments = null;
   }
 
   @override
@@ -1362,6 +1363,7 @@ class MoneroWallet extends CryptoWallet {
       _isBackgroundWallet = false;
       _inBackgroundMode = false;
       _txKeyCache.clear();
+      _keptPayments = null;
     }
     super.dispose();
   }
@@ -1804,6 +1806,19 @@ class MoneroWallet extends CryptoWallet {
 
   List<TxDetails> _cachedHistory = const [];
 
+  /// The wallet file's attribute holding payments kept from an imported backup
+  /// file ([keepPaymentDetails]): JSON, txid -> key and destinations.
+  @visibleForTesting
+  static const keptPaymentsAttribute = 'magic.keptPayments';
+
+  /// [keptPaymentsAttribute] as read from the open wallet: null until read,
+  /// and reset with the handle like [_txKeyCache].
+  Map<String, BackedUpPayment>? _keptPayments;
+
+  /// Set when [keptPaymentsAttribute] could not be parsed: nothing is kept
+  /// then, rather than overwriting what is there.
+  bool _keptPaymentsUnreadable = false;
+
   /// Transaction secret keys already fetched, by hash.
   ///
   /// Cleared with the wallet ([_closeOpenWallet]) and on commit, and never
@@ -1954,7 +1969,89 @@ class MoneroWallet extends CryptoWallet {
   @override
   Future<void> loadTxHistory({bool persistCount = true}) async {
     await refreshTxHistory();
+    await _loadKeptPayments();
     await super.loadTxHistory(persistCount: persistCount);
+  }
+
+  // ----- Payment details kept from an imported backup file -----
+  //
+  // wallet2 keeps a transaction's key and destinations only for one it built
+  // itself. For a payment sent from another device, or before a restore, they
+  // come from a backup file; the wallet file's cache attributes keep them (as
+  // wallet2 keeps its own keys, user data that a rescan does not clear), in
+  // node and LWS mode alike.
+
+  @override
+  BackedUpPayment? keptPaymentDetails(String txid) => _keptPayments?[txid];
+
+  @override
+  Future<bool> keepPaymentDetails(Map<String, BackedUpPayment> payments) async {
+    final wallet = _wallet;
+    // The spend wallet only: a background wallet's file has its user data
+    // cleared by design.
+    if (wallet == null || _isBackgroundWallet || _inBackgroundMode) return false;
+    await _loadKeptPayments();
+    final kept = _keptPayments;
+    if (kept == null || _keptPaymentsUnreadable) return false;
+
+    final merged = Map.of(kept);
+    var changed = false;
+    payments.forEach((txid, p) {
+      final had = merged[txid];
+      final recipients = had != null && had.recipients.isNotEmpty ? had.recipients : p.recipients;
+      final key = had != null && had.txKey.isNotEmpty ? had.txKey : p.txKey;
+      if (recipients.isEmpty && key.isEmpty) return;
+      if (had != null && identical(recipients, had.recipients) && key == had.txKey) return;
+      merged[txid] = BackedUpPayment(recipients: recipients, txKey: key);
+      changed = true;
+    });
+    if (!changed) return true;
+
+    final encoded = jsonEncode({
+      'v': 1,
+      'payments': {
+        for (final e in merged.entries)
+          e.key: {
+            if (e.value.txKey.isNotEmpty) 'key': e.value.txKey,
+            'to': [for (final r in e.value.recipients) r.toJson()],
+          },
+      },
+    });
+    if (!await _backend.setCacheAttribute(wallet, keptPaymentsAttribute, encoded)) return false;
+    _keptPayments = merged;
+    return store();
+  }
+
+  /// Reads [keptPaymentsAttribute] once per open wallet.
+  Future<void> _loadKeptPayments() async {
+    final wallet = _wallet;
+    if (_keptPayments != null || wallet == null || _isBackgroundWallet || _inBackgroundMode) {
+      return;
+    }
+    final raw = await _backend.cacheAttribute(wallet, keptPaymentsAttribute);
+    if (!identical(wallet, _wallet)) return;
+    _keptPaymentsUnreadable = false;
+    if (raw.isEmpty) {
+      _keptPayments = {};
+      return;
+    }
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      _keptPayments = {
+        for (final e in (decoded['payments'] as Map<String, dynamic>).entries)
+          e.key: BackedUpPayment(
+            recipients: [
+              for (final r in (e.value as Map<String, dynamic>)['to'] as List<dynamic>)
+                TxRecipient.fromJson(r as Map<String, dynamic>),
+            ],
+            txKey: (e.value as Map<String, dynamic>)['key'] as String? ?? '',
+          ),
+      };
+    } catch (e) {
+      walletLog(LogLevel.warn, 'Kept payment details are unreadable: $e');
+      _keptPayments = {};
+      _keptPaymentsUnreadable = true;
+    }
   }
 
   @override

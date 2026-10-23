@@ -46,6 +46,20 @@ class FakeWallet extends CryptoWallet {
   /// driven without a chain.
   List<TxDetails> history = const [];
 
+  /// What [keepPaymentDetails] kept, as a wallet file would.
+  final Map<String, BackedUpPayment> kept = {};
+
+  @override
+  Future<bool> keepPaymentDetails(Map<String, BackedUpPayment> payments) async {
+    for (final e in payments.entries) {
+      kept.putIfAbsent(e.key, () => e.value);
+    }
+    return true;
+  }
+
+  @override
+  BackedUpPayment? keptPaymentDetails(String txid) => kept[txid];
+
   /// When set, [openExisting] throws it once.
   Object? openError;
 

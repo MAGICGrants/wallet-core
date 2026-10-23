@@ -1172,12 +1172,13 @@ abstract class CryptoWallet with ChangeNotifier {
   /// fields always wins; nothing here can overwrite a fresh reading.
   ///
   /// What this install saw while in the other mode is the first source. The
-  /// second is the metadata backup ([MetadataBackup]), which is what gives a
-  /// wallet restored from its seed the destinations and keys of payments it
-  /// sent before.
+  /// second is what the wallet itself keeps from an imported backup file
+  /// ([keptPaymentDetails]), and the third is the metadata backup
+  /// ([MetadataBackup]): those are what give a wallet restored from its seed
+  /// the destinations and keys of payments it sent before.
   List<TxDetails> _withCarriedFields(List<TxDetails> fresh) {
     final backup = MetadataBackup.instance;
-    if (fresh.isEmpty || (_txHistory.isEmpty && backup == null)) return fresh;
+    if (fresh.isEmpty) return fresh;
 
     Map<String, TxDetails>? previous;
     var out = fresh;
@@ -1198,8 +1199,8 @@ abstract class CryptoWallet with ChangeNotifier {
 
       if (tx.direction == txDirectionOutgoing &&
           ((wantsRecipients && recipients == null) || (wantsKey && key == null))) {
-        final saved = backup?.outgoingPayment(this, tx.hash);
-        if (saved != null) {
+        for (final saved in [keptPaymentDetails(tx.hash), backup?.outgoingPayment(this, tx.hash)]) {
+          if (saved == null) continue;
           if (wantsRecipients && recipients == null && saved.recipients.isNotEmpty) {
             recipients = saved.recipients;
           }
@@ -1216,6 +1217,21 @@ abstract class CryptoWallet with ChangeNotifier {
 
     return out;
   }
+
+  /// Keeps the destinations and keys of outgoing payments this wallet did not
+  /// build ([payments], by txid; from an imported backup file) in the wallet's
+  /// own storage, so they outlive the import, and [loadTxHistory] gives them to
+  /// each transaction once it is synced. Fills gaps only: what is kept already
+  /// stays. False where this coin keeps none, which is the default.
+  //
+  // TODO(backup): for Monero, also hand imported keys to wallet2 itself with a
+  // `set_tx_key` binding in monero_c (one that does not ask the daemon), so
+  // they are ordinary transaction keys every Monero tool sees.
+  Future<bool> keepPaymentDetails(Map<String, BackedUpPayment> payments) async => false;
+
+  /// What [keepPaymentDetails] kept for [txid], or null.
+  @protected
+  BackedUpPayment? keptPaymentDetails(String txid) => null;
 
   /// Whether an empty [readTxHistory] should replace the cached list rather than
   /// be ignored. False for network-derived histories (an empty sync is usually a

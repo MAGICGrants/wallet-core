@@ -658,15 +658,16 @@ class MetadataBackupService extends ChangeNotifier
   BackedUpPayment? outgoingPayment(CryptoWallet wallet, String txid) {
     if (!isOpen || !_eligible(wallet)) return null;
     final p = _merged.payment(txid);
-    if (p == null) return null;
-    return BackedUpPayment(
-      recipients: [
-        for (final d in p.destinations)
-          if (_addressOf(d) case final address?) TxRecipient(address, d.amount),
-      ],
-      txKey: p.txKeyHex,
-    );
+    return p == null ? null : _backedUp(p);
   }
+
+  BackedUpPayment _backedUp(OutgoingPaymentRecord p) => BackedUpPayment(
+    recipients: [
+      for (final d in p.destinations)
+        if (_addressOf(d) case final address?) TxRecipient(address, d.amount),
+    ],
+    txKey: p.txKeyHex,
+  );
 
   // ----- Sync -----
 
@@ -1401,21 +1402,20 @@ class MetadataBackupService extends ChangeNotifier
     return result;
   }
 
-  /// Before the copy an import went into is deleted (no location on): reloads
-  /// each wallet's history, so the outgoing payments it has already synced take
-  /// their destinations and keys from the import ([outgoingPayment]), and
-  /// writes them to the wallet's cache, which keeps them from then on.
-  /// Payments the wallet has not synced yet are not kept.
-  //
-  // TODO(backup): keep imported payment details whatever the wallet has
-  // synced, and outside the wallet cache, which is disposable display data: a
-  // payment-details store per wallet (txid -> destinations and key, encrypted
-  // with the wallet password like `SeedStore`) that `_withCarriedFields`
-  // consults, and a `set_tx_key` binding in monero_c so an imported key goes
-  // into the Monero wallet file itself.
+  /// Before the copy an import went into is deleted (no location on): hands
+  /// every payment it holds to each wallet to keep in the wallet's own storage
+  /// ([CryptoWallet.keepPaymentDetails]: for Monero, the wallet file), synced
+  /// yet or not, then reloads each wallet's history so the synced ones show
+  /// their destinations and keys at once.
   Future<void> carryImportIntoWallets() async {
+    final payments = {for (final p in _merged.payments) p.txidHex: _backedUp(p)};
     for (final w in _wallets.where(_eligible)) {
       try {
+        if (payments.isNotEmpty && !await w.keepPaymentDetails(payments)) {
+          unawaited(
+            log(LogLevel.warn, '[Backup] ${w.coinSymbol} kept no imported payment details'),
+          );
+        }
         await w.loadTxHistory(persistCount: false);
         await w.persistWalletSnapshot();
         await w.persistCache();

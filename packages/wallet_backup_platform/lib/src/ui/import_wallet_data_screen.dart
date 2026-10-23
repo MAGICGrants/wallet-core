@@ -71,9 +71,9 @@ void scheduleImportWalletData(
 ///   Otherwise a pop-up says so and the user is back on this screen, with
 ///   nothing turned on.
 /// - **From a backup file**: imports a backup file: its contacts go into the
-///   address book, and its payment details into the payments the wallets have
-///   synced. Nothing else is kept, and every automatic location stays off; the
-///   user turns them on in Settings > Backup.
+///   address book, and its payment details into the wallets (for Monero, the
+///   wallet file), synced yet or not. Nothing else is kept, and every automatic
+///   location stays off; the user turns them on in Settings > Backup.
 /// - **Skip**: nothing changes. The backup stays off until turned on in
 ///   Settings > Backup, and a copy Android restored is neither read nor
 ///   deleted.

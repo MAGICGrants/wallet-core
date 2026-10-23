@@ -309,6 +309,20 @@ class FfiMoneroBackend extends MoneroBackend {
   }
 
   @override
+  Future<String> cacheAttribute(NativeHandle wallet, String key) {
+    final w = wallet.id;
+    return Isolate.run(() => monero.Wallet_getCacheAttribute(Pointer.fromAddress(w), key: key));
+  }
+
+  @override
+  Future<bool> setCacheAttribute(NativeHandle wallet, String key, String value) {
+    final w = wallet.id;
+    return Isolate.run(
+      () => monero.Wallet_setCacheAttribute(Pointer.fromAddress(w), key: key, value: value),
+    );
+  }
+
+  @override
   Future<BigInt> balance(NativeHandle wallet, {int accountIndex = 0}) async {
     final w = wallet.id;
     final raw = await Isolate.run(

@@ -626,6 +626,54 @@ void main() {
     }
   });
 
+  test('an import leaves every payment with the wallet, synced yet or not', () async {
+    final a = device('a');
+    await a.open(const PolyseedSeed(raven));
+    a.service.outgoingPaymentSent(
+      a.wallet,
+      txid: txid,
+      accountIndex: 0,
+      fee: BigInt.one,
+      recipients: [TxRecipient(recipient, BigInt.two)],
+      txKey: txKey,
+    );
+    await a.service.idle();
+    final bundle = await a.service.exportBundle();
+
+    // A restored wallet that has not synced the payment yet.
+    final lone = Device(Directory('${tmp.path}/lone'), MemoryLocation('elsewhere'));
+    await lone.open(const PolyseedSeed(raven), restored: true);
+    await lone.service.importBundle(bundle);
+    await lone.service.carryImportIntoWallets();
+    // The copy the import went into goes, as the Backup screens do with no
+    // location on: from here only the wallet has the details.
+    await lone.service.setEnabled(false);
+    expect(lone.wallet.kept[txid]?.txKey, txKey);
+
+    lone.wallet.history = [
+      TxDetails(
+        index: 0,
+        direction: txDirectionOutgoing,
+        hash: txid,
+        amountBaseUnits: BigInt.two,
+        feeBaseUnits: BigInt.one,
+        recipients: const [],
+        accountIndex: 0,
+        subaddrIndexList: const [],
+        timestamp: 1,
+        height: 10,
+        confirmations: 20,
+        key: '',
+      ),
+    ];
+    await lone.wallet.loadTxHistory();
+    expect(lone.wallet.txHistory.single.key, txKey);
+    expect(lone.wallet.txHistory.single.recipients.single.address, recipient);
+
+    await a.service.close();
+    await lone.service.close();
+  });
+
   test('a different file under one of our names is never overwritten, and uploads go on', () async {
     final a = device('a');
     a.setContacts([const Contact(id: 'c1', name: 'One', addresses: {})]);
