@@ -63,8 +63,10 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   not even the local copy or the device state, and no location is read; the
   service only holds the unlocked wallet's keys so it can be turned on without
   unlocking again. Turning it off turns every location off and deletes the
-  local copy and the device state. Deleting the wallet also forgets the
-  switches. It is off by default because anyone
+  local copy and the device state. The local copy is kept only while a
+  location is on: the Backup screens turn the backup off again once the last
+  location goes, and after saving or importing a file with none on. Deleting
+  the wallet also forgets the switches. It is off by default because anyone
   with the seed and a copy can read who the user paid, a cost the user should
   choose.
 - **Only the user deletes a backup.** The one way a location's files are
@@ -75,11 +77,11 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
     names is left as it is).
   - Turning a location off only stops adding. Its files stay, and Android
     backup keeps carrying an on-device location's.
-  - Turning the whole backup off, deleting the copy on this device and
-    deleting the wallet remove only the app's own local copy and device
-    state, never a location's files. That covers a step undone because it
-    did not complete (a cancelled save, a failed import), and a copy Android
-    restored to a location the user never turned on.
+  - Turning the whole backup off (also when the last location is turned
+    off, and after saving or importing a file with none on) and deleting the
+    wallet remove only the app's own local copy and device state, never a
+    location's files, the wallets or the address book. That covers a copy
+    Android restored to a location the user never turned on.
   - A saved backup file is the user's: it is written under a new name (the
     date and time) and never touched again, and importing one only reads it.
 - **Writing.** Each write is one file: a payment, or everything one sync
@@ -117,11 +119,13 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   location has been read, so an unreachable location cannot make an old copy
   look new. Nothing is kept while the backup is off.
 
-  With every location off but the backup on (kept for saving files), the
-  address book does not sync: nothing changed here is recorded, so nothing can
-  travel later, and the next location turned on joins. A saved file carries the
-  address book as it is then, under a device id of its own; importing a file
-  applies it as a join applies the backup.
+  With every location off but the backup on (only for the length of saving
+  or importing a file), the address book does not sync: nothing changed here is
+  recorded, so nothing can travel later, and the next location turned on joins.
+  A saved file carries the address book as it is then, under a device id of its
+  own and a Lamport clock kept in the preferences (`exportLamportPrefKey`), so a
+  newer file's contacts win over an older one's; importing a file applies it as
+  a join applies the backup.
 - **Reading.** On open, on resume, every 5 minutes, and after every change:
   list each location, open anything new, merge, apply, upload what is missing.
 - **Restore.** A new device id, then every enabled location is read. With the
@@ -134,7 +138,13 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   sequence gaps, and payments with two different records.
 - **Export.** `exportBundle` gives every sealed file in one file
   (`u32 length ‖ file`, repeated; no names, no magic) for anywhere else;
-  `importBundle` reads one back.
+  `importBundle` reads one back. With no location on, the copy they use lasts
+  only for that step: turning the backup on records every past payment from
+  the wallets' history, so a saved file is complete, and after an import
+  `carryImportIntoWallets` reloads each wallet's history, so the payments it has
+  already synced take their destinations and keys, which the wallet cache then
+  keeps. Payments a wallet has not synced yet are not kept (see the TODO there:
+  a payment-details store, and `set_tx_key` in monero_c).
 
 ## What a storage location can see
 

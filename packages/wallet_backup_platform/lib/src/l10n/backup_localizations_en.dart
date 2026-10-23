@@ -206,7 +206,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
 
   @override
   String get backupDeleteICloudBody =>
-      'Removes this wallet\'s backup from iCloud. The copy on this device stays, and iCloud gets it again if iCloud backup is on.';
+      'Removes this wallet\'s backup from iCloud. The wallet and address book on this device are not affected.';
 
   @override
   String get backupDeleteAndroid => 'Delete the Android backup copy';
@@ -255,19 +255,6 @@ class BackupLocalizationsEn extends BackupLocalizations {
 
   @override
   String get backupFileDescription => 'Manually save a snapshot anywhere you want.';
-
-  @override
-  String get backupDeleteLocal => 'Delete the copy on this device';
-
-  @override
-  String get backupDeleteLocalTitle => 'Delete the copy on this device?';
-
-  @override
-  String get backupDeleteLocalBody =>
-      'Turns off iCloud and Android backup and deletes the app\'s working copy on this device. The copies in iCloud and Android backup, and saved backup files, stay until you delete them.';
-
-  @override
-  String get backupDeletedLocal => 'Backup on this device deleted';
 
   @override
   String get importTitle => 'Import wallet data';

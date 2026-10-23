@@ -259,6 +259,11 @@ class MetadataBackupService extends ChangeNotifier
   /// Preference keys: `metadataBackup.enabled.<location id>`; off when absent.
   static String enabledKey(String locationId) => 'metadataBackup.enabled.$locationId';
 
+  /// Preference key of the Lamport clock of the last saved file's address
+  /// book ([_addressBookSnapshot]), so a newer file's contacts win over an
+  /// older one's even though no copy is kept between saves.
+  static const exportLamportPrefKey = 'metadataBackup.exportLamport';
+
   final Future<Directory> Function() _localRoot;
 
   /// Where the device state lives. Kept out of phone backups where the app
@@ -369,11 +374,14 @@ class MetadataBackupService extends ChangeNotifier
   /// every past payment and the address book in it. [locations] are turned on in
   /// the same step, so the first sync already reads and writes them; with
   /// [reportRestore] it reports what they held, as after a restore, and starts a
-  /// new device id.
+  /// new device id. The copy is kept only while a location is on: saving or
+  /// importing a file with none on turns it on for that step alone (the
+  /// Backup screens turn it off again).
   ///
   /// Off: turns every location off, and deletes the local copy and the device
   /// state. Every location keeps its files: nothing but [deleteFromLocation]
-  /// deletes them.
+  /// deletes them. Nothing else on the device is touched: the wallets and the
+  /// address book keep what they hold.
   Future<void> setEnabled(
     bool enabled, {
     Iterable<String> locations = const [],
@@ -589,6 +597,7 @@ class MetadataBackupService extends ChangeNotifier
     _on = null;
     _enabled.clear();
     await SharedPreferencesService.remove(enabledPrefKey);
+    await SharedPreferencesService.remove(exportLamportPrefKey);
     for (final c in _locations) {
       await SharedPreferencesService.remove(enabledKey(c.location.id));
     }
@@ -1295,10 +1304,14 @@ class MetadataBackupService extends ChangeNotifier
     if (local == null) return const [];
     final state = _state!;
     final deviceId = randomBytes(16);
-    // Kept, so the next file's snapshot is the newer one.
-    final lamport = max(state.lamport, _merged.maxLamport) + 1;
+    // Kept, so the next file's snapshot is the newer one. Also in the
+    // preferences: with no location on, the device state goes with the copy
+    // once the file is saved.
+    final saved = await SharedPreferencesService.get<int>(exportLamportPrefKey) ?? 0;
+    final lamport = max(max(state.lamport, saved), _merged.maxLamport) + 1;
     state.lamport = lamport;
     await _saveState();
+    await SharedPreferencesService.set<int>(exportLamportPrefKey, lamport);
     final records = <BackupRecord>[
       for (final c in local.values)
         if (_merged.contactVersions[c.id] case final v
@@ -1386,6 +1399,30 @@ class MetadataBackupService extends ChangeNotifier
     _importToApply = true;
     await sync(reportRestore: true);
     return result;
+  }
+
+  /// Before the copy an import went into is deleted (no location on): reloads
+  /// each wallet's history, so the outgoing payments it has already synced take
+  /// their destinations and keys from the import ([outgoingPayment]), and
+  /// writes them to the wallet's cache, which keeps them from then on.
+  /// Payments the wallet has not synced yet are not kept.
+  //
+  // TODO(backup): keep imported payment details whatever the wallet has
+  // synced, and outside the wallet cache, which is disposable display data: a
+  // payment-details store per wallet (txid -> destinations and key, encrypted
+  // with the wallet password like `SeedStore`) that `_withCarriedFields`
+  // consults, and a `set_tx_key` binding in monero_c so an imported key goes
+  // into the Monero wallet file itself.
+  Future<void> carryImportIntoWallets() async {
+    for (final w in _wallets.where(_eligible)) {
+      try {
+        await w.loadTxHistory(persistCount: false);
+        await w.persistWalletSnapshot();
+        await w.persistCache();
+      } catch (e) {
+        unawaited(log(LogLevel.warn, '[Backup] Imported details not kept for ${w.coinSymbol}: $e'));
+      }
+    }
   }
 
   String _requireOpen() {

@@ -48,7 +48,7 @@ class FhseLocalizationsPt extends FhseLocalizations {
 
   @override
   String get securityKeysIntroBody =>
-      'A Advanced Security é uma camada extra de proteção para sua carteira, além do Bloqueio do app. Quando ativada, sua carteira só pode ser aberta com sua chave de segurança e o PIN dela.';
+      'A Advanced Security é uma camada extra de proteção para sua carteira, além do bloqueio do app. Quando ativada, sua carteira só pode ser aberta com sua chave de segurança e o PIN dela.';
 
   @override
   String get securityKeysRequirements =>
@@ -115,11 +115,11 @@ class FhseLocalizationsPt extends FhseLocalizations {
   String get securityKeysLockSection => 'Bloqueio';
 
   @override
-  String get securityKeysFullLockLabel => 'Bloquear totalmente após';
+  String get securityKeysFullLockLabel => 'Bloquear arquivo da carteira após';
 
   @override
   String securityKeysFullLockDescription(String appName) {
-    return 'Depois de todo esse tempo em segundo plano, a $appName bloqueia totalmente a carteira. Você vai precisar de uma chave de segurança para abri-la novamente.';
+    return 'Depois de todo esse tempo em segundo plano, a $appName bloqueia o arquivo da carteira. Você vai precisar de uma chave de segurança para abri-lo novamente.';
   }
 
   @override
@@ -482,11 +482,11 @@ class FhseLocalizationsPt extends FhseLocalizations {
       'Este é o PIN da sua chave de segurança, não a senha do seu Mac.';
 
   @override
-  String get desktopAutoLockLabel => 'Bloquear após';
+  String get desktopAutoLockLabel => 'Bloquear arquivo da carteira após';
 
   @override
   String desktopAutoLockDescription(String appName) {
-    return 'Depois de todo esse tempo sem uso, a $appName bloqueia a carteira. Desbloqueie-a para continuar.';
+    return 'Depois de todo esse tempo sem uso, a $appName bloqueia o arquivo da carteira.';
   }
 
   @override
@@ -524,6 +524,10 @@ class FhseLocalizationsPt extends FhseLocalizations {
       'O Windows vai pedir duas vezes. Em cada uma, insira o PIN da sua chave de segurança e toque na chave.';
 
   @override
+  String get securityKeyWindowsStorageNote =>
+      'O Windows pode dizer que isto vai salvar algo na sua chave, mas essa mensagem genérica não é precisa. Isto não ocupa nenhum espaço de armazenamento na sua chave de segurança.';
+
+  @override
   String get securityKeyWindowsWaiting => 'Aguardando a Segurança do Windows…';
 
   @override
@@ -553,7 +557,7 @@ class FhseLocalizationsPt extends FhseLocalizations {
   String get advancedSecurityContinue => 'Continuar';
 
   @override
-  String get appLockLabel => 'Bloqueio do app';
+  String get appLockLabel => 'Bloquear app após';
 
   @override
   String get appLockImmediately => 'Imediatamente';

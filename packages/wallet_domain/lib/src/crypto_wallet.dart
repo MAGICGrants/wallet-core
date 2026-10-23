@@ -1121,6 +1121,10 @@ abstract class CryptoWallet with ChangeNotifier {
   /// minutes to persist a number that is derivable from the height and the tip.
   /// The cost is that a cold start can show a confirmation count up to one
   /// refresh cycle stale, which the first sync corrects.
+  ///
+  /// Whether a transaction has its recipients and key is included too: those
+  /// can arrive later ([_withCarriedFields], e.g. from an imported backup
+  /// file), and the cache is what keeps them.
   @protected
   String get cachedTxHistoryRevision {
     final parts = StringBuffer()..write(_txHistory.length);
@@ -1130,6 +1134,8 @@ abstract class CryptoWallet with ChangeNotifier {
         ..write(tx.hash)
         ..write(':')
         ..write(tx.height);
+      if (tx.recipients.isNotEmpty) parts.write('r');
+      if (tx.key.isNotEmpty) parts.write('k');
     }
     return parts.toString();
   }

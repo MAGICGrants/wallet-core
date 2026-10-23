@@ -70,9 +70,10 @@ void scheduleImportWalletData(
 ///   found does it turn the backup on, with the location(s) it was found in.
 ///   Otherwise a pop-up says so and the user is back on this screen, with
 ///   nothing turned on.
-/// - **From a backup file**: imports a backup file. The backup is on (it
-///   keeps the imported data on this device) but every automatic location
-///   stays off; the user turns them on in Settings > Backup.
+/// - **From a backup file**: imports a backup file: its contacts go into the
+///   address book, and its payment details into the payments the wallets have
+///   synced. Nothing else is kept, and every automatic location stays off; the
+///   user turns them on in Settings > Backup.
 /// - **Skip**: nothing changes. The backup stays off until turned on in
 ///   Settings > Backup, and a copy Android restored is neither read nor
 ///   deleted.
@@ -158,12 +159,18 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
       _step = _Step.reading;
       _error = null;
     });
-    // On, to keep the imported data on this device; no location is turned on.
+    // On for the import alone: no location is turned on, so once its contacts
+    // are in the address book and its payments in the wallets, nothing of it
+    // is kept here.
     final wasOn = _service.enabled;
     try {
       if (!wasOn) await _service.setEnabled(true);
       final result = await _service.importBundle(bytes);
       final report = _service.lastRestoreReport;
+      if (!wasOn) {
+        await _service.carryImportIntoWallets();
+        await _service.setEnabled(false);
+      }
       if (!mounted) return;
       setState(() {
         _step = _Step.done;

@@ -422,7 +422,7 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
       ),
       _Step.connect => (
         title: widget.enrolling ? i18n.securityKeyConnectTitle : i18n.securityKeyUnlockTitle,
-        body: connectBody,
+        body: _withStorageNote(connectBody, i18n),
       ),
       _Step.pin => (
         title: _known == null
@@ -439,12 +439,18 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
     };
   }
 
+  /// Adding a key on Windows: its dialog says the passkey "will be saved to
+  /// your security key", but the credential is never discoverable, so nothing
+  /// is stored on the key ([WindowsWebAuthnBackend]). Say so up front.
+  String _withStorageNote(String body, FhseLocalizations i18n) =>
+      _system && widget.enrolling ? '$body\n\n${i18n.securityKeyWindowsStorageNote}' : body;
+
   ({String title, String body}) _confirmCopy(FhseLocalizations i18n) {
     if (_system) {
       return (
         title: i18n.securityKeyWindowsPromptTitle,
         body: widget.enrolling
-            ? i18n.securityKeyWindowsPromptEnrollBody
+            ? _withStorageNote(i18n.securityKeyWindowsPromptEnrollBody, i18n)
             : i18n.securityKeyWindowsPromptBody,
       );
     }

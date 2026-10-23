@@ -215,9 +215,10 @@ How each part fits:
 - `lib/security_keys_ui.dart`: the shared screens (Advanced Security, setting
   keys up, unlocking with a key or the recovery phrase), their strings
   (`lib/src/l10n`, `FhseLocalizations`; regenerate with `flutter gen-l10n`
-  here), "Fully lock after" on mobile (`SecurityKeyFullLock`) and "Lock
-  after" on a desktop OS (`DesktopAutoLock`, `DesktopAutoLockTile`), and App
-  Lock's time and Settings row (`AppLockPreferences`, `AppLockTimer`,
+  here), "Lock Wallet File After" (`SecurityKeyFullLock` on mobile, counting
+  time in the background; `DesktopAutoLock`, `DesktopAutoLockTile` on a
+  desktop OS, counting time without use), and App Lock's time and its
+  "Lock App After" Settings row (`AppLockPreferences`, `AppLockTimer`,
   `DesktopAutoLock.appLock`, `AppLockTile`, `showAppLockRecoveryPhrase`). An app
   installs `SecurityKeysUi` with its name, logo, home route and
   `WalletManager`, adds `FhseLocalizations.delegate`, and routes to
@@ -338,7 +339,7 @@ key: set up, unlock, add, set up again, recovery phrase, turn off, delete.
   and the file can then guess a weak typed password quickly; the key and its
   PIN are the real barrier. On a Windows PC
   with a TPM that guessing works only on that PC (the binding above).
-- **"Fully lock after" is measured on two clocks.** The wall clock and a boot
+- **"Lock Wallet File After" is measured on two clocks.** The wall clock and a boot
   clock (`wfhse_boot_ns`: `CLOCK_BOOTTIME` on Android, `CLOCK_MONOTONIC` on
   Apple) that keeps counting while the phone sleeps and cannot be set. Either
   one passing the limit, a wall clock that went backwards, or a boot clock that

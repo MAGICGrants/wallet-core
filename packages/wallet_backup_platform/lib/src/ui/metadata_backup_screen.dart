@@ -15,11 +15,13 @@ import '../setup.dart';
 /// coming soon), and below them the manual backup file, which works at any
 /// time and alongside them.
 ///
-/// Opt-in, with no switch of its own: with every toggle off and no file ever
-/// saved or imported, nothing is kept. Turning a place on, saving a file or
-/// importing one starts the copy on this device (from which files are saved,
-/// and where imported details live). Turning places off keeps that copy;
-/// "Delete the copy on this device" removes it and stops everything.
+/// Opt-in, with no switch of its own. The copy on this device is kept only
+/// while a place is on, since that copy is what syncs: turning the last one off
+/// deletes it (never the places' own copies, the wallets or the address book).
+/// With none on, saving a file builds the backup from the wallets and the
+/// address book and keeps nothing afterwards; importing one applies it to the
+/// address book and to the payments the wallets have synced, and keeps nothing
+/// either.
 class MetadataBackupScreen extends StatefulWidget {
   const MetadataBackupScreen({super.key, this.exportFile, this.pickFile});
 
@@ -50,8 +52,21 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    unawaited(_start());
+  }
+
+  Future<void> _start() async {
     final service = _service;
+    // A copy kept with no place on, as earlier versions did after saving or
+    // importing a file: what it imported goes into the wallets, then it goes.
+    if (service != null &&
+        service.isOpen &&
+        await service.isEnabled() &&
+        !await _anyLocationOn(service)) {
+      await service.carryImportIntoWallets();
+      await service.setEnabled(false);
+    }
+    await _loadSettings();
     if (service != null && service.isOpen) unawaited(service.sync());
   }
 
@@ -71,7 +86,7 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
   }
 
   /// An automatic place on or off. The first one turned on starts the copy on
-  /// this device; turning places off leaves that copy.
+  /// this device; turning the last one off deletes it.
   Future<void> _setLocation(String id, bool value) async {
     final service = _service;
     if (service == null) return;
@@ -82,49 +97,35 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
         await service.setEnabled(true, locations: [id]);
       } else {
         await service.setLocationEnabled(id, value);
+        if (!value && !await _anyLocationOn(service)) await service.setEnabled(false);
       }
       await _loadSettings();
     });
   }
 
-  /// Runs [task] with the copy on this device started, as saving or importing
-  /// a file needs. If it was not running and [task] does not complete (or
-  /// returns false: cancelled, nothing saved), it is stopped again, so a
-  /// cancelled save leaves nothing behind.
-  Future<void> _withLocalCopy(Future<bool> Function() task) async {
-    final service = _service!;
-    final started = !service.enabled;
-    var kept = false;
-    try {
-      if (started) await service.setEnabled(true);
-      kept = await task();
-    } finally {
-      if (started && !kept) await service.setEnabled(false);
-      await _loadSettings();
+  static Future<bool> _anyLocationOn(MetadataBackupService service) async {
+    for (final c in service.locations) {
+      if (await service.isLocationEnabled(c.location.id)) return true;
     }
+    return false;
   }
 
-  /// Deletes the copy on this device, which also turns every place off.
-  Future<void> _deleteLocal() async {
-    final service = _service;
-    if (service == null || _busy) return;
-    final i18n = BackupLocalizations.of(context);
-    final ok = await showConfirmSheet(
-      context: context,
-      icon: Icons.delete_outline,
-      iconBg: BrandColors.errorBg,
-      iconColor: BrandColors.error,
-      title: i18n.backupDeleteLocalTitle,
-      body: i18n.backupDeleteLocalBody,
-      confirmLabel: i18n.backupDeleteConfirm,
-      cancelLabel: i18n.backupCancel,
-    );
-    if (!ok || !mounted) return;
-    await _run((i18n) async {
-      await service.setEnabled(false);
+  /// Runs [task] with the copy on this device started, as saving or importing
+  /// a file needs. With no place on, the copy is deleted again afterwards,
+  /// whatever [task] did: the saved file is the only thing left. An import
+  /// ([imported]) first carries what it brought into the wallets.
+  Future<void> _withLocalCopy(Future<bool> Function() task, {bool imported = false}) async {
+    final service = _service!;
+    try {
+      if (!service.enabled) await service.setEnabled(true);
+      await task();
+    } finally {
+      if (!await _anyLocationOn(service)) {
+        if (imported) await service.carryImportIntoWallets();
+        await service.setEnabled(false);
+      }
       await _loadSettings();
-      if (mounted) showBrandToast(context, i18n.backupDeletedLocal);
-    });
+    }
   }
 
   Future<void> _run(Future<void> Function(BackupLocalizations i18n) task) async {
@@ -156,8 +157,7 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
   Future<void> _import() => _run((i18n) async {
     final bytes = await (widget.pickFile ?? MetadataBackupSetup.pickFile)();
     if (bytes == null) return;
-    // Imported details live only in the copy on this device, so it stays.
-    await _withLocalCopy(() async {
+    await _withLocalCopy(imported: true, () async {
       final result = await _service!.importBundle(bytes);
       if (mounted) {
         showBrandToast(
@@ -415,18 +415,6 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
                 ),
             ],
           ),
-        ),
-      ],
-      if (_on) ...[
-        const SizedBox(height: 18),
-        SettingsGroup(
-          tiles: [
-            SettingsLinkTile(
-              title: i18n.backupDeleteLocal,
-              titleColor: BrandColors.error,
-              onTap: _busy ? () {} : _deleteLocal,
-            ),
-          ],
         ),
       ],
     ];

@@ -47,7 +47,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
 
   @override
   String get securityKeysIntroBody =>
-      'Advanced Security is another layer of protection for your wallet beyond the App Lock. When enabled, your wallet can only be opened with your security key and its PIN.';
+      'Advanced Security is another layer of protection for your wallet beyond locking the app. When enabled, your wallet can only be opened with your security key and its PIN.';
 
   @override
   String get securityKeysRequirements =>
@@ -114,11 +114,11 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysLockSection => 'Lock';
 
   @override
-  String get securityKeysFullLockLabel => 'Fully lock after';
+  String get securityKeysFullLockLabel => 'Lock Wallet File After';
 
   @override
   String securityKeysFullLockDescription(String appName) {
-    return 'After this long in the background, $appName fully locks the wallet. You\'ll need a security key to open it again.';
+    return 'After this long in the background, $appName locks the wallet file. You\'ll need a security key to open it again.';
   }
 
   @override
@@ -475,11 +475,11 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeyPinBodyMac => 'This is your security key\'s PIN, not your Mac\'s password.';
 
   @override
-  String get desktopAutoLockLabel => 'Lock after';
+  String get desktopAutoLockLabel => 'Lock Wallet File After';
 
   @override
   String desktopAutoLockDescription(String appName) {
-    return 'After this long without use, $appName locks the wallet. Unlock it to continue.';
+    return 'After this long without use, $appName locks the wallet file.';
   }
 
   @override
@@ -516,6 +516,10 @@ class FhseLocalizationsEn extends FhseLocalizations {
       'Windows will ask twice. Each time, enter your security key\'s PIN, then touch the key.';
 
   @override
+  String get securityKeyWindowsStorageNote =>
+      'Windows may say that this will save something to your key, but this generic wording is not accurate. This does not take up any storage slots on your security key.';
+
+  @override
   String get securityKeyWindowsWaiting => 'Waiting for Windows Security…';
 
   @override
@@ -545,7 +549,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get advancedSecurityContinue => 'Continue';
 
   @override
-  String get appLockLabel => 'App Lock';
+  String get appLockLabel => 'Lock App After';
 
   @override
   String get appLockImmediately => 'Immediately';

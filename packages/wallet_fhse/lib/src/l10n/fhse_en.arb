@@ -16,7 +16,7 @@
     }
   },
   "securityKeysIntroTitle": "Protect this wallet with a security key",
-  "securityKeysIntroBody": "Advanced Security is another layer of protection for your wallet beyond the App Lock. When enabled, your wallet can only be opened with your security key and its PIN.",
+  "securityKeysIntroBody": "Advanced Security is another layer of protection for your wallet beyond locking the app. When enabled, your wallet can only be opened with your security key and its PIN.",
   "securityKeysRequirements": "Works with most FIDO2 capable hardware security keys over NFC. Over USB, only YubiKeys work for now (on iPhone, with firmware 5.8 or later).",
   "securityKeysSetUpButton": "Set up security keys",
   "securityKeysUnavailable": "Security keys only work with a wallet created or restored in this version of {appName}.",
@@ -43,8 +43,8 @@
   "securityKeysTurnedOff": "Security keys are off",
   "securityKeysTurnedOn": "Security keys are on",
   "securityKeysLockSection": "Lock",
-  "securityKeysFullLockLabel": "Fully lock after",
-  "securityKeysFullLockDescription": "After this long in the background, {appName} fully locks the wallet. You'll need a security key to open it again.",
+  "securityKeysFullLockLabel": "Lock Wallet File After",
+  "securityKeysFullLockDescription": "After this long in the background, {appName} locks the wallet file. You'll need a security key to open it again.",
   "securityKeysMinutes": "{count, plural, =1{1 minute} other{{count} minutes}}",
   "@securityKeysMinutes": {
     "placeholders": {
@@ -264,8 +264,8 @@
   "securityKeysRequirementsMac": "Works with most FIDO2 capable hardware security keys.",
   "securityKeyConnectBodyMac": "Plug your security key into this Mac and touch it when it blinks.",
   "securityKeyPinBodyMac": "This is your security key's PIN, not your Mac's password.",
-  "desktopAutoLockLabel": "Lock after",
-  "desktopAutoLockDescription": "After this long without use, {appName} locks the wallet. Unlock it to continue.",
+  "desktopAutoLockLabel": "Lock Wallet File After",
+  "desktopAutoLockDescription": "After this long without use, {appName} locks the wallet file.",
   "@desktopAutoLockDescription": {
     "placeholders": {
       "appName": {
@@ -283,6 +283,7 @@
   "securityKeyWindowsPromptTitle": "Continue in Windows Security",
   "securityKeyWindowsPromptBody": "Enter your security key's PIN, then touch the key.",
   "securityKeyWindowsPromptEnrollBody": "Windows will ask twice. Each time, enter your security key's PIN, then touch the key.",
+  "securityKeyWindowsStorageNote": "Windows may say that this will save something to your key, but this generic wording is not accurate. This does not take up any storage slots on your security key.",
   "securityKeyWindowsWaiting": "Waiting for Windows Security…",
   "securityKeyUseButton": "Use security key",
   "advancedSecurityAuthReason": "Confirm it's you to open Advanced Security",
@@ -299,7 +300,7 @@
   "advancedSecurityPasswordLabel": "Password",
   "advancedSecurityPasswordWrong": "Incorrect password.",
   "advancedSecurityContinue": "Continue",
-  "appLockLabel": "App Lock",
+  "appLockLabel": "Lock App After",
   "appLockImmediately": "Immediately",
   "appLockDescriptionPhone": "How long {appName} can be in the background before it asks for your face, fingerprint or passcode again.",
   "@appLockDescriptionPhone": {

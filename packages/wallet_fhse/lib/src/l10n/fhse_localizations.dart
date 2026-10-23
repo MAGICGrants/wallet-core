@@ -150,7 +150,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysIntroBody.
   ///
   /// In en, this message translates to:
-  /// **'Advanced Security is another layer of protection for your wallet beyond the App Lock. When enabled, your wallet can only be opened with your security key and its PIN.'**
+  /// **'Advanced Security is another layer of protection for your wallet beyond locking the app. When enabled, your wallet can only be opened with your security key and its PIN.'**
   String get securityKeysIntroBody;
 
   /// No description provided for @securityKeysRequirements.
@@ -270,13 +270,13 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysFullLockLabel.
   ///
   /// In en, this message translates to:
-  /// **'Fully lock after'**
+  /// **'Lock Wallet File After'**
   String get securityKeysFullLockLabel;
 
   /// No description provided for @securityKeysFullLockDescription.
   ///
   /// In en, this message translates to:
-  /// **'After this long in the background, {appName} fully locks the wallet. You\'ll need a security key to open it again.'**
+  /// **'After this long in the background, {appName} locks the wallet file. You\'ll need a security key to open it again.'**
   String securityKeysFullLockDescription(String appName);
 
   /// No description provided for @securityKeysMinutes.
@@ -846,13 +846,13 @@ abstract class FhseLocalizations {
   /// No description provided for @desktopAutoLockLabel.
   ///
   /// In en, this message translates to:
-  /// **'Lock after'**
+  /// **'Lock Wallet File After'**
   String get desktopAutoLockLabel;
 
   /// No description provided for @desktopAutoLockDescription.
   ///
   /// In en, this message translates to:
-  /// **'After this long without use, {appName} locks the wallet. Unlock it to continue.'**
+  /// **'After this long without use, {appName} locks the wallet file.'**
   String desktopAutoLockDescription(String appName);
 
   /// No description provided for @securityKeysRequirementsLinux.
@@ -908,6 +908,12 @@ abstract class FhseLocalizations {
   /// In en, this message translates to:
   /// **'Windows will ask twice. Each time, enter your security key\'s PIN, then touch the key.'**
   String get securityKeyWindowsPromptEnrollBody;
+
+  /// No description provided for @securityKeyWindowsStorageNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Windows may say that this will save something to your key, but this generic wording is not accurate. This does not take up any storage slots on your security key.'**
+  String get securityKeyWindowsStorageNote;
 
   /// No description provided for @securityKeyWindowsWaiting.
   ///
@@ -966,7 +972,7 @@ abstract class FhseLocalizations {
   /// No description provided for @appLockLabel.
   ///
   /// In en, this message translates to:
-  /// **'App Lock'**
+  /// **'Lock App After'**
   String get appLockLabel;
 
   /// No description provided for @appLockImmediately.

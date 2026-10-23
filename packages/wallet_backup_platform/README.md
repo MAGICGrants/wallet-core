@@ -24,18 +24,19 @@ nothing is written anywhere, on the device or off it.
   before the first launch. Turning the location off stops adding files; what
   is there stays, and Android keeps carrying it. So does a copy Android
   restored: nothing reads it while the location is off, and nothing deletes it
-  (not Skip on the import screen, a cancelled save, a failed import, "Delete
-  the copy on this device" or deleting the wallet). Turning Android backup on
+  (not Skip on the import screen, saving or importing a file, turning the
+  backup off or deleting the wallet). Turning Android backup on
   reads it in; only "Delete the Android backup copy", in its card while it is
   off, removes it. No Kotlin.
 - **Everywhere:** saving the whole backup as one file (the share sheet on a
   phone, a save dialog on a desktop OS) and importing one.
 - **The screens:** Settings > Backup (`MetadataBackupScreen`): the automatic
   locations as toggles, and the backup file below them, usable at any time
-  and alongside them. There is no switch of its own: turning a location on,
-  saving a file or importing one starts the copy on this device, and "Delete
-  the copy on this device" stops everything and deletes that copy, leaving
-  iCloud's, Android backup's and every saved file. The only deletes of a
+  and alongside them. There is no switch of its own: the copy on this device
+  is kept only while a location is on, and turning the last one off deletes it,
+  leaving iCloud's, Android backup's, every saved file, the wallets and the
+  address book. With none on, saving a file or importing one uses the copy for
+  that step alone. The only deletes of a
   location's files are its own links, "Delete the iCloud copy" and "Delete the
   Android backup copy", each shown in its card while that location is off. Then "Import wallet data" after
   a restore from the seed (`ImportWalletDataScreen`, shown by
@@ -44,8 +45,9 @@ nothing is written anywhere, on the device or off it.
     anything (`findBackups`). Only if a backup is found is the backup turned on,
     with the location(s) it was found in; otherwise a pop-up says none was
     found and OK returns to the same screen, nothing turned on.
-  - *From a backup file:* imports a backup file. The copy on this device keeps
-    the imported data, but every automatic location stays off.
+  - *From a backup file:* imports a backup file: its contacts go into the
+    address book and its payment details into the payments the wallets have
+    synced. Nothing else is kept, and every automatic location stays off.
   - *Skip:* nothing is kept until turned on in Settings > Backup.
 
   Never shown for a legacy 25-word Monero seed or a polyseed with an offset

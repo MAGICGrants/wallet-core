@@ -525,13 +525,18 @@ void main() {
         },
       );
 
+      // Windows' dialog says the passkey is saved to the key; the flow says
+      // it isn't, before the dialog and while it is up.
+      final storageNote = find.textContaining('does not take up any storage slots');
       expect(find.text('Use security key'), findsOneWidget);
+      expect(storageNote, findsOneWidget);
       await tap(tester, 'Use security key');
       expect(used?.isSystem, isTrue);
       expect(backend.inspected, isFalse, reason: 'nothing is read from the key first');
       expect(find.text("Enter your key's PIN"), findsNothing);
       expect(find.text('Continue in Windows Security'), findsOneWidget);
       expect(find.text('Waiting for Windows Security…'), findsOneWidget);
+      expect(storageNote, findsOneWidget);
 
       result.complete(SecurityKeyRecord(id: 'k1', name: 'YubiKey 1', addedAt: DateTime(2026)));
       await settle(tester);
@@ -544,6 +549,7 @@ void main() {
         enrolling: false,
         useKey: (_, _) async => throw const SecurityKeyException(SecurityKeyFailure.cancelled),
       );
+      expect(find.textContaining('storage slots'), findsNothing, reason: 'unlocking saves nothing');
       await tap(tester, 'Use security key');
       expect(find.text('Try again'), findsOneWidget);
       expect(find.text('Unlock with your security key'), findsOneWidget);

@@ -349,7 +349,7 @@ void main() {
     }
 
     Future<void> pick(WidgetTester tester, String option) async {
-      await tester.tap(find.text('App Lock'));
+      await tester.tap(find.text('Lock App After'));
       await tester.pumpAndSettle();
       await tester.tap(find.text(option).last);
       await tester.pumpAndSettle();

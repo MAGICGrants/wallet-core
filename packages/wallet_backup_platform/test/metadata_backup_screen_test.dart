@@ -45,11 +45,16 @@ void main() {
   late MetadataBackupService service;
   final i18n = lookupBackupLocalizations(const Locale('en'));
 
+  /// The copy on this device (`MetadataBackupSetup`'s local root).
+  Directory localCopy() => Directory('${tmp.path}/metadata_backup_local');
+  Future<bool> isEmptyDir(Directory dir) async => !await dir.exists() || await dir.list().isEmpty;
+
   /// Built and opened outside the fake clock, as the app does at unlock.
   Future<void> openScreen(
     WidgetTester tester, {
     Future<bool> Function()? exportFile,
     Future<Uint8List?> Function()? pickFile,
+    bool enabledBefore = false,
   }) async {
     service = (await tester.runAsync(() async {
       final service = MetadataBackupSetup.install(
@@ -60,6 +65,7 @@ void main() {
         ),
       );
       await service.open(const PolyseedSeed(raven), wallets: const []);
+      if (enabledBefore) await service.setEnabled(true);
       return service;
     }))!;
     await tester.pumpWidget(
@@ -100,7 +106,6 @@ void main() {
     expect(find.text(i18n.backupComingSoon), findsOneWidget);
     expect(find.text(i18n.backupExport), findsOneWidget);
     expect(find.text(i18n.backupImport), findsOneWidget);
-    expect(find.text(i18n.backupDeleteLocal), findsNothing);
 
     await tester.runAsync(service.close);
   });
@@ -141,7 +146,7 @@ void main() {
     await tester.runAsync(service.close);
   });
 
-  testWidgets('Android: a cancelled save, and deleting the copy here, leave the copy it restored', (
+  testWidgets('Android: saving a file, cancelled or not, leaves the copy it restored', (
     tester,
   ) async {
     MetadataBackupSetup.androidForTesting = true;
@@ -159,17 +164,13 @@ void main() {
 
     save = true;
     await tapText(tester, i18n.backupExport);
-    expect(service.enabled, isTrue);
-    await tapText(tester, i18n.backupDeleteLocal);
-    await tester.tap(find.text(i18n.backupDeleteConfirm));
-    await waitIdle(tester);
-    expect(service.enabled, isFalse);
+    expect(service.enabled, isFalse, reason: 'no location on: the saved file is all that is left');
     expect(await tester.runAsync(restored.exists), isTrue, reason: 'Android backup was never on');
 
     await tester.runAsync(service.close);
   });
 
-  testWidgets('Android: turning it off keeps its files; only its delete link removes them', (
+  testWidgets('Android: turning it off keeps its files and deletes only the copy here', (
     tester,
   ) async {
     MetadataBackupSetup.androidForTesting = true;
@@ -194,8 +195,10 @@ void main() {
     expect(
       await tester.runAsync(kept.exists),
       isTrue,
-      reason: 'off stops adding, and deletes nothing',
+      reason: 'off stops adding, and deletes nothing of Android backup',
     );
+    expect(service.enabled, isFalse, reason: 'the last location off: the copy here goes');
+    expect(await tester.runAsync(() => isEmptyDir(localCopy())), isTrue);
     expect(find.text(i18n.backupDeleteAndroid), findsOneWidget);
 
     await tapText(tester, i18n.backupDeleteAndroid);
@@ -220,7 +223,7 @@ void main() {
     );
   });
 
-  testWidgets('saving a file starts the copy on this device, and keeps it', (tester) async {
+  testWidgets('saving a file uses a copy for that step alone', (tester) async {
     var enabledWhileSaving = false;
     await openScreen(
       tester,
@@ -232,8 +235,8 @@ void main() {
 
     await tapText(tester, i18n.backupExport);
     expect(enabledWhileSaving, isTrue);
-    expect(service.enabled, isTrue);
-    expect(find.text(i18n.backupDeleteLocal), findsOneWidget);
+    expect(service.enabled, isFalse, reason: 'the saved file is all that is left');
+    expect(await tester.runAsync(() => isEmptyDir(localCopy())), isTrue);
     expect(find.textContaining(i18n.backupSeedWarningBold, findRichText: true), findsOneWidget);
     expect(find.text(i18n.backupSecurityNote), findsOneWidget);
 
@@ -254,12 +257,11 @@ void main() {
     await tapText(tester, i18n.backupExport);
     expect(enabledWhileSaving, isTrue);
     expect(service.enabled, isFalse);
-    expect(find.text(i18n.backupDeleteLocal), findsNothing);
 
     await tester.runAsync(service.close);
   });
 
-  testWidgets('importing a file keeps the copy its details live in', (tester) async {
+  testWidgets('importing a file applies it to the address book and keeps no copy', (tester) async {
     // A file from an earlier install of the same wallet, with one contact.
     final bundle = (await tester.runAsync(() async {
       final earlier = MetadataBackupService(
@@ -281,25 +283,23 @@ void main() {
     expect(service.enabled, isFalse);
 
     await tapText(tester, i18n.backupImport);
-    expect(service.enabled, isTrue);
-    expect(service.contactCount, 1);
-    expect(find.text(i18n.backupDeleteLocal), findsOneWidget);
-
-    await tester.runAsync(service.close);
-  });
-
-  testWidgets('deleting the copy on this device asks, then stops everything', (tester) async {
-    // On from an earlier saved file.
-    await openScreen(tester, exportFile: () async => true);
-    await tapText(tester, i18n.backupExport);
-    expect(service.enabled, isTrue);
-
-    await tapText(tester, i18n.backupDeleteLocal);
-    expect(find.text(i18n.backupDeleteLocalTitle), findsOneWidget);
-    await tapText(tester, i18n.backupDeleteConfirm);
     expect(service.enabled, isFalse);
-    expect(find.text(i18n.backupDeleteLocal), findsNothing);
+    expect(await tester.runAsync(() => isEmptyDir(localCopy())), isTrue);
+    final contacts = (await tester.runAsync(readEncodedContacts))!;
+    expect(contacts.map((c) => (json.decode(c) as Map<String, dynamic>)['name']), ['Alice']);
 
     await tester.runAsync(service.close);
   });
+
+  testWidgets(
+    'a copy kept with no location on, as earlier versions did, goes on opening',
+    timeout: const Timeout(Duration(seconds: 60)),
+    (tester) async {
+      await openScreen(tester, enabledBefore: true);
+      expect(service.enabled, isFalse);
+      expect(await tester.runAsync(() => isEmptyDir(localCopy())), isTrue);
+
+      await tester.runAsync(service.close);
+    },
+  );
 }

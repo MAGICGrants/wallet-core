@@ -209,7 +209,7 @@ void main() {
     await tester.runAsync(b.service.close);
   });
 
-  testWidgets('from backup file: imports with backup on and every location off', (tester) async {
+  testWidgets('from backup file: imports into the address book and keeps no copy', (tester) async {
     final bundle = (await tester.runAsync(() => earlierInstall(const PolyseedSeed(raven))))!;
     final filesBefore = cloud.folders.values.single.length;
     final b = await restoredInstall(tester);
@@ -219,8 +219,9 @@ void main() {
     await settle(tester, () => shows('Wallet data imported'));
 
     expect(shows('Automatic backups are off'), isTrue);
-    expect(b.names, ['Alice']);
-    expect(b.service.enabled, isTrue);
+    expect(b.names, ['Alice'], reason: 'the contacts stay in the address book');
+    expect(b.service.enabled, isFalse, reason: 'with no location on, nothing of it is kept');
+    expect(await tester.runAsync(() => isEmptyDir(Directory('${tmp.path}/new/local'))), isTrue);
     expect(await tester.runAsync(() => b.service.isLocationEnabled('icloud')), isFalse);
     expect(cloud.folders.values.single, hasLength(filesBefore), reason: 'nothing uploaded');
     await tester.runAsync(b.service.close);

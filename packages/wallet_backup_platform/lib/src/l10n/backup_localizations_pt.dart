@@ -206,7 +206,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
 
   @override
   String get backupDeleteICloudBody =>
-      'Remove do iCloud o backup desta carteira. A cópia neste aparelho continua, e o iCloud a recebe de novo se o backup no iCloud estiver ligado.';
+      'Remove do iCloud o backup desta carteira. A carteira e a agenda de endereços neste aparelho não são afetadas.';
 
   @override
   String get backupDeleteAndroid => 'Apagar a cópia do backup do Android';
@@ -255,19 +255,6 @@ class BackupLocalizationsPt extends BackupLocalizations {
 
   @override
   String get backupFileDescription => 'Salve manualmente uma cópia instantânea onde quiser.';
-
-  @override
-  String get backupDeleteLocal => 'Apagar a cópia neste aparelho';
-
-  @override
-  String get backupDeleteLocalTitle => 'Apagar a cópia neste aparelho?';
-
-  @override
-  String get backupDeleteLocalBody =>
-      'Desativa o iCloud e o backup do Android e apaga a cópia de trabalho do app neste aparelho. As cópias no iCloud e no backup do Android, e os arquivos de backup salvos, ficam até você apagá-los.';
-
-  @override
-  String get backupDeletedLocal => 'Backup neste aparelho apagado';
 
   @override
   String get importTitle => 'Importar dados da carteira';

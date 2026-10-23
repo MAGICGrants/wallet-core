@@ -48,8 +48,9 @@ class MetadataBackupConfig {
 ///   reinstalled), unread while the location is off. Only "Delete the Android
 ///   backup copy" in Settings > Backup removes them; turning the location on
 ///   reads them.
-/// - **Everywhere, once on**: the local copy (`<app dir>/metadata_backup_local/`,
-///   not backed up by Android) and the single-file export.
+/// - **Everywhere**: the local copy (`<app dir>/metadata_backup_local/`, not
+///   backed up by Android), kept only while a location is on, and the
+///   single-file export.
 class MetadataBackupSetup {
   MetadataBackupSetup._();
 

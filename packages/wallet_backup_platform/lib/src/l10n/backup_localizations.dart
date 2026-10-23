@@ -325,7 +325,7 @@ abstract class BackupLocalizations {
   /// No description provided for @backupDeleteICloudBody.
   ///
   /// In en, this message translates to:
-  /// **'Removes this wallet\'s backup from iCloud. The copy on this device stays, and iCloud gets it again if iCloud backup is on.'**
+  /// **'Removes this wallet\'s backup from iCloud. The wallet and address book on this device are not affected.'**
   String get backupDeleteICloudBody;
 
   /// No description provided for @backupDeleteAndroid.
@@ -393,30 +393,6 @@ abstract class BackupLocalizations {
   /// In en, this message translates to:
   /// **'Manually save a snapshot anywhere you want.'**
   String get backupFileDescription;
-
-  /// No description provided for @backupDeleteLocal.
-  ///
-  /// In en, this message translates to:
-  /// **'Delete the copy on this device'**
-  String get backupDeleteLocal;
-
-  /// No description provided for @backupDeleteLocalTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Delete the copy on this device?'**
-  String get backupDeleteLocalTitle;
-
-  /// No description provided for @backupDeleteLocalBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Turns off iCloud and Android backup and deletes the app\'s working copy on this device. The copies in iCloud and Android backup, and saved backup files, stay until you delete them.'**
-  String get backupDeleteLocalBody;
-
-  /// No description provided for @backupDeletedLocal.
-  ///
-  /// In en, this message translates to:
-  /// **'Backup on this device deleted'**
-  String get backupDeletedLocal;
 
   /// No description provided for @importTitle.
   ///
