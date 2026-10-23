@@ -169,6 +169,12 @@ class SecurityKeyService implements SecurityKeyAuthenticator {
   @visibleForTesting
   set backendForTesting(SecurityKeyBackend? backend) => _backend = backend ?? _platformBackend;
 
+  /// The platform channel's backend (Android, iOS, macOS), for a test that
+  /// plays the channel's other end whatever host it runs on: on a Linux host
+  /// the service would otherwise call libfido2 and never reach the channel.
+  @visibleForTesting
+  static SecurityKeyBackend channelBackendForTesting() => _ChannelBackend();
+
   static const rpId = 'fhse:encryption';
 
   /// The channel the mobile and macOS halves answer on. On iOS and macOS the

@@ -99,6 +99,9 @@ void main() {
     );
     calls = [];
     inspectResult = _key();
+    // The channel on every host: CI runs on Linux, where the service would
+    // otherwise talk to libfido2 and these fakes would never be called.
+    SecurityKeyService.instance.backendForTesting = SecurityKeyService.channelBackendForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       _channel,
       (call) async {
@@ -119,6 +122,7 @@ void main() {
   });
 
   tearDown(() {
+    SecurityKeyService.instance.backendForTesting = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       _channel,
       null,
