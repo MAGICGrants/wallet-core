@@ -22,11 +22,20 @@
 //! a denial, and over the record, to be a zone containing the name that was
 //! asked (`denial_signers_enclose`, `secure_txt_answers`). Each test below that
 //! only this check stops says so.
+//!
+//! RFC 6840 §4.1: an NSEC or NSEC3 that a parent zone publishes at a delegation
+//! (NS without SOA), or one at a DNAME, does not deny names below it. hickory
+//! enforces this, and `denies_below_a_cut` checks it again. Without the rule, a
+//! replay of org.'s signed NSEC at example.org. would prove every name under
+//! example.org. absent, since org. contains them all. The delegation tests
+//! assert that hickory itself refuses these, so the wallet's check does not
+//! hide a hickory regression.
 
 use super::secure_txt;
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -229,6 +238,13 @@ struct World {
 /// The honest part of the DNS: root → org → example.org, and root → com →
 /// attacker.com, a domain its owner registered and signed legitimately.
 fn honest_world() -> (World, Zone, Zone) {
+    let (world, _org, example, attacker) = honest_world_with_org();
+    (world, example, attacker)
+}
+
+/// [`honest_world`], also handing back org., for a test that needs its
+/// signature.
+fn honest_world_with_org() -> (World, Zone, Zone, Zone) {
     let root = Zone::new(".");
     let org = Zone::new("org.");
     let example = Zone::new("example.org.");
@@ -245,12 +261,17 @@ fn honest_world() -> (World, Zone, Zone) {
     put(&mut store, vec![com.ds_record()], &root);
     put(&mut store, vec![attacker.dnskey_record()], &attacker);
     put(&mut store, vec![attacker.ds_record()], &com);
-    (World { root, store }, example, attacker)
+    (World { root, store }, org, example, attacker)
 }
 
 /// A loopback DNS-over-TCP server answering from `store`; anything not in it
 /// gets SERVFAIL.
 async fn serve(store: Store) -> u16 {
+    serve_counted(store, Arc::new(AtomicUsize::new(0))).await
+}
+
+/// [`serve`], counting the questions it answers in `count`.
+async fn serve_counted(store: Store, count: Arc<AtomicUsize>) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let store = Arc::new(store);
@@ -258,6 +279,7 @@ async fn serve(store: Store) -> u16 {
         loop {
             let Ok((mut sock, _)) = listener.accept().await else { return };
             let store = store.clone();
+            let count = count.clone();
             tokio::spawn(async move {
                 loop {
                     let mut len = [0u8; 2];
@@ -268,6 +290,7 @@ async fn serve(store: Store) -> u16 {
                     if sock.read_exact(&mut buf).await.is_err() {
                         return;
                     }
+                    count.fetch_add(1, Ordering::SeqCst);
                     let request = Message::from_vec(&buf).unwrap();
                     let query = request.queries[0].clone();
                     let mut response = Message::response(request.metadata.id, OpCode::Query);
@@ -626,4 +649,186 @@ fn refuses_a_wildcard_record_with_no_proof_that_the_name_is_absent() {
     let (mut world, example, _attacker) = honest_world();
     answer(&mut world.store, N, RecordType::TXT, wildcard_at_n(&example), Vec::new());
     assert_refused(lookup(world));
+}
+
+/// org.'s own NSEC at its delegation point example.org.: NS and DS, no SOA,
+/// next name example0.org., signed by org. In canonical order it spans every
+/// name under example.org., and its signer contains all of them.
+fn delegation_nsec(org: &Zone) -> Vec<Record> {
+    let types = [RecordType::NS, RecordType::DS, RecordType::RRSIG, RecordType::NSEC];
+    let nsec = NSEC::new(name("example0.org."), types);
+    signed(vec![Record::from_rdata(name("example.org."), 300, RData::DNSSEC(DNSSECRData::NSEC(nsec)))], org)
+}
+
+/// What a refusal says when it comes from the wallet's own copy of the RFC 6840
+/// §4.1 rule (`denies_below_a_cut`) rather than from hickory.
+const REFUSED_BY_THE_WALLET_AT_A_CUT: &str = "above a zone cut";
+
+/// Asserts that hickory refused `result`, not the wallet's `denies_below_a_cut`,
+/// so the tests using this catch a hickory release that drops RFC 6840 §4.1.
+fn assert_refused_by_hickory(result: Result<Vec<String>, String>) {
+    match result {
+        Err(e) => assert!(!e.contains(REFUSED_BY_THE_WALLET_AT_A_CUT), "only the wallet refused this: {e}"),
+        Ok(records) => panic!("the forged denial was accepted: {records:?}"),
+    }
+}
+
+#[test]
+fn refuses_the_parents_delegation_nsec_as_a_denial_below_the_cut() {
+    // Genuinely signed by org., which contains N, so every signer check the
+    // wallet makes passes. Without RFC 6840 §4.1, replaying this public record
+    // proves any name under example.org. absent.
+    let (mut world, org, _example, _attacker) = honest_world_with_org();
+    nxdomain(&mut world.store, N, RecordType::TXT, delegation_nsec(&org));
+    assert_refused_by_hickory(lookup(world));
+}
+
+#[test]
+fn refuses_the_parents_delegation_nsec_beside_the_parents_soa() {
+    let (mut world, org, _example, _attacker) = honest_world_with_org();
+    let mut authorities = signed(vec![soa("org.")], &org);
+    authorities.extend(delegation_nsec(&org));
+    nxdomain(&mut world.store, N, RecordType::TXT, authorities);
+    assert_refused_by_hickory(lookup(world));
+}
+
+#[test]
+fn refuses_the_parents_delegation_nsec_as_a_denial_of_the_alias() {
+    let (mut world, org, _example, _attacker) = honest_world_with_org();
+    nxdomain(&mut world.store, N1, RecordType::TXT, delegation_nsec(&org));
+    assert_refused_by_hickory(lookup_at(world, N1));
+}
+
+#[test]
+fn refuses_the_parents_delegation_nsec_as_proof_of_a_wildcard_expansion() {
+    // example.org.'s genuine wildcard at N, with org.'s delegation NSEC as the
+    // proof that no closer name exists.
+    let (mut world, org, example, _attacker) = honest_world_with_org();
+    answer(&mut world.store, N, RecordType::TXT, wildcard_at_n(&example), delegation_nsec(&org));
+    assert_refused_by_hickory(lookup(world));
+}
+
+#[test]
+fn control_the_same_nsec_without_ns_is_taken_as_a_denial() {
+    // The same record from org., minus NS, so not a delegation: org. holds N
+    // and may say it is absent. The refusals above are therefore the RFC 6840
+    // §4.1 rule at work, not a malformed record.
+    let (mut world, org, _example, _attacker) = honest_world_with_org();
+    let types = [RecordType::DS, RecordType::RRSIG, RecordType::NSEC];
+    let nsec = NSEC::new(name("example0.org."), types);
+    let record = Record::from_rdata(name("example.org."), 300, RData::DNSSEC(DNSSECRData::NSEC(nsec)));
+    nxdomain(&mut world.store, N, RecordType::TXT, signed(vec![record], &org));
+    assert_eq!(lookup(world), Ok(Vec::new()));
+}
+
+#[test]
+fn a_repeat_lookup_from_the_cache_resolves_the_same() {
+    // The second lookup must come from hickory's cache (no new question) and
+    // still resolve: `secure_txt_answers` needs the Secure mark on the RRSIG
+    // hickory used, so that mark has to survive the cache.
+    let (mut world, example, _attacker) = honest_world();
+    put(&mut world.store, vec![txt(N, HONEST)], &example);
+    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    rt.block_on(async move {
+        let count = Arc::new(AtomicUsize::new(0));
+        let port = serve_counted(world.store, count.clone()).await;
+        let r = resolver(port, &world.root);
+        assert_eq!(secure_txt(N, &r).await, Ok(vec![HONEST.to_string()]));
+        let after_first = count.load(Ordering::SeqCst);
+        assert_eq!(secure_txt(N, &r).await, Ok(vec![HONEST.to_string()]));
+        assert_eq!(count.load(Ordering::SeqCst), after_first, "the second lookup was not served from the cache");
+    });
+}
+
+/// The base32hex owner label NSEC3 writes for `hash`.
+fn hashed_label(hash: &[u8]) -> String {
+    let encoded = NSEC3::new(Nsec3HashAlgorithm::SHA1, false, 0, Vec::new(), hash.to_vec(), []);
+    encoded.next_hashed_owner_name_base32().unwrap().to_string()
+}
+
+/// `hash` one up (`delta` > 0) or one down, as a big-endian number of the same
+/// width.
+fn offset(hash: &[u8], delta: i8) -> Vec<u8> {
+    let mut out = hash.to_vec();
+    for byte in out.iter_mut().rev() {
+        let (value, carry) = if delta > 0 { byte.overflowing_add(1) } else { byte.overflowing_sub(1) };
+        *byte = value;
+        if !carry {
+            break;
+        }
+    }
+    out
+}
+
+/// An NSEC3 in `zone`, signed by `signer`, whose hashed owner is `owner_hash`
+/// and that lists `types`.
+fn nsec3_at(owner_hash: &[u8], next_hash: Vec<u8>, zone: &str, types: &[RecordType], signer: &Zone) -> Vec<Record> {
+    let nsec3 = NSEC3::new(Nsec3HashAlgorithm::SHA1, false, 0, Vec::new(), next_hash, types.iter().copied());
+    let owner = name(&format!("{}.{zone}", hashed_label(owner_hash)));
+    signed(vec![Record::from_rdata(owner, 300, RData::DNSSEC(DNSSECRData::NSEC3(nsec3)))], signer)
+}
+
+fn nsec3_hash(n: &str) -> Vec<u8> {
+    Nsec3HashAlgorithm::SHA1.hash(&[], &name(n), 0).unwrap().as_ref().to_vec()
+}
+
+/// An NSEC3 in `zone` whose hash interval covers only the hash of `n`, proving
+/// `n` absent.
+fn covering_nsec3(n: &str, zone: &str, signer: &Zone) -> Vec<Record> {
+    let hash = nsec3_hash(n);
+    nsec3_at(&offset(&hash, -1), offset(&hash, 1), zone, &[RecordType::A, RecordType::RRSIG], signer)
+}
+
+/// org.'s NSEC3 closest-encloser proof that a name under example.org. does not
+/// exist: example.org. is the closest encloser, listing `encloser_types`, and
+/// `next_closer` and the wildcard at example.org. are covered.
+fn org_nsec3_denial(org: &Zone, next_closer: &str, encloser_types: &[RecordType]) -> Vec<Record> {
+    let encloser = nsec3_hash("example.org.");
+    let mut authorities = signed(vec![soa("org.")], org);
+    authorities.extend(nsec3_at(&encloser, offset(&encloser, 1), "org.", encloser_types, org));
+    authorities.extend(covering_nsec3(next_closer, "org.", org));
+    authorities.extend(covering_nsec3("*.example.org.", "org.", org));
+    authorities
+}
+
+const NSEC3_DELEGATION: [RecordType; 3] = [RecordType::NS, RecordType::DS, RecordType::RRSIG];
+
+#[test]
+fn refuses_the_parents_delegation_nsec3_as_a_closest_encloser() {
+    // The NSEC3 form: org.'s hashed record for its delegation of example.org.,
+    // offered as the closest encloser of N (RFC 5155 §8.3, RFC 6840 §4.1).
+    let (mut world, org, _example, _attacker) = honest_world_with_org();
+    let authorities = org_nsec3_denial(&org, "donate.example.org.", &NSEC3_DELEGATION);
+    nxdomain(&mut world.store, N, RecordType::TXT, authorities);
+    assert_refused_by_hickory(lookup(world));
+}
+
+#[test]
+fn refuses_the_parents_delegation_nsec3_as_a_denial_of_the_alias() {
+    let (mut world, org, _example, _attacker) = honest_world_with_org();
+    let authorities = org_nsec3_denial(&org, N1, &NSEC3_DELEGATION);
+    nxdomain(&mut world.store, N1, RecordType::TXT, authorities);
+    assert_refused_by_hickory(lookup_at(world, N1));
+}
+
+#[test]
+fn refuses_the_parents_delegation_nsec3_at_the_cut_as_a_denial_of_its_txt() {
+    // donate.example.org. delegated by example.org.: the parent's NSEC3 at the
+    // cut proves only that there is no DS there, not that there is no TXT.
+    let (mut world, _org, example, _attacker) = honest_world_with_org();
+    let at_cut = nsec3_hash(N1);
+    let mut authorities = signed(vec![soa("example.org.")], &example);
+    authorities.extend(nsec3_at(&at_cut, offset(&at_cut, 1), "example.org.", &NSEC3_DELEGATION, &example));
+    deny(&mut world.store, N1, RecordType::TXT, authorities);
+    assert_refused_by_hickory(lookup_at(world, N1));
+}
+
+#[test]
+fn control_the_same_nsec3_without_ns_is_taken_as_a_denial() {
+    // Without NS, example.org. is an ordinary name in org., which may then
+    // prove N absent: the refusals above are the rule at work.
+    let (mut world, org, _example, _attacker) = honest_world_with_org();
+    let authorities = org_nsec3_denial(&org, "donate.example.org.", &[RecordType::DS, RecordType::RRSIG]);
+    nxdomain(&mut world.store, N, RecordType::TXT, authorities);
+    assert_eq!(lookup(world), Ok(Vec::new()));
 }

@@ -30,9 +30,9 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use hickory_proto::dnssec::rdata::RRSIG;
+use hickory_proto::dnssec::rdata::{DNSSECRData, NSEC3, RRSIG};
 use hickory_proto::dnssec::Proof;
-use hickory_proto::rr::{Name, RData, Record, RecordType};
+use hickory_proto::rr::{Name, RData, Record, RecordType, RecordTypeSet};
 use hickory_resolver::config::{NameServerConfig, ResolverConfig, ResolverOpts};
 use hickory_resolver::net::runtime::iocompat::AsyncIoTokioAsStd;
 use hickory_resolver::net::runtime::{RuntimeProvider, TokioHandle, TokioTime};
@@ -589,6 +589,11 @@ fn denial_is_proven(name: &Name, authorities: &[Record]) -> bool {
 /// `verify_rrsets` pushes every RRSIG back into the records it returns and marks
 /// the one it used, and `NoRecordsFound` and `Lookup` both carry the
 /// post-validation authority section, through the response cache too.)
+///
+/// Finally, no Secure NSEC/NSEC3 may come from the parent side of a zone cut at
+/// or above `name` ([`denies_below_a_cut`]). Such a record passes the signer
+/// checks above, because the parent contains `name`, but the parent has no
+/// authority below the cut.
 fn denial_signers_enclose(name: &Name, section: &[Record]) -> Result<(), String> {
     for record in section {
         let Some(rrsig) = record.try_borrow::<RRSIG>() else { continue };
@@ -629,7 +634,70 @@ fn denial_signers_enclose(name: &Name, section: &[Record]) -> Result<(), String>
             name.to_ascii()
         ));
     }
+
+    if section.iter().any(|record| record.proof == Proof::Secure && denies_below_a_cut(name, record)) {
+        return Err(format!(
+            "a denial of existence in the answer for {} was made above a zone cut that \
+             contains it, by a zone that does not answer for it",
+            name.to_ascii()
+        ));
+    }
     Ok(())
+}
+
+/// Whether `record` is an NSEC or NSEC3 that RFC 6840 §4.1 forbids as a denial
+/// of anything at `name`: one made by the parent at a zone cut at or above
+/// `name` (NS without SOA), or one at a DNAME strictly above it.
+///
+/// hickory 0.26.3 enforces this rule too. The wallet's other checks would not
+/// catch a violation: a TLD's NSEC at the delegation of `example.org.` is
+/// validly signed by a zone that contains every name under it, and its next
+/// name spans them all. Checking here means a hickory that lost the rule fails
+/// closed.
+///
+/// Honest answers are unaffected. A parent has no authority below a cut, so an
+/// honest denial of a TXT record comes from the child zone. The parent does
+/// answer DS queries at the cut, but the wallet never sends one. A DNAME owner
+/// can hold other records, so a DNAME at `name` itself is allowed.
+fn denies_below_a_cut(name: &Name, record: &Record) -> bool {
+    let forbidden = |owner: &Name, types: &RecordTypeSet| {
+        owner.zone_of(name)
+            && ((types.contains(RecordType::NS) && !types.contains(RecordType::SOA))
+                || (types.contains(RecordType::DNAME) && owner != name))
+    };
+    match &record.data {
+        RData::DNSSEC(DNSSECRData::NSEC(nsec)) => forbidden(&record.name, nsec.type_set()),
+        RData::DNSSEC(DNSSECRData::NSEC3(nsec3)) => {
+            if !nsec3.is_ancestor_delegation() {
+                return false;
+            }
+            // An NSEC3 owner is a hash, so the name it stands for is found by
+            // hashing `name` and its ancestors inside the zone, until one matches.
+            let zone = record.name.base_name();
+            let mut candidate = name.clone();
+            while zone.zone_of(&candidate) {
+                if hashed_owner(nsec3, &candidate, &zone).as_ref() == Some(&record.name) {
+                    return forbidden(&candidate, nsec3.type_set());
+                }
+                if candidate.is_root() {
+                    break;
+                }
+                candidate = candidate.base_name();
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+/// The owner name an NSEC3 with `nsec3`'s parameters would have for `name` in
+/// `zone`.
+fn hashed_owner(nsec3: &NSEC3, name: &Name, zone: &Name) -> Option<Name> {
+    let hash = nsec3.hash_algorithm().hash(nsec3.salt(), name, nsec3.iterations()).ok()?;
+    // NSEC3 writes its next hashed owner name the way an owner label is written,
+    // so this borrows that encoding instead of repeating it.
+    let encoded = NSEC3::new(nsec3.hash_algorithm(), false, 0, Vec::new(), hash.as_ref().to_vec(), []);
+    zone.prepend_label(encoded.next_hashed_owner_name_base32()?).ok()
 }
 
 /// The TXT records in `answers` that are an answer to the question asked about
@@ -656,7 +724,13 @@ fn denial_signers_enclose(name: &Name, section: &[Record]) -> Result<(), String>
 /// RRset was made from inside a zone that contains `name`. hickory 0.26.3 makes
 /// the last check too, by skipping such an RRSIG; it is made again here so the
 /// wallet does not depend on which signature hickory picks, and so that a
-/// hickory that dropped the rule again would fail here instead of resolving.
+/// hickory that dropped the rule for the last signature would fail here instead
+/// of resolving. The same rule on the chain above it (the DS links) is hickory's
+/// alone; the chain tests pin it.
+///
+/// And, as [`denial_signers_enclose`] requires of a denial, the RRset must
+/// arrive with the RRSIG hickory verified it with, which it marks Secure:
+/// counting any RRSIG would let an unmarked one stand in for a missing one.
 fn secure_txt_answers(name: &Name, answers: &[Record]) -> Result<Vec<String>, String> {
     // `zone_of` is ancestor-or-equal, which is as close to §5.3.1 as a stub can
     // get: the zone cut is in the SOA, and this answer need not carry one. It
@@ -739,6 +813,21 @@ fn secure_txt_answers(name: &Name, answers: &[Record]) -> Result<Vec<String>, St
             name.to_ascii()
         ));
     }
+    // As denial_signers_enclose already does for denials: require the RRSIG that
+    // hickory marked Secure, the one it verified with, not just any RRSIG.
+    let proved = answers.iter().any(|record| {
+        record.proof == Proof::Secure
+            && &record.name == name
+            && record
+                .try_borrow::<RRSIG>()
+                .is_some_and(|rrsig| rrsig.data().input().type_covered == RecordType::TXT)
+    });
+    if !proved {
+        return Err(format!(
+            "TXT records at {} arrived without the signature that proved them",
+            name.to_ascii()
+        ));
+    }
     Ok(records)
 }
 
@@ -807,8 +896,8 @@ mod tests {
     use std::ptr;
     use std::time::{Duration, UNIX_EPOCH};
 
-    use hickory_proto::dnssec::rdata::{DNSSECRData, SigInput, NSEC, RRSIG};
-    use hickory_proto::dnssec::{Algorithm, Proof};
+    use hickory_proto::dnssec::rdata::{DNSSECRData, SigInput, NSEC, NSEC3, RRSIG};
+    use hickory_proto::dnssec::{Algorithm, Nsec3HashAlgorithm, Proof};
     use hickory_proto::rr::rdata::{TXT, SOA};
     use hickory_proto::rr::{Name, RData, Record, RecordType, SerialNumber};
 
@@ -933,6 +1022,17 @@ mod tests {
         // silently passes on every answer. hickory always returns them, so this
         // cannot be built end to end.
         let answers = [txt(ALIAS, "oa_version=2; network=xmr; address=888real;", Proof::Secure)];
+        assert!(secure_txt_answers(&name(ALIAS), &answers).is_err());
+    }
+
+    #[test]
+    fn refuses_a_record_whose_only_signature_hickory_did_not_mark() {
+        // hickory marks Secure only the RRSIG it verified with. An answer whose
+        // only RRSIG is unmarked means the one that counted is missing.
+        let answers = [
+            txt(ALIAS, "oa_version=2; network=xmr; address=888forged;", Proof::Secure),
+            unproven_rrsig(ALIAS, "example.org."),
+        ];
         assert!(secure_txt_answers(&name(ALIAS), &answers).is_err());
     }
 
@@ -1078,6 +1178,76 @@ mod tests {
             rrsig("donate.example.org.", "example.org."),
         ];
         assert!(!denial_is_proven(&name(ALIAS), &answers));
+    }
+
+    /// An NSEC at `owner` listing `types`, proved Secure, with the signature by
+    /// `signer` that proved it.
+    fn signed_nsec(owner: &str, signer: &str, types: &[RecordType]) -> Vec<Record> {
+        let data = NSEC::new(name("zz.example.org."), types.iter().copied());
+        let mut record = Record::from_rdata(name(owner), 300, RData::DNSSEC(DNSSECRData::NSEC(data)));
+        record.proof = Proof::Secure;
+        vec![record, nsec_rrsig(owner, signer)]
+    }
+
+    /// An NSEC3 in `zone` standing for `owner` and listing `types`, proved
+    /// Secure, with the signature by `zone` that proved it.
+    fn signed_nsec3(owner: &str, zone: &str, types: &[RecordType]) -> Vec<Record> {
+        let hash = Nsec3HashAlgorithm::SHA1.hash(&[], &name(owner), 0).unwrap();
+        let data = NSEC3::new(Nsec3HashAlgorithm::SHA1, false, 0, Vec::new(), hash.as_ref().to_vec(), types.iter().copied());
+        // The next hashed owner is this record's own hash, so its encoding is
+        // the owner label.
+        let hashed = format!("{}.{zone}", data.next_hashed_owner_name_base32().unwrap());
+        let mut record = Record::from_rdata(name(&hashed), 300, RData::DNSSEC(DNSSECRData::NSEC3(data)));
+        record.proof = Proof::Secure;
+        let mut rrsig = rrsig_covering(&hashed, zone, RecordType::NSEC3);
+        rrsig.proof = Proof::Secure;
+        vec![record, rrsig]
+    }
+
+    const DELEGATION: [RecordType; 4] = [RecordType::NS, RecordType::DS, RecordType::RRSIG, RecordType::NSEC];
+
+    #[test]
+    fn a_parents_nsec_at_a_cut_above_the_name_is_not_proven_absence() {
+        // org.'s NSEC at its delegation of example.org.: signed by a zone that
+        // contains ALIAS, so only the RFC 6840 §4.1 rule refuses it. hickory
+        // 0.26.3 refuses it first; this is the wallet's own copy.
+        assert!(!denial_is_proven(&name(ALIAS), &signed_nsec("example.org.", "org.", &DELEGATION)));
+        // At the cut itself the parent answers only for DS.
+        let alias = name("donate.example.org.");
+        assert!(!denial_is_proven(&alias, &signed_nsec("donate.example.org.", "example.org.", &DELEGATION)));
+        // Nothing exists below a DNAME.
+        let dname = [RecordType::DNAME, RecordType::RRSIG, RecordType::NSEC];
+        assert!(!denial_is_proven(&name(ALIAS), &signed_nsec("donate.example.org.", "example.org.", &dname)));
+    }
+
+    #[test]
+    fn an_apex_a_dname_at_the_name_or_an_unrelated_cut_is_proven_absence() {
+        // NS with SOA is the zone's own apex, not its parent's side of the cut.
+        let apex = [RecordType::NS, RecordType::SOA, RecordType::RRSIG, RecordType::NSEC, RecordType::DNSKEY];
+        assert!(denial_is_proven(&name(ALIAS), &signed_nsec("example.org.", "example.org.", &apex)));
+        // A DNAME owner can hold other data, so it can say it has no TXT.
+        let dname = [RecordType::DNAME, RecordType::RRSIG, RecordType::NSEC];
+        let alias = name("donate.example.org.");
+        assert!(denial_is_proven(&alias, &signed_nsec("donate.example.org.", "example.org.", &dname)));
+        // A cut beside the name, not above it.
+        assert!(denial_is_proven(&name(ALIAS), &signed_nsec("a.example.org.", "example.org.", &DELEGATION)));
+    }
+
+    #[test]
+    fn a_parents_nsec3_at_a_cut_above_the_name_is_not_proven_absence() {
+        // The NSEC3 form, where the owner is a hash: org.'s record for its
+        // delegation of example.org., which a closest-encloser proof for ALIAS
+        // would use.
+        let delegation = [RecordType::NS, RecordType::DS, RecordType::RRSIG];
+        assert!(!denial_is_proven(&name(ALIAS), &signed_nsec3("example.org.", "org.", &delegation)));
+        let alias = name("donate.example.org.");
+        assert!(!denial_is_proven(&alias, &signed_nsec3("donate.example.org.", "example.org.", &delegation)));
+
+        // Without NS it is an ordinary name; and a cut beside the name is
+        // nothing to do with it.
+        let plain = [RecordType::DS, RecordType::RRSIG];
+        assert!(denial_is_proven(&name(ALIAS), &signed_nsec3("example.org.", "org.", &plain)));
+        assert!(denial_is_proven(&name(ALIAS), &signed_nsec3("a.example.org.", "example.org.", &delegation)));
     }
 
     #[test]
