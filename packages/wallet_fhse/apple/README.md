@@ -1,13 +1,17 @@
-# Swift half of the security-key channel (iOS and macOS)
+# Swift the apps compile in (iOS and macOS)
 
-Also `PrivacyCover.swift` (iOS): App Lock's privacy cover, the launch screen
-over the app whenever its scene is not active, installed from each app's
-AppDelegate (not on a Mac running the iOS build).
+One copy serves both apps:
 
-`SecurityKeyOperations.swift` talks CTAP2 to the key through YubiKit Swift;
-`SecurityKeyChannel.swift` maps it to the method channel that
-`lib/src/security_key_service.dart` calls. One copy serves both apps on both
-platforms.
+- The Swift half of the security-key channel (iOS and macOS).
+  `SecurityKeyOperations.swift` talks CTAP2 to the key through YubiKit Swift;
+  `SecurityKeyChannel.swift` maps it to the method channel that
+  `lib/src/security_key_service.dart` calls.
+- `PrivacyCover.swift` (iOS): App Lock's privacy cover, the launch screen over
+  the app whenever its scene is not active, installed from each app's
+  AppDelegate (not on a Mac running the iOS build).
+- `SecureScreen.swift` (iOS): keeps the window out of screenshots and screen
+  recordings while `wallet_infra`'s `SecureScreenMixin` asks for it. Each app's
+  AppDelegate answers the `org.magicgrants.wallet/secure_screen` channel with it.
 
 They are not part of this plugin's pods: YubiKit Swift is a Swift package, and
 a CocoaPods pod cannot depend on one. Each app adds YubiKit Swift to its Runner

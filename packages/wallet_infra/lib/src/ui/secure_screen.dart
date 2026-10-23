@@ -1,19 +1,30 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:screen_protector/screen_protector.dart';
 
+import '../logging.dart';
 import 'host_platform.dart';
 
-/// Blocks screenshots and screen recording (Android `FLAG_SECURE`, iOS) and
-/// covers the app with a blur when it is backgrounded (iOS resign-active),
-/// for as long as the screen is mounted.
+/// Blocks screenshots and screen recording for as long as the screen is
+/// mounted: Android `FLAG_SECURE`; on iOS the window is drawn inside a secure
+/// text field's canvas, which iOS leaves out of screenshots, recordings and
+/// mirroring.
 ///
 /// Use on anything that displays a secret: seed, private keys, LWS view key.
 /// The display-side counterpart to `Redact`; the same value
-/// that must not reach a log should not reach the app switcher's screenshot.
+/// that must not reach a log should not reach a screenshot. The app switcher's
+/// snapshot is covered on every screen, not just these: Android 13+ via
+/// `setRecentsScreenshotEnabled(false)`, iOS via wallet_fhse's `PrivacyCover`.
 mixin SecureScreenMixin<T extends StatefulWidget> on State<T> {
-  // Mobile-only plugin, and not enforced for the iOS build on a Mac. The mount
+  /// Fixed, app-neutral channel name. Each app registers the handler itself
+  /// (MainActivity, AppDelegate), as for `SecureClipboard`.
+  static const channelName = 'org.magicgrants.wallet/secure_screen';
+
+  static const _channel = MethodChannel(channelName);
+
+  // Mobile only, and not enforced for the iOS build on a Mac. The mount
   // counter is still kept everywhere so the ref-count stays valid.
   @visibleForTesting
   static bool? debugForceProtectablePlatform;
@@ -28,10 +39,7 @@ mixin SecureScreenMixin<T extends StatefulWidget> on State<T> {
   @override
   void initState() {
     super.initState();
-    if (_mounted++ == 0 && _supported) {
-      ScreenProtector.preventScreenshotOn();
-      ScreenProtector.protectDataLeakageWithBlur();
-    }
+    if (_mounted++ == 0 && _supported) unawaited(_setSecure(true));
   }
 
   @override
@@ -39,11 +47,17 @@ mixin SecureScreenMixin<T extends StatefulWidget> on State<T> {
     // Clamped: a dispose without a matching initState would otherwise drive the
     // count negative and leave protection stuck on for the process.
     _mounted = _mounted > 0 ? _mounted - 1 : 0;
-    if (_mounted == 0 && _supported) {
-      ScreenProtector.preventScreenshotOff();
-      ScreenProtector.protectDataLeakageWithBlurOff();
-    }
+    if (_mounted == 0 && _supported) unawaited(_setSecure(false));
     super.dispose();
+  }
+
+  static Future<void> _setSecure(bool secure) async {
+    try {
+      await _channel.invokeMethod<void>('setSecure', {'secure': secure});
+    } catch (e) {
+      // An app build without the handler. Nothing to fall back to.
+      log(LogLevel.warn, 'secure screen channel failed: $e');
+    }
   }
 
   /// Test-only: the number of protected screens currently mounted.

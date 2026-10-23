@@ -61,17 +61,17 @@ void main() {
     expect(SecureScreenMixin.mountedProtectedScreens, 0);
   });
 
-  group('plugin engagement by platform', () {
-    const channel = MethodChannel('screen_protector');
-    late List<String> calls;
+  group('channel engagement by platform', () {
+    const channel = MethodChannel(SecureScreenMixin.channelName);
+    late List<Object?> calls;
 
     setUp(() {
-      calls = <String>[];
+      calls = <Object?>[];
       SecureScreenMixin.debugForceProtectablePlatform = true;
       TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(
         channel,
         (call) async {
-          calls.add(call.method);
+          calls.add('${call.method} ${call.arguments}');
           return null;
         },
       );
@@ -86,19 +86,36 @@ void main() {
       );
     });
 
-    testWidgets('arms the plugin on a supported mobile platform', (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: _Protected()));
+    testWidgets('turns protection on for the first screen and off after the last', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: Column(children: [_Protected(), _Protected()])),
+      );
       await tester.pump();
-      expect(SecureScreenMixin.mountedProtectedScreens, 1);
-      expect(calls, containsAll(<String>['preventScreenshotOn', 'protectDataLeakageWithBlur']));
+      expect(SecureScreenMixin.mountedProtectedScreens, 2);
+      expect(calls, ['setSecure {secure: true}']);
+
+      await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+      await tester.pump();
+      expect(calls, ['setSecure {secure: true}', 'setSecure {secure: false}']);
     });
 
-    testWidgets('does not arm the plugin when the iOS build runs on a Mac', (tester) async {
+    testWidgets('does not call the channel when the iOS build runs on a Mac', (tester) async {
       HostPlatform.iosAppOnMacForTesting = true;
       await tester.pumpWidget(const MaterialApp(home: _Protected()));
       await tester.pump();
       expect(SecureScreenMixin.mountedProtectedScreens, 1);
       expect(calls, isEmpty);
+    });
+
+    testWidgets('a host without the handler does not break the screen', (tester) async {
+      TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      );
+      await tester.pumpWidget(const MaterialApp(home: _Protected()));
+      await tester.pump();
+      expect(SecureScreenMixin.mountedProtectedScreens, 1);
+      expect(tester.takeException(), isNull);
     });
   });
 }

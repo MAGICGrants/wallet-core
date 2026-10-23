@@ -136,7 +136,7 @@ you need depends on the packages you take:
 | `bip39` at the `cypherstack/stack-bip39` SHA | any coin package or `wallet_domain` |
 | `blockchain_utils` at the `cake-tech` SHA | `wallet_bitcoin`, `wallet_ethereum` or `wallet_monero` |
 | `web3dart` at the `cake-tech` SHA | `wallet_ethereum` |
-| `intl: any` | you also use `flutter_localizations` |
+| `intl: 0.20.3` | `wallet_bitcoin` (its `bitcoin_base` asks for `intl: ^0.19.0`, which it never imports) |
 
 Copy the values from the root `pubspec.yaml`.
 
@@ -146,7 +146,9 @@ Everything is pinned to a commit to make builds verifiable.
 
 - `monero_c`: `magicgrants/monero_c@757bf8e`, a fork carrying
   `Wallet_estimateTransactionFee`.
-- `tor_ffi_plugin`: `cypherstack/tor@e30ed0d` (tag `native-0.2.0`).
+- `tor_ffi_plugin`: `MAGICGrants/tor@72e455f`, a fork of `cypherstack/tor`
+  `native-0.2.0` whose build hook sets a fixed `SOURCE_DATE_EPOCH` and remaps
+  the cargo home, so the Tor library is reproducible.
 - `bip39`: `cypherstack/stack-bip39@0cd6d54`, which fixes an entropy bug
   upstream still has.
 
