@@ -37,10 +37,8 @@ NativeTxInfo _sent(String hash) => NativeTxInfo(
 
 final _paid = '4${'p' * 94}';
 
-BackedUpPayment _imported({String key = 'imported-key', String? to}) => BackedUpPayment(
-  recipients: [TxRecipient(to ?? _paid, BigInt.from(1000000000000))],
-  txKey: key,
-);
+BackedUpPayment _imported({String key = 'imported-key', String? to}) =>
+    BackedUpPayment(recipients: [TxRecipient(to ?? _paid, BigInt.from(1000000000000))], txKey: key);
 
 void main() {
   late Directory tmp;
