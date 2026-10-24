@@ -1,6 +1,5 @@
-// The Android Gradle Plugin builds the native code with the Android NDK, from
-// the CMake build shared with host builds (../src/CMakeLists.txt). The Kotlin
-// half is the security key channel (YubiKit, src/main/kotlin).
+// The security key channel (YubiKit, src/main/kotlin). The C library is
+// fhse_native's, which builds it with the NDK.
 
 group = "org.magicgrants.wallet_fhse"
 version = "1.0"
@@ -37,15 +36,6 @@ android {
     }
 
     compileSdk = 36
-
-    // The NDK the app's android/app/build.gradle declares.
-    ndkVersion = android.ndkVersion
-
-    externalNativeBuild {
-        cmake {
-            path = "../src/CMakeLists.txt"
-        }
-    }
 
     sourceSets {
         main.java.srcDirs += "src/main/kotlin"

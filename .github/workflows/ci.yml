@@ -89,13 +89,12 @@ jobs:
           REQUIRE_FIXTURE_CORPUS: '1'
         run: flutter test --no-pub
 
-      # The real native library, built for the host from its vendored sources
-      # (FHSE, libsodium, libcbor): the tests load it rather than a stand-in.
-      - name: Build wallet_fhse for the host
+      # The real native library: fhse_native's sources (FHSE, libsodium,
+      # libcbor) at the commit pub resolved, built for the host. The tests load
+      # it rather than a stand-in.
+      - name: Build fhse_native for the host
         working-directory: packages/wallet_fhse
-        run: |
-          cmake -S src -B build/host -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/host -j4
+        run: dart run tool/build_host_library.dart
 
       # REQUIRE_FHSE_LIBRARY=1: a missing build fails the tests instead of
       # skipping them. The libfido2 tests still skip without libfido2 installed;

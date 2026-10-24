@@ -1,8 +1,8 @@
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+import 'package:fhse_native/fhse_native.dart';
 
 /// An FHSE operation failed. [code] is FHSE's `enum fhse_error` value, or one
 /// of wfhse.h's own codes above it.
@@ -48,19 +48,13 @@ class FhseException implements Exception {
 
 /// Where the native library comes from.
 ///
-/// The plugin builds it per platform: a shared object on Android and Linux, a
-/// DLL on Windows, and on iOS and macOS a framework CocoaPods links into the
-/// app (the apps' Podfiles use `use_frameworks!`). Host tests point [FhseNative.libraryPathOverride] at a
-/// CMake build of `src/`; see test/README.md.
+/// fhse_native builds it per platform and knows its name on each. Host tests
+/// point [FhseNative.libraryPathOverride] at a CMake build of fhse_native's
+/// `src/`; see test/README.md.
 DynamicLibrary _open() {
   final override = FhseNative.libraryPathOverride;
   if (override != null) return DynamicLibrary.open(override);
-  if (Platform.isAndroid || Platform.isLinux) return DynamicLibrary.open('libwallet_fhse.so');
-  if (Platform.isIOS || Platform.isMacOS) {
-    return DynamicLibrary.open('wallet_fhse.framework/wallet_fhse');
-  }
-  if (Platform.isWindows) return DynamicLibrary.open('wallet_fhse.dll');
-  throw UnsupportedError('wallet_fhse is not built for ${Platform.operatingSystem}');
+  return openFhseNative();
 }
 
 typedef WfhseSecretNewN = Pointer<Void> Function();

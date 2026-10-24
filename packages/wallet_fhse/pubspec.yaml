@@ -1,5 +1,5 @@
 name: wallet_fhse
-description: "vtnerd's FHSE (FIDO2 hmac-secret encryption) guarding the wallet password: a C library (FHSE, libcbor, libsodium) behind wallet_domain's WalletPasswordGuard."
+description: "vtnerd's FHSE (FIDO2 hmac-secret encryption) guarding the wallet password, behind wallet_domain's WalletPasswordGuard. The C library (FHSE, libcbor, libsodium) is fhse_native."
 publish_to: "none"
 version: 0.1.0
 resolution: workspace
@@ -27,6 +27,12 @@ dependencies:
     path: ../wallet_ui
 
   ffi: 2.1.4
+  # The C library: FHSE, libcbor and libsodium behind wfhse.h, built for each
+  # platform. Pinned to a commit, as everything native is.
+  fhse_native:
+    git:
+      url: https://github.com/MAGICGrants/fhse_native
+      ref: 5b2da7c75e270e64d7e7ea881540f494b4ea594e # main
 
 dev_dependencies:
   flutter_test:
@@ -38,23 +44,18 @@ flutter:
   generate: true
   plugin:
     platforms:
-      # FFI for the FHSE C library; on Android also the security key channel
-      # (WalletFhsePlugin, Kotlin + YubiKit). On iOS that channel is still the
-      # app's own Swift: YubiKit Swift is a Swift package, which a CocoaPods
-      # plugin cannot depend on. See README.md.
+      # The security key channel (WalletFhsePlugin, Kotlin + YubiKit). The C
+      # library is fhse_native's.
       android:
-        ffiPlugin: true
         package: org.magicgrants.wallet_fhse
         pluginClass: WalletFhsePlugin
+      # On iOS and macOS the channel is the app's own Swift (apple/): YubiKit
+      # Swift is a Swift package, which a CocoaPods plugin cannot depend on.
+      # The source-less pod is declared so Flutter links this package into the
+      # app, which compiles apple/ through that link. See README.md.
       ios:
         ffiPlugin: true
-      # FFI for the FHSE C library; the security key channel is the app's own
-      # Swift, shared with iOS (see README.md).
       macos:
         ffiPlugin: true
-      # FFI for the FHSE C library. Keys are reached from Dart: the system's
-      # libfido2 on Linux, webauthn.dll on Windows (lib/src/backends).
-      linux:
-        ffiPlugin: true
-      windows:
-        ffiPlugin: true
+      # Linux and Windows need nothing native here: keys are reached from Dart
+      # (the system's libfido2, webauthn.dll; lib/src/backends).

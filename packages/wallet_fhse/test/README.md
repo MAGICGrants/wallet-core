@@ -1,15 +1,17 @@
 # wallet_fhse tests
 
-The tests run the real native library, built for the host from `src/`:
+The tests run the real native library: fhse_native's C sources, from the
+commit pub resolved, built for the host:
 
 ```sh
-cmake -S src -B build/host -DCMAKE_BUILD_TYPE=Release
-cmake --build build/host -j8
+dart run tool/build_host_library.dart
 flutter test
 ```
 
-`test/support/host_library.dart` finds `build/host/libwallet_fhse.{dylib,so}`,
-or the path in `WALLET_FHSE_LIBRARY`. Without either, every test is skipped
+Extra arguments go to CMake's configure step, for instance
+`-DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path)` where the Command
+Line Tools' SDK and linker disagree. `test/support/host_library.dart` finds
+`build/host/libfhse_native.{dylib,so}`, or the path in `WALLET_FHSE_LIBRARY`. Without either, every test is skipped
 with a message saying so rather than failing, unless `REQUIRE_FHSE_LIBRARY=1`
 is set, as CI does: then the run fails.
 

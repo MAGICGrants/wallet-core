@@ -185,25 +185,11 @@ How each part fits:
 
 ## Layout
 
-- `src/vendor/`: sources, vendored unmodified except as noted.
-  - FHSE, from [MAGICGrants/fhse](https://github.com/MAGICGrants/fhse) (a fork
-    of vtnerd/fhse): `35b32c6` plus fixes (32-byte KDF input, atomic
-    open, PIN handling and a credProtect check in `device.c` that reads the
-    key's own answer from its authenticator data, CBOR counts and the key
-    length bounded before anything is allocated). `device.c` is not compiled
-    here (no `FHSE_LIBFIDO2`); each platform's backend checks credProtect
-    itself (`lib/src/key_reply.dart`).
-  - libcbor 0.13.0, with its two CMake-generated headers written by hand.
-  - libsodium 1.0.22 stable.
-- `src/wfhse.{h,c}`: the C interface Dart binds to. Only these 19 functions
-  are exported.
-- `src/CMakeLists.txt`: the Android, Linux and Windows builds, and host
-  builds for the tests. The defines follow libsodium's own `build.zig`.
-- `ios/` and `macos/`: the CocoaPods builds of the same sources, through
-  forwarding files that `tool/generate_ios_classes.sh` generates for both.
-  Re-run that script after changing anything under `src/`.
-- `linux/` and `windows/`: the FFI plugin builds of `src/` (MSVC on
-  Windows; `src/CMakeLists.txt` has its settings).
+- The C library (FHSE, libcbor and libsodium behind `wfhse.h`, and its builds
+  for every platform) is [fhse_native](https://github.com/MAGICGrants/fhse_native),
+  pinned by commit in `pubspec.yaml`. `lib/src/fhse_native.dart` binds to it.
+- `ios/` and `macos/`: podspecs with no sources. They exist so Flutter links
+  this package into the apps, which compile `apple/` through that link.
 - `lib/src/backends/`: how Dart reaches a key where no platform channel does:
   `LinuxLibFido2Backend` (the system's libfido2, through `dart:ffi`, on a
   background isolate) and `WindowsWebAuthnBackend` (`webauthn.dll` from
