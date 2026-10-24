@@ -116,11 +116,9 @@ void main() {
 
       expect(path, '${tmp.path}${Platform.pathSeparator}cacert.pem');
       expect(File(path).readAsStringSync(), TestPki.rootCa);
-      expect(
-        tmp.listSync().whereType<File>().map((f) => f.uri.pathSegments.last),
-        ['cacert.pem'],
-        reason: 'no temporary file is left behind',
-      );
+      expect(tmp.listSync().whereType<File>().map((f) => f.uri.pathSegments.last), [
+        'cacert.pem',
+      ], reason: 'no temporary file is left behind');
     });
 
     test('rewrites a file that differs from the shipped bundle', () async {

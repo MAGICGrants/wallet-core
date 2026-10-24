@@ -23,8 +23,7 @@ Widget _harness({required ValueChanged<Rect?>? onShare, bool ready = true}) => M
     // Null so the card (and its SVG) stays out of the widget test.
     coinName: null,
     blockchainSubtitle: null,
-    address:
-        '4AdUndXHHZ6cfufTMvppY6JwXNouMBzSkbLYfpAV5Usx3skxNgYeYTRj5UzqtReoS44qo9mtmXCqY45DJ852K5Jv2684Rge',
+    address: '4AdUndXHHZ6cfufTMvppY6JwXNouMBzSkbLYfpAV5Usx3skxNgYeYTRj5UzqtReoS44qo9mtmXCqY45DJ852K5Jv2684Rge',
     qrHeading: 'Subaddress #1',
     onCopy: () {},
   ),

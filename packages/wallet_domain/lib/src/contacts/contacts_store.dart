@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:wallet_infra/wallet_infra.dart';
 
+import 'contact.dart';
+
 /// Storage for the address book.
 ///
 /// Contacts are names attached to addresses — the user's counterparties — so
@@ -51,9 +53,10 @@ Future<void> writeEncodedContacts(List<String> contacts) async {
   await WalletSecrets.store.write(_storageKey, json.encode(contacts));
 }
 
-/// Deletes the stored address book. Part of deleting a wallet: contacts are the
-/// user's counterparties, and leaving them behind outlives the wallet they
-/// belonged to.
+/// Deletes the stored address book, and any copy a build from before secure
+/// storage left in preferences. Deleting a wallet does not: the address book
+/// outlives it, and the user deletes it on its own
+/// (`ContactModel.deleteAll`).
 Future<void> clearContacts() async {
   try {
     await WalletSecrets.store.delete(_storageKey);
@@ -89,4 +92,59 @@ Future<List<String>?> _migrateFromPreferences() async {
   unawaited(log(LogLevel.info, 'Moved ${legacy.length} contacts out of shared preferences'));
 
   return legacy;
+}
+
+/// Applies address-book changes merged in from elsewhere: a metadata backup
+/// written by another device, or one being restored.
+///
+/// An open `ContactModel` registers itself here and takes the changes in
+/// memory, so an edit the user is making at the same moment is applied on top
+/// of them rather than racing a write underneath it. With no model open, the
+/// changes are applied to storage directly.
+abstract final class ContactsSync {
+  static Future<void> Function(Map<String, Contact?> changes)? _model;
+
+  /// Installed by `ContactModel`; the last one constructed wins.
+  static void attach(Future<void> Function(Map<String, Contact?> changes) model) => _model = model;
+
+  static void detach(Future<void> Function(Map<String, Contact?> changes) model) {
+    if (_model == model) _model = null;
+  }
+
+  /// [changes] maps a contact id to its new version, or to null when it was
+  /// deleted. Ids not named are left alone.
+  ///
+  /// Throws when the changes were not stored (the address book could not be
+  /// read or written), so the caller does not take them as stored.
+  static Future<void> applyRemote(Map<String, Contact?> changes) async {
+    if (changes.isEmpty) return;
+    final model = _model;
+    if (model != null) return model(changes);
+
+    final stored = await readEncodedContacts();
+    if (stored == null) {
+      throw StateError('Address book unreadable; backup changes not applied');
+    }
+    await writeEncodedContacts(applyContactChanges(stored, changes));
+  }
+}
+
+/// [stored] (encoded contacts) with [changes] applied: replaced in place,
+/// removed, or appended when new.
+List<String> applyContactChanges(List<String> stored, Map<String, Contact?> changes) {
+  final remaining = Map.of(changes);
+  final out = <String>[];
+  for (final entry in stored) {
+    final contact = Contact.fromJson(json.decode(entry) as Map<String, dynamic>);
+    if (!remaining.containsKey(contact.id)) {
+      out.add(entry);
+      continue;
+    }
+    final replacement = remaining.remove(contact.id);
+    if (replacement != null) out.add(json.encode(replacement.toJson()));
+  }
+  for (final added in remaining.values) {
+    if (added != null) out.add(json.encode(added.toJson()));
+  }
+  return out;
 }

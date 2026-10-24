@@ -131,6 +131,10 @@ class _ScanQrViewState extends State<ScanQrView> {
                   ? const EdgeInsets.only(left: 66, bottom: 10)
                   : const EdgeInsets.all(10),
               cropPercent: 1.0,
+              // QR only: payment requests and keys never come in another
+              // symbology, and the default (every format) also runs zxing's
+              // PDF417 and other decoders over attacker-chosen frames.
+              codeFormat: Format.qrCode,
               tryHarder: true,
               scanDelay: const Duration(milliseconds: 200),
             ),

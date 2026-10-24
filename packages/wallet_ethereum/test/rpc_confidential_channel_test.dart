@@ -63,6 +63,20 @@ void main() {
       expect((client()..configure(url: '192.168.1.5:8545')).url, 'http://192.168.1.5:8545');
     });
 
+    test('a path is kept: RPC endpoints often have one', () {
+      expect(
+        (client()..configure(url: 'rpc.example.com/v3/abc123')).url,
+        'https://rpc.example.com/v3/abc123',
+      );
+      expect((client()..configure(url: '192.168.1.5:8545/rpc')).url, 'http://192.168.1.5:8545/rpc');
+    });
+
+    test('a Tailscale user\'s node defaults to http, like a LAN one', () {
+      // A Tailscale IP (100.64/10) is a network the user controls, reached over
+      // WireGuard.
+      expect((client()..configure(url: '100.101.102.103:8545')).url, 'http://100.101.102.103:8545');
+    });
+
     test('an explicit scheme is always honoured', () {
       expect((client()..configure(url: 'https://10.0.2.2:8545')).url, 'https://10.0.2.2:8545');
       expect((client()..configure(url: 'http://rpc.example.com')).url, 'http://rpc.example.com');

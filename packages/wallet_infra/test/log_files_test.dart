@@ -61,8 +61,8 @@ void main() {
   group('FileLogSink', () {
     tearDown(WalletLog.resetForTesting);
 
-    test('appends to a dated file when verbose', () async {
-      WalletLog.isVerbose = () async => true;
+    test('appends to a dated file when logging is on', () async {
+      WalletLog.isLoggingOn = () async => true;
       final sink = FileLogSink();
       await sink.write(LogLevel.info, 'first');
       await sink.write(LogLevel.warn, 'second');
@@ -74,8 +74,8 @@ void main() {
       expect(contents, 'first\nsecond\n');
     });
 
-    test('writes nothing when verbose is off', () async {
-      WalletLog.isVerbose = () async => false;
+    test('writes nothing when logging is off', () async {
+      WalletLog.isLoggingOn = () async => false;
       await FileLogSink().write(LogLevel.error, 'dropped');
       expect(await getLogFiles(), isEmpty);
     });
@@ -87,5 +87,14 @@ void main() {
     await cleanOldLogFiles();
     final files = await getLogFiles();
     expect(files.map((f) => f.name), ['fresh.txt']);
+  });
+
+  test('cleanOldLogFiles keeps three days of logs', () async {
+    final now = DateTime.now();
+    await writeLog('two_days.txt', modified: now.subtract(const Duration(days: 2)));
+    await writeLog('four_days.txt', modified: now.subtract(const Duration(days: 4)));
+    await cleanOldLogFiles();
+    final files = await getLogFiles();
+    expect(files.map((f) => f.name), ['two_days.txt']);
   });
 }

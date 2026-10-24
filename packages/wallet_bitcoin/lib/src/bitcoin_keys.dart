@@ -83,9 +83,9 @@ openBitcoinWalletFromEncryptedBlob({
   }
 
   final decryptSw = Stopwatch()..start();
-  final json =
-      jsonDecode(await WalletFileCrypto.decryptFromBase64(blob, password, kdf: kdf))
-          as Map<String, dynamic>;
+  final json = jsonDecode(
+    await WalletFileCrypto.decryptFromBase64(blob, password, kdf: kdf),
+  ) as Map<String, dynamic>;
   decryptSw.stop();
 
   final mnemonic = json['mnemonic'] as String;

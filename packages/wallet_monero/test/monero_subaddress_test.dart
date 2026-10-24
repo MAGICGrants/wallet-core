@@ -68,7 +68,7 @@ void main() {
     useTestCaBundle();
     logs = MemoryLogSink();
     WalletLog.sink = logs;
-    WalletLog.isVerbose = () async => true;
+    WalletLog.isLoggingOn = () async => true;
 
     backend = FakeMoneroBackend();
     wallet = MoneroWallet(backend: backend);
@@ -474,6 +474,24 @@ void main() {
       expect(posts.single.url.scheme, 'http');
     });
 
+    test('an LWS behind a path gets its requests under that path', () async {
+      await openWallet();
+      connect(address: '192.168.1.50:18090/wallet');
+
+      expect(await wallet.isSubaddressSupported(1), isTrue);
+      expect(posts.single.url.path, '/wallet/upsert_subaddrs');
+    });
+
+    test('a Tailscale user\'s LWS is sent the view key in the clear', () async {
+      // Their tailnet is a network they control, reached over WireGuard.
+      await openWallet();
+      connect(address: '100.101.102.103:18090');
+
+      expect(await wallet.isSubaddressSupported(1), isTrue);
+      expect(posts.single.url.scheme, 'http');
+      expect(posts.single.url.host, '100.101.102.103');
+    });
+
     test('a routable host still loads without throwing out of the load path', () async {
       // Both callers catch, and the request now succeeds over https rather than
       // being refused, either way the load path completes.
@@ -616,10 +634,11 @@ void main() {
       expect(written, contains('index 1'));
     });
 
-    test('before the first load finishes there is an index but nothing to show', () async {
+    test('a reopen resolves the persisted subaddress before any connection', () async {
       // The index and the support flag are persisted; the resolved subaddress
-      // is runtime-only and is refreshed in the last step of `load()`. Between
-      // an open and that step there is an index and no address to go with it.
+      // is runtime-only. It used to be resolved only in the last step of
+      // `load()`, which waits on the server: offline, the receive screen
+      // spun forever. Deriving it needs only the open wallet, so the open does.
       final indexed = _IndexedAddressBackend();
       final first = MoneroWallet(backend: indexed);
       addTearDown(first.dispose);
@@ -630,19 +649,17 @@ void main() {
       await first.setUnusedSubaddressIndex(3, isSupported: true);
       expect(first.getReceiveAddress(), startsWith('8'), reason: 'a real subaddress, once loaded');
 
-      // A fresh session: `openExisting` restores the persisted index and flag,
-      // but nothing has resolved the subaddress yet.
+      // A fresh session, with a server that never answers: `openExisting`
+      // restores the persisted index and flag and resolves the address itself.
       final second = MoneroWallet(backend: indexed);
       addTearDown(second.dispose);
+      second.postJson = (url, body) async => fail('the open must not contact the server');
       second.setConnection(address: '127.0.0.1:18090', proxyPort: '', useTor: false);
       await second.openExisting(password: 'pw');
 
       expect(second.serverSupportsSubaddresses, isTrue);
-      expect(second.unusedSubaddressIndex, 3, reason: 'the wallet is still aiming for #3');
-      // Nothing to label, so nothing is shown: the pair is what a screen reads,
-      // and it refuses to exist until the address it names has been resolved.
-      expect(second.unusedSubaddress, isNull);
-      expect(second.getUnusedSubaddress(), isNull);
+      expect(second.unusedSubaddress?.index, 3);
+      expect(second.unusedSubaddress?.address, '8${'3' * 94}');
     });
 
     test('a server that will not provision index 1 offers no subaddress at all', () async {

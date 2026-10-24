@@ -32,6 +32,9 @@ class CoinMark extends StatelessWidget {
     this.statusDotFactor = 0.32,
   });
 
+  /// The chain colour of [symbol]'s tile, or null for a coin with no tile.
+  static Color? colorOf(String symbol) => _mark(symbol)?.color;
+
   static ({Color color, String glyph})? _mark(String symbol) {
     switch (symbol.toUpperCase()) {
       case 'XMR':

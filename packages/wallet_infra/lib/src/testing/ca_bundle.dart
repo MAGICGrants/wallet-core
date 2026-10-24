@@ -1,3 +1,7 @@
+// Test support, exported through package:wallet_infra/testing.dart: reaching
+// @visibleForTesting members is the point of this file.
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:convert';
 import 'dart:typed_data';
 

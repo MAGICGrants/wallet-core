@@ -30,12 +30,14 @@ class WalletAppConfig {
     required this.walletFileNamer,
     required this.prefKeyNamer,
     required this.seedPolicy,
-  });
+    required this.securityKeyLabelDomain,
+  }) : assert(securityKeyLabelDomain.length <= 16);
 
   /// Unix/macOS application directory, e.g. `.skylight_wallet`.
   final String appDirName;
 
-  /// Windows `%APPDATA%` subpath, e.g. `MAGIC Grants/Skylight Wallet`.
+  /// Windows `%LOCALAPPDATA%` subpath (`%APPDATA%` before this build), e.g.
+  /// `MAGIC Grants/Skylight Wallet`.
   final String windowsAppDataDir;
 
   /// Platform channel prefix, e.g. `org.magicgrants.skylight`.
@@ -44,6 +46,12 @@ class WalletAppConfig {
   final WalletFileNamer walletFileNamer;
   final PrefKeyNamer prefKeyNamer;
   final SeedPolicy seedPolicy;
+
+  /// The BLAKE2b personalisation (ASCII, at most 16 bytes) that turns a
+  /// security key's credential id into the id its name is stored under. Each
+  /// app has its own, and it never changes: a new one orphans every saved key
+  /// name.
+  final String securityKeyLabelDomain;
 
   /// Preserves Skylight's shipped on-disk and prefs layout exactly: one coin,
   /// so no suffix and no namespace.
@@ -54,6 +62,7 @@ class WalletAppConfig {
     walletFileNamer: (_) => 'mywallet',
     prefKeyNamer: (_, key) => key,
     seedPolicy: SeedPolicy.skylight,
+    securityKeyLabelDomain: 'skylight-label-1',
   );
 
   static WalletAppConfig get spice => WalletAppConfig(
@@ -63,6 +72,7 @@ class WalletAppConfig {
     walletFileNamer: (coin) => 'mywallet_${coin.toLowerCase()}',
     prefKeyNamer: (coin, key) => '${coin.toLowerCase()}_$key',
     seedPolicy: SeedPolicy.spice,
+    securityKeyLabelDomain: 'spice-label-1',
   );
 
   static WalletAppConfig? _instance;

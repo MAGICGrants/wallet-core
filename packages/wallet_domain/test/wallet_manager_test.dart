@@ -41,6 +41,13 @@ class _RecordingWallet extends FakeWallet {
   }
 }
 
+/// A keystore that refuses every write, as macOS does a release build that is
+/// not team-signed.
+class _RefusingSecretStore extends MemorySecretStore {
+  @override
+  Future<void> write(String key, String value) async => throw StateError('keystore refused');
+}
+
 void main() {
   late Directory tmp;
   late MemoryPreferenceStore prefs;
@@ -72,12 +79,10 @@ void main() {
   WalletManager manager(List<CryptoWallet> coins) => WalletManager(coins: () => coins);
 
   group('armAppLockRelock', () {
-    Future<void> setAppLock(bool on) =>
-        SharedPreferencesService.set<bool>(DomainPreferenceKeys.appLockEnabled, on);
-
-    test('with the lock on and a wallet present, drops the password and arms', () async {
+    // App Lock is always on: the old on/off switch no longer decides anything.
+    test('with a wallet present, drops the password and arms', () async {
       installSkylight();
-      await setAppLock(true);
+      WalletSecrets.holdsWalletPassword = true;
       final m = manager([FakeWallet('XMR')..existing = true])..useGeneratedPassword();
       expect(m.hasPassword, isTrue);
 
@@ -85,30 +90,239 @@ void main() {
       expect(m.hasPassword, isFalse, reason: 'a resumed app must not decrypt anything');
     });
 
-    test('with the lock off, the password survives backgrounding', () async {
+    test('an old "App Lock off" changes nothing: it still locks', () async {
       installSkylight();
-      await setAppLock(false);
+      WalletSecrets.holdsWalletPassword = true;
+      await SharedPreferencesService.set<bool>(DomainPreferenceKeys.legacyAppLockEnabled, false);
       final m = manager([FakeWallet('XMR')..existing = true])..useGeneratedPassword();
 
-      expect(await m.armAppLockRelock(), isFalse);
-      expect(m.hasPassword, isTrue);
+      expect(await m.armAppLockRelock(), isTrue);
+      expect(m.hasPassword, isFalse);
     });
 
     test('no wallet yet: onboarding is never interrupted by a lock screen', () async {
       installSkylight();
-      await setAppLock(true);
       final m = manager([FakeWallet('XMR')..existing = false])..useGeneratedPassword();
 
       expect(await m.armAppLockRelock(), isFalse);
       expect(m.hasPassword, isTrue, reason: 'a half-created wallet must stay usable');
     });
 
-    test('unset preference is treated as off', () async {
+    test('Linux and Windows keep the typed password: it cannot be read back', () async {
       installSpice();
-      final m = manager([FakeWallet('XMR')..existing = true])..useGeneratedPassword();
+      WalletSecrets.holdsWalletPassword = false;
+      final m = manager([FakeWallet('BTC')..existing = true])..setWalletPassword('typed');
 
-      expect(await m.armAppLockRelock(), isFalse);
+      expect(await m.armAppLockRelock(), isTrue);
+      expect(m.hasPassword, isTrue, reason: 'App Lock checks it again, the wallet stays open');
+    });
+  });
+
+  group('unlockWithRecoveryPhrase: App Lock without the device', () {
+    const otherBip39 =
+        'legal winner thank year wave sausage worth useful legal winner thank yellow';
+
+    Future<WalletManager> restored() async {
+      installSpice();
+      WalletSecrets.holdsWalletPassword = true;
+      final m = manager([FakeWallet('BTC')])..useGeneratedPassword();
+      await m.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+      );
+      return m;
+    }
+
+    test('the right phrase brings the password back from the keystore', () async {
+      final m = await restored();
+      final password = m.passwordForGuard;
+      m.clearPassword();
+
+      expect(await m.unlockWithRecoveryPhrase(_bip39), isTrue);
+      expect(m.passwordForGuard, password);
+      m.dispose();
+    });
+
+    test('spacing and case do not matter', () async {
+      final m = await restored();
+      m.clearPassword();
+
+      expect(
+        await m.unlockWithRecoveryPhrase('  ${_bip39.toUpperCase().replaceAll(' ', '  ')}\n'),
+        isTrue,
+      );
+      m.dispose();
+    });
+
+    test('another wallet\'s phrase, or no phrase, loads nothing', () async {
+      final m = await restored();
+      m.clearPassword();
+
+      expect(await m.unlockWithRecoveryPhrase(otherBip39), isFalse);
+      expect(await m.unlockWithRecoveryPhrase('not a phrase'), isFalse);
+      expect(await m.unlockWithRecoveryPhrase(''), isFalse);
+      expect(m.hasPassword, isFalse, reason: 'a wrong phrase must not load the keystore copy');
+      m.dispose();
+    });
+
+    test('with the password still in memory it is checked against it', () async {
+      final m = await restored();
+      expect(await m.unlockWithRecoveryPhrase(otherBip39), isFalse);
       expect(m.hasPassword, isTrue);
+      expect(await m.unlockWithRecoveryPhrase(_bip39), isTrue);
+      m.dispose();
+    });
+
+    test('Linux and Windows have no keystore copy: nothing to open with', () async {
+      installSpice();
+      WalletSecrets.holdsWalletPassword = false;
+      final m = manager([FakeWallet('BTC')])..setWalletPassword('typed');
+      await m.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+      );
+      m.clearPassword();
+
+      expect(await m.unlockWithRecoveryPhrase(_bip39), isFalse);
+      m.dispose();
+    });
+  });
+
+  test('a launch decrypts nothing before App Lock, even with a keystore copy', () async {
+    installSkylight();
+    WalletSecrets.holdsWalletPassword = true;
+    await storeKeystoreWalletPassword('kept');
+    await SharedPreferencesService.set<bool>(DomainPreferenceKeys.legacyAppLockEnabled, false);
+    final m = manager([FakeWallet('XMR', existing: true)]);
+
+    await m.loadCachedDisplayState();
+    expect(m.hasPassword, isFalse, reason: 'the unlock screen loads it');
+    m.dispose();
+  });
+
+  // The spend wallet locked: the password and every spending key leave memory.
+  // A coin that can keep watching does, view-only; any other closes.
+  group('the spend wallet locks and unlocks', () {
+    Future<WalletManager> openWith(List<_LockableWallet> coins) async {
+      installSkylight();
+      WalletSecrets.holdsWalletPassword = true;
+      final m = manager(coins)..setWalletPassword('pw');
+      addTearDown(m.dispose);
+      await m.openAll();
+      AppSession.markUnlocked();
+      return m;
+    }
+
+    test('lockSpend: password gone, watchers view-only, the rest closed', () async {
+      final watcher = _LockableWallet('BTC');
+      final closer = _LockableWallet('XMR', keeps: false);
+      final m = await openWith([watcher, closer]);
+
+      await m.lockSpend();
+      expect(AppSession.isUnlocked, isFalse);
+      expect(m.hasPassword, isFalse);
+      expect((watcher.isViewOnly, watcher.isLoaded), (true, true));
+      expect((closer.isViewOnly, closer.isLoaded), (false, false));
+      expect(m.isSpendLocked, isTrue);
+    });
+
+    test('unlockSpend: watchers take their keys back, closed ones open again', () async {
+      final watcher = _LockableWallet('BTC');
+      final closer = _LockableWallet('XMR', keeps: false);
+      final m = await openWith([watcher, closer]);
+      await m.lockSpend();
+      final opensBefore = closer.openCount;
+
+      m.setWalletPassword('pw');
+      await m.unlockSpend();
+      expect(watcher.events, ['enter', 'leave pw']);
+      expect(watcher.isViewOnly, isFalse);
+      expect(closer.isLoaded, isTrue);
+      expect(closer.openCount, opensBefore + 1);
+      expect(m.isSpendLocked, isFalse);
+    });
+
+    test('a watcher that cannot take its keys back is closed and opened again', () async {
+      final watcher = _LockableWallet('BTC')..leaveSucceeds = false;
+      final m = await openWith([watcher]);
+      await m.lockSpend();
+      final opensBefore = watcher.openCount;
+
+      m.setWalletPassword('pw');
+      await m.unlockSpend();
+      expect(watcher.isViewOnly, isFalse);
+      expect(watcher.isLoaded, isTrue);
+      expect(watcher.openCount, opensBefore + 1);
+    });
+
+    test('no password, no unlock', () async {
+      final watcher = _LockableWallet('BTC');
+      final m = await openWith([watcher]);
+      await m.lockSpend();
+      await m.unlockSpend();
+      expect(watcher.isViewOnly, isTrue);
+    });
+
+    test('App Lock locks the spend wallet with security keys off', () async {
+      final watcher = _LockableWallet('BTC');
+      final m = await openWith([watcher]);
+      expect(await m.armAppLockRelock(), isTrue);
+      expect(watcher.isViewOnly, isTrue);
+      expect(m.hasPassword, isFalse);
+    });
+
+    test('Linux and Windows: App Lock keeps the wallet open, keys and all', () async {
+      final watcher = _LockableWallet('BTC');
+      installSpice();
+      WalletSecrets.holdsWalletPassword = false;
+      final m = manager([watcher])..setWalletPassword('typed');
+      addTearDown(m.dispose);
+      await m.openAll();
+
+      expect(await m.armAppLockRelock(), isTrue);
+      expect(watcher.isViewOnly, isFalse);
+      expect(watcher.isLoaded, isTrue);
+      expect(m.hasPassword, isTrue);
+    });
+  });
+
+  // On Android the Continuous Sync service may hold view-only copies of the
+  // same files; the app asks it to let go before opening its own.
+  group('claimWalletFiles', () {
+    tearDown(() => WalletManager.claimWalletFiles = null);
+
+    test('is asked before every open with the password', () async {
+      installSkylight();
+      final w = FakeWallet('BTC', existing: true);
+      var claims = 0;
+      WalletManager.claimWalletFiles = () async {
+        expect(w.openCount, 0, reason: 'nothing opens before the claim');
+        claims++;
+      };
+      final m = manager([w])..setWalletPassword('pw');
+      addTearDown(m.dispose);
+      await m.openAll();
+      expect((claims, w.openCount), (1, 1));
+    });
+
+    test('never in an unattended run, which is the other holder', () async {
+      installSkylight();
+      var claims = 0;
+      WalletManager.claimWalletFiles = () async => claims++;
+      final m = manager([FakeWallet('BTC', existing: true)..markUnattended()]);
+      addTearDown(m.dispose);
+      await m.openAll();
+      expect(claims, 0);
+    });
+
+    test('a claim that fails does not stop the open', () async {
+      installSkylight();
+      final w = FakeWallet('BTC', existing: true);
+      WalletManager.claimWalletFiles = () async => throw StateError('no service');
+      final m = manager([w])..setWalletPassword('pw');
+      addTearDown(m.dispose);
+      await m.openAll();
+      expect(w.openCount, 1);
     });
   });
 
@@ -215,6 +429,24 @@ void main() {
       m.dispose();
     });
 
+    test('a keystore that refuses the password stops it before any file is written', () async {
+      installSpice();
+      WalletSecrets.holdsWalletPassword = true;
+      WalletSecrets.store = _RefusingSecretStore();
+      final btc = FakeWallet('BTC');
+      final m = manager([btc])..useGeneratedPassword();
+
+      await expectLater(
+        m.restoreAll(seed: const Bip39Seed(_bip39), from: RestorePoint.date(DateTime.utc(2026))),
+        throwsStateError,
+      );
+
+      // Nothing is encrypted under a password no one holds.
+      expect(btc.restores, isEmpty);
+      expect(await SeedStore.exists(), isFalse);
+      m.dispose();
+    });
+
     test('skips coins that cannot derive from the seed rather than failing', () async {
       // A polyseed restore in a multicoin wallet must not blow up on Bitcoin.
       installSkylight();
@@ -229,6 +461,49 @@ void main() {
 
       expect(xmr.restores, hasLength(1));
       expect(btc.restores, isEmpty, reason: 'BTC cannot derive from a polyseed');
+      m.dispose();
+    });
+
+    test('a fresh seed starts at a zero balance; a restored one at none', () async {
+      // Monero's node mode loads no stats until the first scan finishes, so a
+      // new wallet with no balance sat on a skeleton (fiat with it) for the
+      // whole scan. A seed generated this session has received nothing.
+      installSpice();
+      final fresh = FakeWallet('BTC')..deferStats = true;
+      final m = manager([fresh])..setWalletPassword('pw');
+      await m.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+        freshSeed: true,
+      );
+      expect(fresh.unlockedBalanceBaseUnits, BigInt.zero);
+      expect(fresh.totalBalanceBaseUnits, BigInt.zero);
+      m.dispose();
+
+      // A typed seed may hold funds the scan has not reached; zero would lie.
+      final restored = FakeWallet('BTC')..deferStats = true;
+      final m2 = manager([restored])..setWalletPassword('pw');
+      await m2.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+      );
+      expect(restored.unlockedBalanceBaseUnits, isNull);
+      expect(restored.totalBalanceBaseUnits, isNull);
+      m2.dispose();
+    });
+
+    test('a fresh seed leaves skipped coins without a balance', () async {
+      installSkylight();
+      final xmr = FakeWallet('XMR', seedFormats: {SeedFormat.polyseed, SeedFormat.bip39});
+      final btc = FakeWallet('BTC');
+      final m = manager([xmr, btc])..setWalletPassword('pw');
+      await m.restoreAll(
+        seed: const PolyseedSeed('sixteen words here'),
+        from: RestorePoint.date(DateTime.utc(2026)),
+        freshSeed: true,
+      );
+      expect(xmr.unlockedBalanceBaseUnits, BigInt.zero);
+      expect(btc.unlockedBalanceBaseUnits, isNull, reason: 'BTC was never created');
       m.dispose();
     });
 
@@ -248,7 +523,7 @@ void main() {
 
   group('the typed desktop password stays out of the keystore', () {
     // `holdsWalletPassword` is pinned in each test: the default follows the
-    // host, and `flutter test` runs on a desktop OS.
+    // host, which may be a Mac (holds it) or Linux (does not).
     Future<void> restoreWith(WalletManager m) =>
         m.restoreAll(seed: const Bip39Seed(_bip39), from: RestorePoint.date(DateTime.utc(2026)));
 
@@ -266,7 +541,7 @@ void main() {
     test('a copy an earlier build stored is never loaded', () async {
       installSpice();
       WalletSecrets.holdsWalletPassword = false;
-      await storeMobileWalletPassword('typed');
+      await storeKeystoreWalletPassword('typed');
       final btc = FakeWallet('BTC', existing: true);
       final m = manager([btc]);
 
@@ -274,7 +549,7 @@ void main() {
       expect(m.hasPassword, isFalse, reason: 'nothing may decrypt before the unlock');
       await m.openAll();
       expect(btc.openCount, 0);
-      expect(await m.loadMobileWalletPassword(), isFalse);
+      expect(await m.loadStoredPassword(), isFalse);
       m.dispose();
     });
 
@@ -298,7 +573,7 @@ void main() {
       final m = manager([FakeWallet('BTC')])..setWalletPassword('typed');
       await restoreWith(m);
       m.clearPassword();
-      await storeMobileWalletPassword('typed');
+      await storeKeystoreWalletPassword('typed');
 
       await m.unlockWithTypedPassword('wrong');
       expect(secrets.values[walletPasswordStorageKey], 'typed', reason: 'kept until proven');
@@ -337,7 +612,7 @@ void main() {
 
       expect(secrets.values[walletPasswordStorageKey], isNotNull);
       final fresh = manager([FakeWallet('BTC', existing: true)]);
-      expect(await fresh.loadMobileWalletPassword(), isTrue);
+      expect(await fresh.loadStoredPassword(), isTrue);
       m.dispose();
       fresh.dispose();
     });
@@ -583,7 +858,7 @@ void main() {
       // Background isolates run only on mobile, the platforms that keep the
       // password in the keystore.
       WalletSecrets.holdsWalletPassword = true;
-      await storeMobileWalletPassword('kept-in-the-keystore');
+      await storeKeystoreWalletPassword('kept-in-the-keystore');
       final xmr = await openWallet('XMR');
       final m = manager([xmr]);
 
@@ -634,4 +909,68 @@ void main() {
       m.dispose();
     });
   });
+
+  group('AppSession: the one "past every lock" flag', () {
+    setUp(AppSession.resetForTesting);
+    tearDown(AppSession.resetForTesting);
+
+    test('finishing onboarding unlocks it', () async {
+      installSpice();
+      final m = manager([FakeWallet('BTC')])..setWalletPassword('pw');
+      expect(AppSession.isUnlocked, isFalse);
+
+      await m.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+      );
+      expect(AppSession.isUnlocked, isTrue);
+      m.dispose();
+    });
+
+    test('an App Lock relock locks it; with no wallet yet it stays as it was', () async {
+      installSkylight();
+      final none = manager([FakeWallet('XMR')..existing = false])..useGeneratedPassword();
+      AppSession.markUnlocked();
+      expect(await none.armAppLockRelock(), isFalse);
+      expect(AppSession.isUnlocked, isTrue);
+
+      final m = manager([FakeWallet('XMR')..existing = true])..useGeneratedPassword();
+      expect(await m.armAppLockRelock(), isTrue);
+      expect(AppSession.isUnlocked, isFalse);
+    });
+
+    test('a full lock and deleting the wallet lock it', () async {
+      installSpice();
+      final m = manager([FakeWallet('BTC')..existing = true])..setWalletPassword('pw');
+      AppSession.markUnlocked();
+      await m.fullyLock();
+      expect(AppSession.isUnlocked, isFalse);
+
+      AppSession.markUnlocked();
+      await m.deleteAll();
+      expect(AppSession.isUnlocked, isFalse);
+      m.dispose();
+    });
+  });
+}
+
+/// A coin that can stay open view-only when the spend wallet locks, or not.
+class _LockableWallet extends FakeWallet {
+  _LockableWallet(super.symbol, {this.keeps = true}) : super(existing: true);
+
+  final bool keeps;
+  bool leaveSucceeds = true;
+  final events = <String>[];
+
+  @override
+  Future<bool> enterViewOnlyMode() async {
+    events.add('enter');
+    return keeps;
+  }
+
+  @override
+  Future<bool> leaveViewOnlyMode(String password) async {
+    events.add('leave $password');
+    return leaveSucceeds;
+  }
 }

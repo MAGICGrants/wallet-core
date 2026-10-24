@@ -56,7 +56,12 @@ class ConfirmSendView extends StatelessWidget {
   final String address;
   final String? openAlias;
   final String? openAliasName;
+
+  /// The contact's name, shown under [address] only when [contactAddress] (the
+  /// address that name belongs to) is [address]. So a name never labels another
+  /// address, whatever changed in the form after the contact was picked.
   final String? contactName;
+  final String? contactAddress;
 
   // High-fee warning. [highFeeWarning] is the localized sentence with a single
   // occurrence of [highFeeToken]; the view splits on the token and renders
@@ -83,12 +88,13 @@ class ConfirmSendView extends StatelessWidget {
     this.openAlias,
     this.openAliasName,
     this.contactName,
+    this.contactAddress,
     this.showHighFeeWarning = false,
     this.highFeeWarning,
     this.highFeeToken,
     this.highFeePercent,
     this.loading = false,
-  });
+  }) : assert(contactName == null || contactAddress != null, 'a contact name needs its address');
 
   @override
   Widget build(BuildContext context) {
@@ -172,7 +178,7 @@ class ConfirmSendView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             _verifiableAddress(address),
-            if (contactName != null) ...[
+            if (contactName != null && contactAddress == address) ...[
               const SizedBox(height: 4),
               _fiatText('($contactName)', mono: false),
             ],
@@ -433,6 +439,7 @@ Future<bool?> showConfirmSendSheet({
   String? openAlias,
   String? openAliasName,
   String? contactName,
+  String? contactAddress,
   bool showHighFeeWarning = false,
   String? highFeeWarning,
   String? highFeeToken,
@@ -453,6 +460,7 @@ Future<bool?> showConfirmSendSheet({
       openAlias: openAlias,
       openAliasName: openAliasName,
       contactName: contactName,
+      contactAddress: contactAddress,
       showHighFeeWarning: showHighFeeWarning,
       highFeeWarning: highFeeWarning,
       highFeeToken: highFeeToken,
@@ -478,6 +486,7 @@ class _ConfirmSendSheet extends StatefulWidget {
   final String? openAlias;
   final String? openAliasName;
   final String? contactName;
+  final String? contactAddress;
   final bool showHighFeeWarning;
   final String? highFeeWarning;
   final String? highFeeToken;
@@ -496,6 +505,7 @@ class _ConfirmSendSheet extends StatefulWidget {
     required this.openAlias,
     required this.openAliasName,
     required this.contactName,
+    required this.contactAddress,
     required this.showHighFeeWarning,
     required this.highFeeWarning,
     required this.highFeeToken,
@@ -539,6 +549,7 @@ class _ConfirmSendSheetState extends State<_ConfirmSendSheet> {
       openAlias: widget.openAlias,
       openAliasName: widget.openAliasName,
       contactName: widget.contactName,
+      contactAddress: widget.contactAddress,
       showHighFeeWarning: widget.showHighFeeWarning,
       highFeeWarning: widget.highFeeWarning,
       highFeeToken: widget.highFeeToken,

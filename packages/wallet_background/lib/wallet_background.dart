@@ -14,4 +14,7 @@ library;
 export 'package:flutter_foreground_task/flutter_foreground_task.dart' show NotificationIcon;
 
 export 'src/background_sync.dart';
+export 'src/foreground_sync_link.dart';
 export 'src/foreground_sync_service.dart';
+export 'src/sync_handoff.dart';
+export 'src/wallet_holders.dart';

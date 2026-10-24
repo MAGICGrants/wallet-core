@@ -7,26 +7,26 @@ void main() {
   setUp(() {
     sink = MemoryLogSink();
     WalletLog.sink = sink;
-    WalletLog.isVerbose = () async => true;
+    WalletLog.isLoggingOn = () async => true;
   });
 
   tearDown(WalletLog.resetForTesting);
 
   group('verbosity gating', () {
-    test('info is dropped when verbose logging is off', () async {
-      WalletLog.isVerbose = () async => false;
+    test('info is dropped when logging is off', () async {
+      WalletLog.isLoggingOn = () async => false;
       await log(LogLevel.info, 'chatty');
       expect(sink.records, isEmpty);
     });
 
     test('warn and error always get through', () async {
-      WalletLog.isVerbose = () async => false;
+      WalletLog.isLoggingOn = () async => false;
       await log(LogLevel.warn, 'careful');
       await log(LogLevel.error, 'broken');
       expect(sink.records.map((r) => r.level), [LogLevel.warn, LogLevel.error]);
     });
 
-    test('info gets through when verbose is on', () async {
+    test('info gets through when logging is on', () async {
       await log(LogLevel.info, 'chatty');
       expect(sink.records, hasLength(1));
     });

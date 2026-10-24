@@ -26,7 +26,7 @@ void main() {
   late MemoryLogSink logs;
 
   /// Arguments each resolver invocation received.
-  late List<({String alias, String network, String asset, String? nativeAsset, int socksPort})>
+  late List<({String alias, String network, String asset, String? nativeAsset, int? socksPort})>
   calls;
 
   setUp(() {
@@ -36,7 +36,7 @@ void main() {
     WalletAppConfig.install(WalletAppConfig.spice, directories: FixedDirectories(tmp));
     logs = MemoryLogSink();
     WalletLog.sink = logs;
-    WalletLog.isVerbose = () async => true;
+    WalletLog.isLoggingOn = () async => true;
     calls = [];
   });
 
@@ -62,7 +62,7 @@ void main() {
           required String alias,
           required String network,
           required String asset,
-          required int socksPort,
+          required int? socksPort,
           String? nativeAsset,
         }) async {
           calls.add((
@@ -117,6 +117,31 @@ void main() {
       expect(written, isNot(contains('donate.example.org')), reason: 'the payee is fingerprinted');
     });
 
+    test('the alias is kept out of the log in every form the resolver quotes it', () async {
+      await torOnPort('9150');
+      installResolver(
+        throws: Exception(
+          'no record for Donate@Example.org; lookup of oa2pay.donate.example.org. failed; '
+          'xn--bcher-kva.example: DNSSEC chain is broken',
+        ),
+      );
+      final wallet = FakeAliasWallet('XMR', network: 'xmr');
+      addTearDown(wallet.dispose);
+
+      await expectLater(wallet.resolveAlias('donate@example.org'), throwsA(isA<Exception>()));
+
+      final written = (await logged()).toLowerCase();
+      expect(written, contains('dnssec chain is broken'), reason: 'the reason is kept');
+      for (final part in ['donate', 'example', 'oa2pay', 'xn--']) {
+        expect(written, isNot(contains(part)));
+      }
+    });
+
+    test('text without a domain name is logged as it is', () {
+      expect(withoutDomainNames('Tor proxy unavailable (v0.26.3)', 'a@b.org'), contains('v0.26.3'));
+      expect(withoutDomainNames('no record', 'a@b.org'), 'no record');
+    });
+
     test('the proxy port reaches the resolver', () async {
       await torOnPort('9150');
       installResolver(result: const ResolvedAlias(address: address));
@@ -126,6 +151,48 @@ void main() {
       await wallet.resolveAlias('donate.example.org');
 
       expect(calls.single.socksPort, 9150);
+    });
+  });
+
+  group('the lookup mode the user chose', () {
+    test('Tor-only is the default', () async {
+      expect(await OpenAliasMode.load(), OpenAliasMode.torOnly);
+    });
+
+    test('disabled: the resolver is never called', () async {
+      await torOnPort('9150');
+      await OpenAliasMode.disabled.save();
+      installResolver(result: const ResolvedAlias(address: address));
+      final wallet = FakeAliasWallet('XMR', network: 'xmr');
+      addTearDown(wallet.dispose);
+
+      await expectLater(
+        wallet.resolveAlias('donate.example.org'),
+        throwsA(isA<AliasLookupDisabledException>()),
+      );
+      expect(calls, isEmpty);
+    });
+
+    test('clearnet: resolved without Tor, by explicit choice only', () async {
+      await torUnavailable();
+      await OpenAliasMode.clearnet.save();
+      installResolver(result: const ResolvedAlias(address: address));
+      final wallet = FakeAliasWallet('XMR', network: 'xmr');
+      addTearDown(wallet.dispose);
+
+      await wallet.resolveAlias('donate.example.org');
+      expect(calls.single.socksPort, isNull);
+    });
+
+    test('clearnet does not use Tor even when it is running', () async {
+      await torOnPort('9150');
+      await OpenAliasMode.clearnet.save();
+      installResolver(result: const ResolvedAlias(address: address));
+      final wallet = FakeAliasWallet('XMR', network: 'xmr');
+      addTearDown(wallet.dispose);
+
+      await wallet.resolveAlias('donate.example.org');
+      expect(calls.single.socksPort, isNull);
     });
   });
 

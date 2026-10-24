@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:ui' show IsolateNameServer;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_background/wallet_background.dart';
@@ -28,6 +30,7 @@ class WalletSpec {
     this.historyThrows,
     this.synced = true,
     this.heightScript,
+    this.viewOnly = true,
   });
 
   final String symbol;
@@ -45,6 +48,9 @@ class WalletSpec {
   /// [FakeBackgroundWallet.heightScript].
   final List<int>? heightScript;
 
+  /// False: the coin's view-only material is not set up yet.
+  final bool viewOnly;
+
   FakeBackgroundWallet build() =>
       FakeBackgroundWallet(
           symbol,
@@ -56,6 +62,7 @@ class WalletSpec {
           historyThrows: historyThrows,
         )
         ..synced = synced
+        ..hasViewOnly = viewOnly
         ..heightScript = heightScript == null ? null : [...heightScript!];
 }
 
@@ -106,22 +113,26 @@ void main() {
     WalletSecrets.store = MemorySecretStore();
     WalletAppConfig.install(WalletAppConfig.spice, directories: FixedDirectories(tmp));
     WalletLog.sink = MemoryLogSink();
-    WalletLog.isVerbose = () async => true;
-    // `runTxNotifier` opens with no password argument, so it depends on the
-    // mobile password already being in the keystore, which is the real shape: a
-    // background isolate has no user to ask. Pinned to the mobile model, since
-    // the test host is a desktop OS, which keeps no password there.
+    WalletLog.isLoggingOn = () async => true;
+    // A kept password is in the keystore, as on a phone with security keys
+    // off, so the tests also show a background run never reads it: every run
+    // opens view-only. Pinned to the mobile model, since the default follows
+    // the test host, and Linux keeps no password there.
     WalletSecrets.holdsWalletPassword = true;
-    await storeMobileWalletPassword('background-test-password');
+    await storeKeystoreWalletPassword('background-test-password');
     // Tor resolvable and instant. The default mode is `builtIn`, whose
     // `getProxy()` waits on a Tor daemon that never starts under `flutter test`
     //; every Tor case then failed on a 30-second timeout rather than on
     // anything about background sync. `external` models "Tor is up" with no
     // daemon; the fail-closed case gets its own test below.
     await TorSettingsService.sharedInstance.save(torMode: TorMode.external, socksPort: '9050');
+    // A phone on the default Sync Frequency (Periodic); the host itself has no
+    // background runs at all.
+    syncFrequencyPlatform = 'android';
   });
 
   tearDown(() {
+    syncFrequencyPlatform = Platform.operatingSystem;
     BackgroundSync.coins = () => const [];
     BackgroundSync.ensureTorConnected = null;
     WalletAppConfig.resetForTesting();
@@ -154,6 +165,237 @@ void main() {
     BackgroundSync.coins = registry.build;
     return registry;
   }
+
+  // Every run without the user is view-only, keys or not: the kept password
+  // stays in the keystore, unread.
+  // One holder at a time: in one Android process a periodic run and the app
+  // would be two writers on the same files.
+  group('the periodic run and the app take turns', () {
+    test('a run skips while the app holds the wallets', () async {
+      final r = _Registry([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+      BackgroundSync.coins = r.build;
+      expect(
+        await runTxNotifier(budget: Duration.zero, anotherHolderHasWallets: () async => true),
+        isTrue,
+      );
+      expect(r.opens('BTC'), 0);
+      expect(r.opens('XMR'), 0);
+      expect(IsolateNameServer.lookupPortByName(WalletHolders.periodicRunName), isNull);
+    });
+
+    test('a run that holds them lets go when the app claims them', () async {
+      final r = _Registry([
+        WalletSpec(
+          'XMR',
+          type: 'node',
+          synced: false,
+          heightScript: [for (var h = 1; h < 100000; h++) h],
+        ),
+      ]);
+      BackgroundSync.coins = r.build;
+      final run = runTxNotifier(
+        budget: const Duration(seconds: 30),
+        pollInterval: const Duration(milliseconds: 5),
+        anotherHolderHasWallets: () async => false,
+      );
+      // The run registers itself and is scanning.
+      while (r.opens('XMR') == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+
+      final answer = await WalletHolders.ask(
+        WalletHolders.periodicRunName,
+        SyncMessage.hello,
+        timeout: const Duration(seconds: 10),
+      );
+      expect(answer, SyncMessage.released);
+      expect(r.last('XMR').isLoaded, isFalse, reason: 'closed before the answer');
+      expect(r.last('XMR').calls, contains('store'));
+      expect(await run, isTrue);
+      expect(IsolateNameServer.lookupPortByName(WalletHolders.periodicRunName), isNull);
+    });
+
+    test('asked while Tor starts: the run closes them without connecting', () async {
+      final r = _Registry([const WalletSpec('BTC', tor: true)]);
+      BackgroundSync.coins = r.build;
+      Future<Object?>? answer;
+      BackgroundSync.ensureTorConnected = () async {
+        // The app asks while the run waits for Tor; the run answers once closed.
+        answer = WalletHolders.ask(
+          WalletHolders.periodicRunName,
+          SyncMessage.hello,
+          timeout: const Duration(seconds: 10),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        return true;
+      };
+      expect(
+        await runTxNotifier(
+          budget: const Duration(seconds: 30),
+          pollInterval: const Duration(milliseconds: 5),
+          anotherHolderHasWallets: () async => false,
+        ),
+        isTrue,
+      );
+      expect(await answer, SyncMessage.released);
+      expect(r.last('BTC').calls, isNot(contains('connectToDaemon')));
+      expect(r.last('BTC').isLoaded, isFalse);
+    });
+
+    test('every run closes its wallets at the end: none outlives it in the process', () async {
+      final r = await runPass([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+      expect(r.last('BTC').isLoaded, isFalse);
+      expect(r.last('XMR').isLoaded, isFalse);
+    });
+
+    group('in a shared process (Android)', () {
+      final ports = <ReceivePort>[];
+
+      setUp(() => holdersShareProcess = true);
+
+      tearDown(() {
+        holdersShareProcess = Platform.isAndroid;
+        WalletManager.closeOrphanedWallets = null;
+        for (final name in [
+          WalletHolders.appName,
+          WalletHolders.serviceName,
+          WalletHolders.periodicRunName,
+        ]) {
+          IsolateNameServer.removePortNameMapping(name);
+        }
+        for (final p in ports) {
+          p.close();
+        }
+        ports.clear();
+      });
+
+      /// Registers a holder under [name] that answers whether it holds.
+      void holder(String name, {required bool holds, String? token}) {
+        final port = ReceivePort()
+          ..listen(
+            (m) => WalletHolders.answer(m, {'op': 'holds', 'holds': holds, 'token': ?token}),
+          );
+        ports.add(port);
+        WalletHolders.register(name, port.sendPort);
+      }
+
+      test('a run skips while the Continuous Sync service holds the wallets', () async {
+        holder(WalletHolders.serviceName, holds: true);
+        final r = await runPass([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+        expect(r.opens('BTC'), 0);
+        expect(r.opens('XMR'), 0);
+      });
+
+      /// Registers another periodic run under its shared name: it answers that
+      /// it holds, and lets go when asked, recording the request.
+      List<String> peerRun() {
+        final asked = <String>[];
+        final port = ReceivePort()
+          ..listen((m) {
+            final op = SyncMessage.opOf(m);
+            if (op == null) return;
+            asked.add(op);
+            WalletHolders.answer(
+              m,
+              op == 'hello' ? SyncMessage.released : {'op': 'holds', 'holds': true},
+            );
+          });
+        ports.add(port);
+        WalletHolders.register(WalletHolders.periodicRunName, port.sendPort);
+        return asked;
+      }
+
+      test('the light job skips while the full-scan job holds: that one checks them', () async {
+        final asked = peerRun();
+        final r = await runPass([const WalletSpec('BTC')], allowNode: false);
+        expect(r.opens('BTC'), 0);
+        expect(asked, ['holds?'], reason: 'it asked, and asked nothing to let go');
+      });
+
+      test('the full-scan job has a light run let go, then runs in its place', () async {
+        final asked = peerRun();
+        final r = await runPass([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+        expect(asked, ['holds?', 'hello']);
+        expect(r.connects('BTC'), 1, reason: 'the light coins are checked here instead');
+        expect(r.connects('XMR'), 1);
+      });
+
+      test('nobody holds them: what a destroyed app isolate left is closed first, '
+          "sparing a live app's", () async {
+        holder(WalletHolders.appName, holds: false, token: 'live-app');
+        final spared = <String?>[];
+        WalletManager.closeOrphanedWallets = ({exceptToken}) async => spared.add(exceptToken);
+
+        final r = await runPass([const WalletSpec('BTC')]);
+        expect(spared, ['live-app']);
+        expect(r.opens('BTC'), 1);
+      });
+    });
+
+    test('the service holds as a registered holder, and lets go on hello', () async {
+      final r = install([const WalletSpec('BTC')]);
+      final handler = BackgroundSyncTaskHandler();
+      // The app answers that it holds nothing (its lock screen after a cold start).
+      handler.onReceiveData(SyncMessage.pong(holds: false, synced: false, token: 'app'));
+      while (r.opens('BTC') == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      final answer = await WalletHolders.ask(
+        WalletHolders.serviceName,
+        WalletHolders.holdsQuery,
+        timeout: const Duration(seconds: 5),
+      );
+      expect(answer, {'op': 'holds', 'holds': true});
+
+      handler.onReceiveData(SyncMessage.hello);
+      while (IsolateNameServer.lookupPortByName(WalletHolders.serviceName) != null) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(r.last('BTC').isLoaded, isFalse);
+    });
+
+    test('nobody registered: a claim has nothing to wait for', () async {
+      expect(
+        await WalletHolders.ask(
+          WalletHolders.periodicRunName,
+          SyncMessage.hello,
+          timeout: const Duration(milliseconds: 50),
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('view-only, whatever the configuration', () {
+    test('a run never reads the kept wallet password', () async {
+      final store = _CountingSecretStore();
+      store.values.addAll((WalletSecrets.store as MemorySecretStore).values);
+      WalletSecrets.store = store;
+
+      final r = await runPass([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+      expect(r.opens('BTC'), 1);
+      expect(r.opens('XMR'), 1);
+      expect(r.last('XMR').calls, contains('openViewOnly'));
+      expect(r.last('XMR').calls, isNot(contains('openExisting')));
+      expect(store.reads, isNot(contains(walletPasswordStorageKey)));
+    });
+
+    test('a coin whose view-only material is not set up yet is skipped', () async {
+      final r = await runPass([
+        const WalletSpec('BTC'),
+        const WalletSpec('XMR', type: 'node', viewOnly: false),
+      ]);
+      expect(r.opens('BTC'), 1);
+      expect(r.opens('XMR'), 0);
+    });
+
+    test('the Continuous Sync service marks every coin before opening it', () {
+      final r = install([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+      final coins = serviceCoins();
+      expect(coins.every((w) => w.unattended), isTrue);
+      expect(r.created.every((w) => w.markedUnattendedBeforeOpen), isTrue);
+    });
+  });
 
   group('which coins a window may sync', () {
     test('the default window syncs everything configured', () async {
@@ -234,6 +476,54 @@ void main() {
     test('a run with no wallet files returns without opening anything', () async {
       final r = await runPass([const WalletSpec('BTC', existing: false)]);
       expect(r.opens('BTC'), 0);
+    });
+  });
+
+  group('whether there is anything to schedule', () {
+    // The scheduler asks `syncableCoins` before registering, so a task that
+    // would only wake up, read the settings and exit is never registered.
+    test('a node alone leaves the light job nothing', () async {
+      install([const WalletSpec('XMR', type: 'node')]);
+      expect(await syncableCoins(allowNode: false), isEmpty);
+    });
+
+    test('a node beside light coins leaves the light job those coins', () async {
+      install([const WalletSpec('XMR', type: 'node'), const WalletSpec('BTC')]);
+      expect(await syncableCoins(allowNode: false), {'BTC'});
+    });
+
+    test('a node is work for a window that allows a full scan', () async {
+      install([const WalletSpec('XMR', type: 'node')]);
+      expect(await syncableCoins(), {'XMR'});
+    });
+
+    test('the full-scan job is registered only for a coin that needs a full scan', () async {
+      install([const WalletSpec('XMR', type: 'node'), const WalletSpec('BTC')]);
+      expect(await syncableCoins(scansOnly: true), {'XMR'});
+    });
+
+    test('light coins alone give the full-scan job nothing', () async {
+      install([const WalletSpec('XMR', type: 'lws'), const WalletSpec('BTC')]);
+      expect(await syncableCoins(scansOnly: true), isEmpty);
+    });
+
+    test('no configured server leaves nothing', () async {
+      install([const WalletSpec('BTC', address: ''), const WalletSpec('XMR', address: '')]);
+      expect(await syncableCoins(), isEmpty);
+    });
+
+    test('no wallet files leaves nothing', () async {
+      install([const WalletSpec('BTC', existing: false)]);
+      expect(await syncableCoins(), isEmpty);
+    });
+
+    test('asking opens no wallet file', () async {
+      // The scheduler asks from the app's own isolate, alongside its open
+      // wallets; it must only ever read the persisted settings.
+      final r = install([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+      await syncableCoins();
+      expect(r.opens('BTC'), 0);
+      expect(r.opens('XMR'), 0);
     });
   });
 
@@ -320,31 +610,27 @@ void main() {
       expect(r.connects('BTC'), 1);
     });
 
-    test(
-      'a wallet whose Tor never came up is skipped rather than tried anyway',
-      () async {
-        // KNOWN GAP. `runTxNotifier` awaits
-        // `ensureTorConnected()` and discards the bool, so a wallet configured
-        // for Tor is connected anyway when Tor failed to start. The transport
-        // itself fails closed (pinned in wallet_monero), so this is a wasted
-        // window rather than a leak, but the run reports success having synced
-        // nothing, and the next window repeats it.
-        //
-        // Written now and skipped until the fix, so the finding is executable
-        // rather than prose in a report.
-        var asked = 0;
-        BackgroundSync.ensureTorConnected = () async {
-          asked++;
-          return false; // Tor did not come up
-        };
+    test('a wallet whose Tor never came up is skipped rather than tried anyway', () async {
+      // KNOWN GAP. `runTxNotifier` awaits
+      // `ensureTorConnected()` and discards the bool, so a wallet configured
+      // for Tor is connected anyway when Tor failed to start. The transport
+      // itself fails closed (pinned in wallet_monero), so this is a wasted
+      // window rather than a leak, but the run reports success having synced
+      // nothing, and the next window repeats it.
+      //
+      // Written now and skipped until the fix, so the gap is pinned by a test
+      // rather than only described.
+      var asked = 0;
+      BackgroundSync.ensureTorConnected = () async {
+        asked++;
+        return false; // Tor did not come up
+      };
 
-        final r = await runPass([const WalletSpec('BTC', tor: true)]);
+      final r = await runPass([const WalletSpec('BTC', tor: true)]);
 
-        expect(asked, 1);
-        expect(r.connects('BTC'), 0, reason: 'no Tor means no sync for a Tor wallet');
-      },
-      skip: 'M-14/L-15: the answer from ensureTorConnected is discarded',
-    );
+      expect(asked, 1);
+      expect(r.connects('BTC'), 0, reason: 'no Tor means no sync for a Tor wallet');
+    }, skip: 'known gap: the answer from ensureTorConnected is discarded');
   });
 
   group('dispatchBackgroundTask routes each window', () {
@@ -362,7 +648,7 @@ void main() {
       expect(r.connects('XMR'), 0);
     });
 
-    test('the iOS processing window takes Tor but not a node', () async {
+    test('the iOS processing window takes Tor and scans a node', () async {
       final r = install([
         const WalletSpec('ETH', tor: true),
         const WalletSpec('XMR', type: 'node'),
@@ -371,14 +657,12 @@ void main() {
       await dispatchBackgroundTask(PeriodicTasks.iosProcessing);
 
       expect(r.connects('ETH'), 1);
-      expect(r.connects('XMR'), 0);
+      expect(r.connects('XMR'), 1);
     });
 
-    test('with background sync off, a node is not scanned but light coins still are', () async {
-      // The toggle gates the *heavy* work only: notifications from an LWS or
-      // Electrum server cost almost nothing and stay on the notifications
-      // setting alone.
-      await SharedPreferencesService.set<bool>(SettingsKeys.backgroundSyncEnabled, false);
+    test('the Android light job checks light coins and leaves a node alone', () async {
+      // It runs on any network; a node scan waits for the full-scan job, which
+      // only runs while charging and on WiFi.
       final r = install([const WalletSpec('XMR', type: 'node'), const WalletSpec('BTC')]);
 
       await dispatchBackgroundTask(PeriodicTasks.txNotifier);
@@ -387,21 +671,40 @@ void main() {
       expect(r.connects('BTC'), 1);
     });
 
-    test('with background sync on, the node is scanned', () async {
-      await SharedPreferencesService.set<bool>(SettingsKeys.backgroundSyncEnabled, true);
-      final r = install([const WalletSpec('XMR', type: 'node')]);
+    test('the Android full-scan job scans the node and checks the light coins too', () async {
+      final r = install([const WalletSpec('XMR', type: 'node'), const WalletSpec('BTC')]);
 
-      await dispatchBackgroundTask(PeriodicTasks.txNotifier);
+      await dispatchBackgroundTask(PeriodicTasks.scan);
 
       expect(r.connects('XMR'), 1);
+      expect(r.connects('BTC'), 1);
     });
 
-    test('an unknown task falls through to the full window rather than doing nothing', () async {
-      await SharedPreferencesService.set<bool>(SettingsKeys.backgroundSyncEnabled, true);
-      final r = install([const WalletSpec('BTC')]);
+    test('an unknown task is the light job, whose constraints any device meets', () async {
+      // Builds before this one registered the light job as "Background sync".
+      final r = install([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
 
-      expect(await dispatchBackgroundTask('something-else-entirely'), isTrue);
+      expect(await dispatchBackgroundTask('Background sync'), isTrue);
       expect(r.connects('BTC'), 1);
+      expect(r.connects('XMR'), 0);
+    });
+
+    test('nothing runs unless Sync Frequency is Periodic', () async {
+      // Changing the setting cancels the tasks, but one already handed to the
+      // isolate can still arrive.
+      for (final frequency in [SyncFrequency.off, SyncFrequency.continuous]) {
+        await saveSyncFrequency(frequency);
+        for (final task in [
+          PeriodicTasks.txNotifier,
+          PeriodicTasks.scan,
+          PeriodicTasks.iosRefresh,
+          PeriodicTasks.iosProcessing,
+        ]) {
+          final r = install([const WalletSpec('BTC'), const WalletSpec('XMR', type: 'node')]);
+          expect(await dispatchBackgroundTask(task), isTrue);
+          expect(r.opens('BTC') + r.opens('XMR'), 0, reason: '${frequency.name} / $task');
+        }
+      }
     });
   });
 
@@ -446,10 +749,9 @@ void main() {
       await expectLater(restartForegroundSyncIfRunning(), completes);
     });
 
-    test('even with every toggle on', () async {
-      await SharedPreferencesService.set<bool>(SettingsKeys.backgroundSyncEnabled, true);
+    test('whatever Sync Frequency says', () async {
+      await saveSyncFrequency(SyncFrequency.continuous);
       await SharedPreferencesService.set<bool>(SettingsKeys.notificationsEnabled, true);
-      await SharedPreferencesService.set<bool>(SettingsKeys.foregroundSyncEnabled, true);
 
       await expectLater(applyBackgroundTaskRegistration(), completes);
       await expectLater(startForegroundSyncIfEnabled(), completes);
@@ -556,20 +858,31 @@ void main() {
     });
   });
 
+  group('migrateSyncSettings', () {
+    test('an install with a wallet and every old toggle off stays off', () async {
+      install([const WalletSpec('XMR', type: 'node')]);
+      await SharedPreferencesService.set<bool>('backgroundSyncEnabled', false);
+      await migrateSyncSettings();
+      expect(await loadSyncFrequency(), SyncFrequency.off);
+    });
+
+    test('an install with no wallet yet gets the default, Periodic', () async {
+      final r = install([const WalletSpec('XMR', existing: false)]);
+      await migrateSyncSettings();
+      expect(await loadSyncFrequency(), SyncFrequency.periodic);
+      expect(r.opens('XMR'), 0, reason: 'it reads the files, it opens none');
+    });
+  });
+
   group('stopSyncAndDeleteWallets', () {
     // The plugin calls (stopService, WorkManager cancel) are out of reach here,
     // as everywhere else in this file; what is reachable is the decision that
-    // outlives the tap. Leaving these three set is what re-registers the
-    // background task on the next launch, so a deleted wallet would keep waking
-    // the device to find out it has nothing to sync.
-    test('clears the sync preferences and deletes the wallets', () async {
-      for (final key in [
-        SettingsKeys.backgroundSyncEnabled,
-        SettingsKeys.foregroundSyncEnabled,
-        SettingsKeys.notificationsEnabled,
-      ]) {
-        await SharedPreferencesService.set<bool>(key, true);
-      }
+    // outlives the tap. Settings go back to a fresh install's: Sync Frequency
+    // written down as Periodic, so the next launch's migration cannot read the
+    // empty install as "existing, everything off", and notifications off.
+    test('resets the sync settings and deletes the wallets', () async {
+      await saveSyncFrequency(SyncFrequency.continuous);
+      await SharedPreferencesService.set<bool>(SettingsKeys.notificationsEnabled, true);
 
       final registry = _Registry([const WalletSpec('XMR'), const WalletSpec('BTC')]);
       final manager = WalletManager(coins: registry.build);
@@ -577,13 +890,11 @@ void main() {
 
       await stopSyncAndDeleteWallets(manager);
 
-      for (final key in [
-        SettingsKeys.backgroundSyncEnabled,
-        SettingsKeys.foregroundSyncEnabled,
-        SettingsKeys.notificationsEnabled,
-      ]) {
-        expect(await SharedPreferencesService.get<bool>(key), isFalse, reason: key);
-      }
+      expect(
+        await SharedPreferencesService.get<String>(SettingsKeys.syncFrequency),
+        SyncFrequency.periodic.name,
+      );
+      expect(await SharedPreferencesService.get<bool>(SettingsKeys.notificationsEnabled), isFalse);
       expect(registry.last('XMR').deleteFilesCount, 1);
       expect(registry.last('BTC').deleteFilesCount, 1);
     });
@@ -600,4 +911,15 @@ void main() {
       expect(await SharedPreferencesService.get<String>('skylight_contacts'), isNull);
     });
   });
+}
+
+/// Records which keys were read, to show a run never asks for the password.
+class _CountingSecretStore extends MemorySecretStore {
+  final List<String> reads = [];
+
+  @override
+  Future<String?> read(String key) {
+    reads.add(key);
+    return super.read(key);
+  }
 }

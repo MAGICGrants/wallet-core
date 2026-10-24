@@ -1,0 +1,193 @@
+{
+  "@@locale": "en",
+  "backupTitle": "Backup",
+  "backupSeedWarningBold": "This does NOT back up your recovery phrase, which you still need to do separately or you could lose your funds.",
+  "backupSeedWarning": "This backs up additional data not stored on the blockchain, like certain transaction data and your address book.",
+  "backupSecurityNote": "The backup files are secure with quantum resistant encryption. They are encrypted with keys derived from your recovery phrase, so you can restore any backups with it. If you store your backups on a cloud service, they cannot see the contents of the backups, but they can see certain metadata which you may consider sensitive.",
+  "backupLegacySeed": "Backup isn't available for 25-word recovery phrases. To use it, create a new wallet with a 16-word recovery phrase and send your funds to it.",
+  "backupUnsupportedPassphrase": "Backup isn't available yet for recovery phrases with an offset passphrase.",
+  "backupLocked": "Unlock your wallet to see its backup.",
+  "backupOpening": "Opening your backup…",
+  "backupSummary": "{payments, plural, =1{1 payment} other{{payments} payments}} and {contacts, plural, =1{1 contact} other{{contacts} contacts}} backed up",
+  "@backupSummary": {
+    "placeholders": {
+      "payments": {
+        "type": "int"
+      },
+      "contacts": {
+        "type": "int"
+      }
+    }
+  },
+  "backupLastChecked": "Last checked {time}",
+  "@backupLastChecked": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "backupICloud": "iCloud",
+  "backupICloudDescription": "iCloud backups are performed by your operating system and are not protected with Tor.",
+  "backupAndroid": "Android backup",
+  "backupAndroidDescription": "Android backups are performed by your operating system and are not protected with Tor.",
+  "backupAndroidShort": "Android",
+  "backupLws": "Light wallet server",
+  "backupComingSoon": "Coming soon",
+  "backupStatusUpToDate": "Up to date",
+  "backupStatusPending": "{count, plural, =1{1 change waiting to upload} other{{count} changes waiting to upload}}",
+  "@backupStatusPending": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupStatusAwaiting": "Handed to iCloud; waiting for it to upload",
+  "backupStatusUnavailable": "iCloud Drive is off",
+  "backupStatusError": "Couldn't save there; will retry",
+  "backupAndroidLarge": "Android's copy is getting close to its 25 MB limit.",
+  "backupFileSection": "Backup file",
+  "backupExport": "Save a backup file",
+  "backupExported": "Backup file saved",
+  "backupImport": "Import a backup file",
+  "backupImported": "{count, plural, =1{Imported 1 new change} other{Imported {count} new changes}}",
+  "@backupImported": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupImportNothingNew": "Nothing new in that file",
+  "backupImportWrongWallet": "That file isn't a backup of this wallet",
+  "backupFailed": "Something went wrong: {error}",
+  "@backupFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "backupUnrecorded": "{count, plural, =1{1 sent payment has no backup record: it was sent from another wallet, or before backup was available.} other{{count} sent payments have no backup record: they were sent from another wallet, or before backup was available.}}",
+  "@backupUnrecorded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreTitle": "Last restore",
+  "backupRestoreSummary": "{payments, plural, =1{Found 1 payment} other{Found {payments} payments}}; {contacts, plural, =1{restored 1 contact} other{restored {contacts} contacts}}.",
+  "@backupRestoreSummary": {
+    "placeholders": {
+      "payments": {
+        "type": "int"
+      },
+      "contacts": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreUnreadable": "{count, plural, =1{1 file couldn't be read.} other{{count} files couldn't be read.}}",
+  "@backupRestoreUnreadable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreGaps": "Some changes made on another device are missing. Open the wallet on that device so it can upload them.",
+  "backupRestoreConflicts": "{count, plural, =1{1 payment has two different records; both are kept.} other{{count} payments have two different records; both are kept.}}",
+  "@backupRestoreConflicts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupDeleteICloud": "Delete the iCloud copy",
+  "backupDeleteICloudBody": "Removes this wallet's backup from iCloud. The wallet and address book on this device are not affected.",
+  "backupDeleteAndroid": "Delete the Android backup copy",
+  "backupDeleteAndroidBody": "Removes this wallet's files from Android backup on this device, so Android's next backup no longer carries them.",
+  "backupDeletedAndroid": "Android backup copy deleted",
+  "backupDeleteConfirm": "Delete",
+  "backupCancel": "Cancel",
+  "backupDeleted": "iCloud copy deleted",
+  "backupRestoreFound": "Restored {payments, plural, =1{1 payment} other{{payments} payments}} and {contacts, plural, =1{1 contact} other{{contacts} contacts}} from your backup",
+  "@backupRestoreFound": {
+    "placeholders": {
+      "payments": {
+        "type": "int"
+      },
+      "contacts": {
+        "type": "int"
+      }
+    }
+  },
+  "backupEnable": "Back up payment details",
+  "backupAutomaticSection": "Automatic (Recommended)",
+  "backupManualSection": "Manual",
+  "backupFileDescription": "Manually save a snapshot anywhere you want.",
+  "importTitle": "Import wallet data",
+  "importIntro": "If you have a backup file, you can restore it here. You can change these behaviors later in settings.",
+  "importFromLocation": "From {where}",
+  "@importFromLocation": {
+    "placeholders": {
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "importFromLocationNote": "If found, this also turns on automatic {where} backups.",
+  "@importFromLocationNote": {
+    "placeholders": {
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "importFromFile": "From a backup file",
+  "importFromFileNote": "This will not turn on automatic backups, which we suggest enabling in settings.",
+  "importNo": "Skip",
+  "importNoNote": "You can restore from automatic or manual backups later.",
+  "importLooking": "Looking in {where}…",
+  "@importLooking": {
+    "placeholders": {
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "importReading": "Reading the backup file…",
+  "importNotFoundTitle": "No backup found",
+  "importOk": "OK",
+  "importNotFound": "No backup of this wallet in {where}.",
+  "@importNotFound": {
+    "placeholders": {
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "importUnavailable": "Couldn't reach {where}. Check that it's on for this device, then try again.",
+  "@importUnavailable": {
+    "placeholders": {
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "importDoneTitle": "Wallet data imported",
+  "importScanNote": "Each payment's details appear as the wallet finishes scanning.",
+  "importLocationOn": "Backup to {where} is on. You can turn it off in Settings > Backup.",
+  "@importLocationOn": {
+    "placeholders": {
+      "where": {
+        "type": "String"
+      }
+    }
+  },
+  "importFileBackupNote": "Automatic backups are off. Save a backup file from Settings > Backup to keep a copy.",
+  "importDone": "Done"
+}

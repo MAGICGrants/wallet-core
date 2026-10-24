@@ -6,10 +6,15 @@ import 'package:polyseed/polyseed.dart';
 import 'package:wallet_infra/wallet_infra.dart';
 
 import 'app_config.dart';
+import 'app_session.dart';
 import 'crypto_wallet.dart';
+import 'metadata_backup.dart';
 import 'seed/seed.dart';
 import 'seed/seed_policy.dart';
+import 'stores/seed_check_store.dart';
 import 'stores/seed_store.dart';
+import 'wallet_password_guard.dart';
+import 'wallet_password_store.dart';
 
 /// Supplies the coins this app supports. Called once, at construction.
 ///
@@ -30,7 +35,10 @@ class DomainPreferenceKeys {
   DomainPreferenceKeys._();
 
   static const testnetCoinsEnabled = 'testnetCoinsEnabled';
-  static const appLockEnabled = 'appLockEnabled';
+
+  /// App Lock's old on/off switch. App Lock is always on now; the key is only
+  /// removed with the wallet.
+  static const legacyAppLockEnabled = 'appLockEnabled';
 }
 
 /// Top-level state holder shared by every screen.
@@ -49,10 +57,15 @@ class WalletManager with ChangeNotifier {
 
   final Map<String, CryptoWallet> _wallets;
 
+  /// Installed by an app that keeps the generated (mobile) password somewhere
+  /// safer than the keystore; see [WalletPasswordGuard]. Null keeps the
+  /// keystore behaviour.
+  static WalletPasswordGuard? passwordGuard;
+
   String? _password;
 
-  /// Whether [_password] came from [useGeneratedPassword] rather than the user.
-  bool _passwordIsGenerated = false;
+  /// Where [_password] came from.
+  _PasswordSource _passwordSource = _PasswordSource.typed;
 
   bool _testnetCoinsEnabled = false;
   Timer? _notifyDebounce;
@@ -121,14 +134,34 @@ class WalletManager with ChangeNotifier {
 
   bool get hasPassword => _password != null;
 
-  void setWalletPassword(String password) {
+  /// The in-memory password, for a [passwordGuard]'s own set-up and release
+  /// (moving it between the keystore and the guard). Null while locked. Not
+  /// for anything else.
+  String? get passwordForGuard => _password;
+
+  void setWalletPassword(String password) => _setPassword(password, _PasswordSource.typed);
+
+  /// Sets the in-memory password and, with it, the cost of encrypting files
+  /// under it: [WalletFileCrypto.typedPasswordIterations] for one the user
+  /// typed, the lower [WalletFileCrypto.generatedPasswordIterations] for a
+  /// generated or seed-derived one, which nobody can guess anyway.
+  void _setPassword(String? password, _PasswordSource source) {
+    if (password != null && isUnattendedRun) {
+      log(LogLevel.error, '[WalletManager] An unattended run was handed the wallet password');
+      return;
+    }
     _password = password;
-    _passwordIsGenerated = false;
+    _passwordSource = source;
+    if (password != null) _useFileCost(typed: source == _PasswordSource.typed);
   }
 
-  /// True if [password] decrypts the stored seed. The desktop unlock checks
-  /// here, through [unlockWithTypedPassword]; mobile unlocks via biometric-gated
-  /// storage instead.
+  static void _useFileCost({required bool typed}) {
+    WalletFileCrypto.walletPasswordIterations = typed
+        ? WalletFileCrypto.typedPasswordIterations
+        : WalletFileCrypto.generatedPasswordIterations;
+  }
+
+  /// True if [password] decrypts the stored seed.
   Future<bool> verifyWalletPassword(String password) async {
     try {
       return await SeedStore.load(password) != null;
@@ -137,71 +170,272 @@ class WalletManager with ChangeNotifier {
     }
   }
 
-  /// The desktop unlock: true if the typed [password] is right, in which case it
-  /// is held in memory for this session and nowhere else.
+  /// The Linux and Windows unlock: true if the typed [password] is right.
   ///
-  /// Checked against the stored seed. A wallet from before the seed store has
-  /// none, so its password is taken as given and the open that follows is the
-  /// only check, as it always was.
-  ///
-  /// A right password also deletes any copy of it in the keystore. Earlier
-  /// builds wrote the typed password there too, and a desktop OS never reads it
-  /// back.
+  /// What it opens is the [WalletPasswordStore]'s business: the wallet
+  /// password kept in `wallet.key`, or for an older wallet the typed password
+  /// itself. With a [passwordGuard] engaged (security keys on) it only proves
+  /// the typed password: this returns true with no password in memory, and the
+  /// guard's own unlock comes next ([isPasswordGuarded], then
+  /// [unlockWithGuardedPassword]).
   Future<bool> unlockWithTypedPassword(String password) async {
-    if (await SeedStore.exists() && !await verifyWalletPassword(password)) return false;
-    setWalletPassword(password);
-    if (!WalletSecrets.holdsWalletPassword) {
-      try {
-        await deleteMobileWalletPassword();
-      } catch (e) {
-        log(LogLevel.error, '[WalletManager] Failed to delete stored password: $e');
-      }
+    final opened = await WalletPasswordStore.current.unlockTyped(password, guard: passwordGuard);
+    switch (opened.kind) {
+      case TypedUnlockKind.wrongPassword:
+        return false;
+      case TypedUnlockKind.engaged:
+        _password = null;
+      case TypedUnlockKind.unlocked:
+        _setPassword(
+          opened.walletPassword,
+          opened.walletPasswordIsTyped ? _PasswordSource.typed : _PasswordSource.guard,
+        );
     }
     return true;
   }
 
+  /// Re-authentication on Linux and Windows: true if [password] is the one the
+  /// user unlocks with (with security keys on, FHSE's outer password), checked
+  /// without changing what is unlocked or held.
+  Future<bool> checkTypedPassword(String password) =>
+      WalletPasswordStore.current.checkTyped(password, guard: passwordGuard);
+
   /// Mints a random password. Used on mobile, where the user authenticates via
   /// the device rather than typing one; [restoreAll] persists it to the
   /// keystore.
-  void useGeneratedPassword() {
-    _password = genWalletPassword();
-    _passwordIsGenerated = true;
-  }
+  void useGeneratedPassword() => _setPassword(genWalletPassword(), _PasswordSource.generated);
 
-  /// Clears the in-memory password, e.g. on background with app lock enabled.
+  /// Drops the in-memory password, as a lock would, without closing anything.
+  /// The apps lock through [lockSpend] and [fullyLock].
+  @visibleForTesting
   void clearPassword() => _password = null;
 
-  /// Arms the App Lock re-lock as the app goes to the background.
+  /// Whether an engaged [passwordGuard] holds the password, so the keystore
+  /// has none and an open needs [unlockWithGuardedPassword] first.
+  Future<bool> isPasswordGuarded() async => await passwordGuard?.isEngaged() ?? false;
+
+  /// Takes the password a [passwordGuard] released once the user unlocked it,
+  /// for this session. Held in memory only, across App Lock relocks, until
+  /// [fullyLock].
   ///
-  /// Returns whether the next resume should show the lock screen, and drops the
-  /// in-memory password on the way out so a resumed app cannot decrypt anything
-  /// until the user authenticates again.
+  /// Throws [StateError], taking nothing, when the keystore still keeps a
+  /// different password: the guard is then not this wallet's (left by an
+  /// earlier wallet whose delete was cut short), and the kept copy is what
+  /// still opens this one.
+  Future<void> unlockWithGuardedPassword(String password) async {
+    final store = WalletPasswordStore.current;
+    String? copy;
+    try {
+      copy = await store.readCopy();
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Failed to read the kept password: $e');
+    }
+    if (copy != null && copy != password) {
+      throw StateError("The password guard does not hold this wallet's password");
+    }
+    _setPassword(password, _PasswordSource.guard);
+    // Engaging a guard writes the guard first and deletes the kept copy last,
+    // so a crash in between leaves both, holding the same password. The guard
+    // has just proven it works; finish the delete. (On Linux and Windows the
+    // copy is `wallet.key`, which [WalletPasswordStore.readCopy] never returns.)
+    try {
+      await store.deleteCopy();
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Failed to delete the kept password: $e');
+    }
+  }
+
+  /// Has every open wallet keep what an unattended run needs to check in
+  /// without the password (see [CryptoWallet.prepareViewOnly]). Call when a
+  /// [passwordGuard] engages, before the keystore copy goes; otherwise
+  /// [applyViewOnlySetting] keeps it in step with the toggles.
+  Future<void> prepareViewOnlyAll() async {
+    await Future.wait([
+      for (final w in loadedWallets)
+        w.prepareViewOnly().catchError((Object e) {
+          log(LogLevel.warn, 'prepareViewOnly failed: $e', coin: w.coinSymbol);
+        }),
+    ]);
+  }
+
+  /// Undoes [prepareViewOnlyAll]; see [applyViewOnlySetting] for when.
+  Future<void> forgetViewOnlyAll() async {
+    await Future.wait([
+      for (final w in _wallets.values)
+        w.forgetViewOnly().catchError((Object e) {
+          log(LogLevel.warn, 'forgetViewOnly failed: $e', coin: w.coinSymbol);
+        }),
+    ]);
+  }
+
+  /// Keeps the view-only material ([prepareViewOnlyAll]) in step with what runs
+  /// without the user: kept while any unattended run is on
+  /// ([unattendedRunsEnabled]: any Sync Frequency but off) or security keys
+  /// are (an unattended run there has nothing else), forgotten otherwise. Runs
+  /// after every open with the password; best effort.
+  ///
+  /// Every unattended run is view-only, keys or not ([isUnattendedRun]), so
+  /// without this material it can check nothing.
+  Future<void> applyViewOnlySetting() async {
+    if (isUnattendedRun || _password == null) return;
+    // Only where the keystore holds the password (Android, iOS, macOS). Linux
+    // and Windows run nothing in the background, and their keystores are weak:
+    // a Bitcoin xpub there would show the account's whole history for nothing.
+    if (!WalletSecrets.holdsWalletPassword) return;
+    try {
+      if (await unattendedRunsEnabled() || await isPasswordGuarded()) {
+        await prepareViewOnlyAll();
+      } else {
+        await forgetViewOnlyAll();
+      }
+    } catch (e) {
+      log(LogLevel.warn, '[WalletManager] Could not update the view-only material: $e');
+    }
+  }
+
+  /// After the user changes Sync Frequency: sets up or removes
+  /// Monero's view-only background copy ([applyBackgroundSyncSettingAll]) and
+  /// the other coins' view-only material ([applyViewOnlySetting]) now, so the
+  /// next background run finds them, rather than at the next launch.
+  Future<void> applySyncSettings() async {
+    await applyBackgroundSyncSettingAll();
+    await applyViewOnlySetting();
+  }
+
+  /// Closes every wallet and forgets the password and everything decrypted
+  /// with it, keeping the files. The next open needs the password again: from
+  /// the keystore, the typed password, or for a guarded password, from
+  /// unlocking the guard.
+  ///
+  /// App Lock alone only covers the screen; this is the lock that takes the
+  /// key out of memory.
+  Future<void> fullyLock() async {
+    AppSession.lock();
+    // The password goes first, before the slow part (each close stores its
+    // wallet). Nothing below needs it: every wallet closes with its own cache
+    // password and native state. And nothing else can use it meanwhile.
+    _password = null;
+    WalletPasswordStore.current.endSession();
+    await _closeBackup();
+    await Future.wait([
+      for (final w in _wallets.values)
+        w.close().catchError((Object e) {
+          log(LogLevel.warn, 'close failed: $e', coin: w.coinSymbol);
+        }),
+    ]);
+    notifyListeners();
+  }
+
+  /// The spend wallet locks: the wallet password leaves memory, and every open
+  /// wallet drops its spending keys ([CryptoWallet.enterViewOnly]). Monero on a
+  /// node keeps scanning with its view key (wallet2's background mode, when its
+  /// view-only copy is set up), Bitcoin keeps watching with the account xpub and
+  /// Ethereum with the address; anything else closes. [AppSession] locks first.
+  ///
+  /// When: App Lock locking with security keys off ([armAppLockRelock]); the
+  /// full lock with security keys on, when Continuous Sync keeps the app
+  /// running (otherwise [fullyLock] closes everything). The next open with the
+  /// password ([unlockSpend], [openWalletFilesAndSync]) takes the keys back.
+  Future<void> lockSpend() async {
+    AppSession.lock();
+    // The password first, as in [fullyLock]: nothing below needs it.
+    _password = null;
+    WalletPasswordStore.current.endSession();
+    await _closeBackup();
+    await Future.wait([
+      for (final w in _wallets.values)
+        w.enterViewOnly().catchError((Object e) {
+          log(LogLevel.warn, 'locking the spend wallet failed: $e', coin: w.coinSymbol);
+        }),
+    ]);
+    notifyListeners();
+  }
+
+  /// Whether a wallet is waiting for the password: view-only since
+  /// [lockSpend], or not open.
+  bool get isSpendLocked => _visibleWallets.any((w) => w.isViewOnly || !w.isLoaded);
+
+  /// After the password is back: wallets [lockSpend] left view-only take their
+  /// keys back (Monero replays what it watched), and closed ones open again,
+  /// then everything syncs. Joins an open under way.
+  Future<void> unlockSpend() async {
+    if (isUnattendedRun || _password == null) return;
+    await _openWalletFiles();
+    syncInBackground();
+    notifyListeners();
+  }
+
+  /// Locks App Lock: the app has been away for its "Lock after" time.
+  ///
+  /// Returns whether there is a wallet to lock (false during onboarding), and
+  /// drops the in-memory password so nothing can be decrypted until the user
+  /// authenticates again. App Lock is always on; how long the app may be away
+  /// first is the app's setting.
   Future<bool> armAppLockRelock() async {
-    final enabled =
-        await SharedPreferencesService.get<bool>(DomainPreferenceKeys.appLockEnabled) ?? false;
-    if (!enabled) return false;
     if (!await hasAnyExistingWallet()) return false;
-    clearPassword();
+    // From here until the user passes App Lock again, nothing may open a
+    // screen or a payment link ([AppSession]).
+    AppSession.lock();
+    // With security keys off the spend wallet locks here: the password and
+    // every spending key leave memory ([lockSpend]). A guarded password cannot
+    // be read back from the keystore after a relock, so it stays in memory
+    // until the full lock; App Lock is the screen in front of it. Linux and
+    // Windows keep theirs too: it was typed and cannot be read back, and their
+    // App Lock checks the password again rather than reopening.
+    if (WalletSecrets.holdsWalletPassword && !await isPasswordGuarded()) await lockSpend();
     return true;
   }
 
-  /// Writes the password to the keystore. A no-op on a desktop OS, where it is
-  /// typed at every launch; see [WalletSecrets.holdsWalletPassword].
-  Future<void> persistMobileWalletPassword() async {
-    final password = _password;
-    if (password == null) throw StateError('Cannot persist password: none set');
-    if (!WalletSecrets.holdsWalletPassword) return;
-    await storeMobileWalletPassword(password);
+  /// App Lock's way in when the device cannot confirm its owner (a biometric
+  /// lockout, a prompt that keeps failing): true when [mnemonic] is this
+  /// wallet's recovery phrase, checked against the stored seed. The password
+  /// then stays in memory, or comes back from the keystore.
+  ///
+  /// False, with nothing loaded, for any other phrase. Never reads a guarded
+  /// password: with security keys on and the wallet locked this is false, and
+  /// the keys' own recovery is the way in.
+  Future<bool> unlockWithRecoveryPhrase(String mnemonic) async {
+    final SeedSource? typed;
+    try {
+      // A keyboard that capitalises the first word must not make it wrong.
+      typed = SeedSource.detect(_phrase(mnemonic));
+    } catch (_) {
+      return false;
+    }
+    if (typed == null) return false;
+    final password =
+        _password ??
+        (await isPasswordGuarded() ? null : await WalletPasswordStore.current.readCopy());
+    if (password == null) return false;
+    final ({SeedSource seed, RestorePoint from})? stored;
+    try {
+      stored = await SeedStore.load(password);
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Failed to read stored seed: $e');
+      return false;
+    }
+    if (stored == null || _phrase(stored.seed.mnemonic) != _phrase(typed.mnemonic)) return false;
+    if (_password == null) _setPassword(password, _PasswordSource.generated);
+    return true;
   }
 
-  /// Takes the password from the keystore. Always false on a desktop OS, so
-  /// nothing there opens or decrypts before the user types the password, even
-  /// if an earlier build left a copy behind.
-  Future<bool> loadMobileWalletPassword() async {
-    if (!WalletSecrets.holdsWalletPassword) return false;
-    final stored = await getMobileWalletPassword();
+  static String _phrase(String mnemonic) =>
+      mnemonic.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// Takes the password from its kept copy, where one can be read without the
+  /// user: the keystore. Always false on Linux and Windows, so nothing there
+  /// opens or decrypts before the user types the password, and false behind an
+  /// engaged guard, whose leftover copy (if any) is not read back.
+  ///
+  /// A copy in the keystore is generated or seed-derived, so files under it
+  /// get the generated-password cost.
+  Future<bool> loadStoredPassword() async {
+    // Never in an unattended run: it checks in with view-only material.
+    if (isUnattendedRun) return false;
+    if (await isPasswordGuarded()) return false;
+    final stored = await WalletPasswordStore.current.readCopy();
     if (stored == null) return false;
-    _password = stored;
+    _setPassword(stored, _PasswordSource.generated);
     return true;
   }
 
@@ -215,17 +449,58 @@ class WalletManager with ChangeNotifier {
   }
 
   Future<void> openAll({String? password, bool displayOnly = false}) async {
+    if (isUnattendedRun) {
+      assert(password == null, 'An unattended run never holds the wallet password');
+      assert(
+        _wallets.values.every((w) => w.unattended),
+        'A manager is unattended for every coin or for none',
+      );
+      await loadCachedDisplayState();
+      if (displayOnly) return;
+      // A Periodic run or Continuous Sync: whatever the configuration, only view-only material (see [isUnattendedRun]). A coin
+      // without it is skipped.
+      await _openViewOnly();
+      return;
+    }
+
     if (password != null) setWalletPassword(password);
 
     await loadCachedDisplayState();
     if (displayOnly) return;
 
-    if (_password == null && !await loadMobileWalletPassword()) {
+    if (_password == null && !await loadStoredPassword()) {
       log(LogLevel.warn, '[WalletManager] openAll called without a password');
       return;
     }
 
     await _openWalletFiles();
+  }
+
+  /// A run the user is not doing (a Periodic run, Continuous Sync): its
+  /// wallets were marked
+  /// [CryptoWallet.markUnattended] before opening. It holds view-only material
+  /// only, whether or not security keys are on: it never loads the wallet
+  /// password, never decrypts the seed store and never opens a wallet with its
+  /// spend key ([openAll], [loadStoredPassword], [_setPassword]).
+  bool get isUnattendedRun => _wallets.values.any((w) => w.unattended);
+
+  Future<void> _openViewOnly() async {
+    await Future.wait([
+      for (final w in _visibleWallets)
+        () async {
+          try {
+            if (!await w.openViewOnly()) {
+              log(
+                LogLevel.info,
+                'No password and no view-only path; skipping.',
+                coin: w.coinSymbol,
+              );
+            }
+          } catch (e) {
+            log(LogLevel.warn, 'View-only open failed: $e', coin: w.coinSymbol);
+          }
+        }(),
+    ]);
   }
 
   /// Restores persisted connection settings and cached balances. Fast; meant
@@ -243,15 +518,10 @@ class WalletManager with ChangeNotifier {
       }),
     );
 
-    // Cached balances live in the password-encrypted cache. With app lock off
-    // the password can be auto-loaded and the numbers shown immediately; with
-    // it on we must not decrypt before the user authenticates, so hydration is
-    // deferred to the post-unlock open path. A desktop OS has no stored
-    // password to load, so there it waits for the typed one the same way.
-    final appLockEnabled =
-        await SharedPreferencesService.get<bool>(DomainPreferenceKeys.appLockEnabled) ?? false;
-    if (_password == null && !appLockEnabled) await loadMobileWalletPassword();
-
+    // Cached balances live in the password-encrypted cache. App Lock is always
+    // on, so nothing is decrypted before the user authenticates: without a
+    // password in memory, hydration waits for the post-unlock open path. Linux
+    // and Windows wait for the typed password the same way.
     await Future.wait(_visibleWallets.map(_hydrateWalletCache));
   }
 
@@ -270,16 +540,73 @@ class WalletManager with ChangeNotifier {
 
   Future<void> _openWalletFiles() => _openWalletFilesInFlight ??= _openWalletFilesOnce();
 
+  /// Asked before this app opens its wallet files with the password, so
+  /// nothing else in the process holds them: on Android, the Continuous Sync
+  /// service lets go of its view-only copies first (wallet_background's
+  /// `ForegroundSyncLink`). Null where nothing else can hold them.
+  static Future<void> Function()? claimWalletFiles;
+
+  /// Closes the native wallets an app isolate of this process left open when
+  /// Android destroyed it, other than [exceptToken]'s (a live isolate's,
+  /// [WalletIsolate.token]). Called by whoever takes the wallets next: the
+  /// Continuous Sync service, or the app's next isolate. Installed by the app's
+  /// bootstrap in every isolate (wallet_monero's `closeOrphanedMoneroWallets`);
+  /// null where no coin keeps native wallets.
+  static Future<void> Function({String? exceptToken})? closeOrphanedWallets;
+
   Future<void> _openWalletFilesOnce() async {
+    final password = _password;
+    if (isUnattendedRun || password == null) return;
     try {
+      await claimWalletFiles?.call();
+    } catch (e) {
+      log(LogLevel.warn, '[WalletManager] Could not claim the wallet files: $e');
+    }
+    try {
+      // Wallets left view-only by [lockSpend] take their keys back first,
+      // before the seed is read: a send right after an unlock waits on exactly
+      // this ([CryptoWallet.leaveViewOnly]).
+      final leaving = {
+        for (final w in _visibleWallets)
+          if (w.isViewOnly) w: w.leaveViewOnly(password),
+      };
       final storedSeed = await _loadStoredSeed();
 
       // Fan out so per-wallet opens (each in its own isolate or FFI thread)
       // overlap. A failure in one wallet must not cancel the others.
-      await Future.wait([for (final w in _visibleWallets) _openOneWallet(w, storedSeed)]);
+      await Future.wait([
+        for (final w in _visibleWallets)
+          leaving.containsKey(w)
+              ? _afterLeavingViewOnly(w, leaving[w]!, storedSeed)
+              : _openOneWallet(w, storedSeed),
+      ]);
+      // With logging on, once per process: how long a key derivation
+      // takes here, to choose the iteration counts from real numbers.
+      unawaited(WalletFileCrypto.logDerivationTimes());
+
+      if (storedSeed != null) _openBackup(storedSeed.seed);
+      await applyViewOnlySetting();
     } finally {
       _openWalletFilesInFlight = null;
     }
+  }
+
+  /// A wallet that could not take its keys back in place is closed and opened
+  /// again, which also merges what it watched (Monero's open replays its
+  /// view-only copy).
+  Future<void> _afterLeavingViewOnly(
+    CryptoWallet w,
+    Future<bool> leaving,
+    ({SeedSource seed, RestorePoint from})? storedSeed,
+  ) async {
+    if (await leaving) return;
+    log(LogLevel.warn, 'Keys not taken back in place; reopening.', coin: w.coinSymbol);
+    try {
+      await w.close();
+    } catch (e) {
+      log(LogLevel.warn, 'close failed: $e', coin: w.coinSymbol);
+    }
+    await _openOneWallet(w, storedSeed);
   }
 
   /// The persisted original mnemonic for the reveal-seed screen, or null when
@@ -287,8 +614,10 @@ class WalletManager with ChangeNotifier {
   Future<({SeedSource seed, RestorePoint from})?> loadStoredSeed() => _loadStoredSeed();
 
   Future<({SeedSource seed, RestorePoint from})?> _loadStoredSeed() async {
+    final password = _password;
+    if (password == null || isUnattendedRun) return null;
     try {
-      return await SeedStore.load(_password!);
+      return await SeedStore.load(password);
     } catch (e) {
       log(LogLevel.error, '[WalletManager] Failed to read stored seed: $e');
       return null;
@@ -298,7 +627,7 @@ class WalletManager with ChangeNotifier {
   /// Re-runs the open path for one wallet, after a connection change that needs
   /// the wallet rebuilt for a different server kind (Monero LWS↔node).
   Future<void> reopenWallet(String coinSymbol) async {
-    if (_password == null) await loadMobileWalletPassword();
+    if (_password == null) await loadStoredPassword();
     if (_password == null) return;
 
     final w = getWallet(coinSymbol);
@@ -326,7 +655,7 @@ class WalletManager with ChangeNotifier {
   /// are logged and swallowed: a wallet that cannot configure background sync
   /// still syncs in the foreground.
   Future<void> applyBackgroundSyncSettingAll() async {
-    if (_password == null) await loadMobileWalletPassword();
+    if (_password == null) await loadStoredPassword();
     final password = _password;
     if (password == null) {
       log(LogLevel.warn, '[WalletManager] no password; background sync setting not applied');
@@ -346,7 +675,7 @@ class WalletManager with ChangeNotifier {
   /// Unlike [reopenWallet] this always reconnects, so plain tweaks (Tor, SSL,
   /// address) take effect too.
   Future<void> applyConnectionChange(String coinSymbol) async {
-    if (_password == null) await loadMobileWalletPassword();
+    if (_password == null) await loadStoredPassword();
     final password = _password;
     if (password == null) return;
 
@@ -366,7 +695,7 @@ class WalletManager with ChangeNotifier {
     // load() dedupes via the connect's in-flight future.
     unawaited(_connectBeforeOpenSafely(w));
 
-    // Decrypt the cache now the password is available; covers desktop unlock,
+    // Decrypt the cache now the password is available; covers the typed unlock,
     // where loadCachedDisplayState ran before there was one.
     await _hydrateWalletCache(w);
 
@@ -377,7 +706,7 @@ class WalletManager with ChangeNotifier {
         log(LogLevel.info, 'Wallet opened in ${timer.elapsedMilliseconds}ms', coin: w.coinSymbol);
       } else if (storedSeed != null) {
         log(LogLevel.info, 'Bootstrapping from stored seed.', coin: w.coinSymbol);
-        await _restoreOne(w, storedSeed.seed, storedSeed.from);
+        await _restoreOne(w, storedSeed.seed, storedSeed.from, _password!);
       }
     } catch (e) {
       log(LogLevel.error, 'Failed to open: $e', coin: w.coinSymbol);
@@ -390,7 +719,7 @@ class WalletManager with ChangeNotifier {
             coin: w.coinSymbol,
           );
           await w.deleteFiles();
-          await _restoreOne(w, storedSeed.seed, storedSeed.from);
+          await _restoreOne(w, storedSeed.seed, storedSeed.from, _password!);
         } catch (e2) {
           log(LogLevel.error, 'Failed to re-bootstrap: $e2', coin: w.coinSymbol);
         }
@@ -403,7 +732,13 @@ class WalletManager with ChangeNotifier {
   /// A multicoin wallet restored from a polyseed would otherwise throw for
   /// every non-Monero coin. The two-sided check makes "this coin can't use
   /// this seed" a skip rather than a failure of the whole restore.
-  Future<void> _restoreOne(CryptoWallet w, SeedSource seed, RestorePoint from) async {
+  Future<void> _restoreOne(
+    CryptoWallet w,
+    SeedSource seed,
+    RestorePoint from,
+    String password, {
+    bool freshSeed = false,
+  }) async {
     if (!_seedPolicy.accepts(seed.format) || !w.supportedSeedFormats.contains(seed.format)) {
       log(
         LogLevel.info,
@@ -412,7 +747,8 @@ class WalletManager with ChangeNotifier {
       );
       return;
     }
-    await w.restoreFromSeed(seed: seed, from: from, password: _password!);
+    await w.restoreFromSeed(seed: seed, from: from, password: password);
+    if (freshSeed) w.markFreshlyGenerated();
 
     // Everything this seed already received is history, not news. Done here
     // rather than inside each coin's `restoreFromSeed` so a coin added later
@@ -453,7 +789,7 @@ class WalletManager with ChangeNotifier {
 
   void openWalletFilesAndSync() {
     unawaited(() async {
-      if (_password == null) await loadMobileWalletPassword();
+      if (_password == null) await loadStoredPassword();
       if (_password == null) return;
       await _openWalletFiles();
       syncInBackground();
@@ -475,7 +811,7 @@ class WalletManager with ChangeNotifier {
   Future<void> bootstrap() async {
     await loadCachedDisplayState();
     if (loadedWallets.isEmpty) {
-      if (_password == null) await loadMobileWalletPassword();
+      if (_password == null) await loadStoredPassword();
       if (_password != null) await _openWalletFiles();
     }
     syncInBackground();
@@ -546,14 +882,23 @@ class WalletManager with ChangeNotifier {
   ///
   /// Coins that cannot derive from this seed format are skipped rather than
   /// failing the restore; see [_restoreOne].
-  Future<void> restoreAll({required SeedSource seed, required RestorePoint from}) async {
+  ///
+  /// [freshSeed] is for a seed [generateSeed] just produced, never a typed one:
+  /// such a seed has received nothing, so each wallet starts at a known zero
+  /// balance instead of none until its first sync. See
+  /// [CryptoWallet.markFreshlyGenerated].
+  Future<void> restoreAll({
+    required SeedSource seed,
+    required RestorePoint from,
+    bool freshSeed = false,
+  }) async {
     if (_password == null) {
       throw StateError('Wallet password must be set before restoring wallets.');
     }
-    // A desktop OS keeps no copy of the password, so a wallet encrypted with one
-    // the user never typed could not be opened again.
-    if (_passwordIsGenerated && !WalletSecrets.holdsWalletPassword) {
-      throw StateError('On a desktop OS the wallet password must be the one the user typed.');
+    // Linux and Windows keep no copy of a generated password, so a wallet
+    // encrypted with one could not be opened again.
+    if (_passwordSource == _PasswordSource.generated && WalletPasswordStore.current.typesPassword) {
+      throw StateError('On Linux and Windows the wallet password must be the one the user typed.');
     }
     if (!_seedPolicy.accepts(seed.format)) {
       throw UnsupportedSeedFormatException(
@@ -562,29 +907,109 @@ class WalletManager with ChangeNotifier {
       );
     }
 
+    // A guard supplies the password in place of the random one minted at
+    // onboarding. Where the user types one (Linux, Windows) it supplies it too,
+    // and the typed one only unlocks it (WalletPasswordStore). Without a guard
+    // a typed password is the wallet password.
+    final guard = passwordGuard;
+    final store = WalletPasswordStore.current;
+    if (_passwordSource == _PasswordSource.guard && store.typesPassword && guard != null) {
+      // The typed password that must open the new wallet is not in memory.
+      throw StateError('On Linux and Windows a new wallet needs the password the user typed.');
+    }
+    final typed = _passwordSource == _PasswordSource.typed ? _password : null;
+    final guarded = guard != null && (typed == null || store.typesPassword);
+
+    // Held here, and only made the manager's once the restore succeeds: a
+    // retry after a failure then starts from the same typed or generated
+    // password, and derives and keeps a copy again.
+    var walletPassword = _password!;
+    if (guarded) walletPassword = await guard.passwordForNewWallet(seed);
+    _useFileCost(typed: !guarded && typed != null);
+
+    // The copy before any file: if the keystore refuses it (on macOS, a
+    // release build that is not team-signed), onboarding stops with nothing
+    // encrypted under a password no one holds. On Linux and Windows the copy
+    // is `wallet.key`, under the typed password. A copy kept with no wallet is
+    // never read, since startup loads one only when a wallet exists, and the
+    // next onboarding replaces it.
+    await store.saveCopy(walletPassword, typed: typed);
+    // The guard's own record goes next, for the same reason: a restore cut
+    // short after the coin files would otherwise leave a wallet the guard can
+    // never serve.
+    if (guarded) await guard.keepForNewWallet(walletPassword);
+
     for (final w in _visibleWallets) {
-      w.setCachePassword(_password);
-      await _restoreOne(w, seed, from);
+      w.setCachePassword(walletPassword);
+      await _restoreOne(w, seed, from, walletPassword, freshSeed: freshSeed);
     }
 
     // Persist the seed so coins added in a future release can be bootstrapped
     // on the next unlock without re-prompting, and so a bip39/polyseed restore
     // can be shown back verbatim, since the wallet only yields its derived
     // legacy seed.
-    await SeedStore.save(seed: seed, from: from, password: _password!);
+    await SeedStore.save(seed: seed, from: from, password: walletPassword);
+    // A new wallet starts unverified: the keystore can outlive an uninstall
+    // (iOS), so a record from a wallet that was here before must not carry over.
+    await SeedCheckStore.delete();
 
-    await persistMobileWalletPassword();
+    _setPassword(walletPassword, guarded ? _PasswordSource.guard : _passwordSource);
 
     for (final w in _visibleWallets) {
       await w.loadPersistedConnection();
+    }
+
+    // Onboarding is done: the user who just created or restored the wallet is
+    // past every lock it has (none yet).
+    AppSession.markUnlocked();
+    _openBackup(seed, restored: true);
+  }
+
+  // ----- Metadata backup -----
+
+  /// Opens the metadata backup, if the app installed one. Not awaited by the
+  /// callers: it derives keys (PBKDF2) and reads storage, and neither may hold
+  /// up an unlock or a restore.
+  void _openBackup(SeedSource seed, {bool restored = false}) {
+    final backup = MetadataBackup.instance;
+    if (backup == null) return;
+    unawaited(
+      backup.open(seed, wallets: _visibleWallets.toList(), restored: restored).catchError((
+        Object e,
+      ) {
+        log(LogLevel.warn, '[WalletManager] Metadata backup did not open: $e');
+      }),
+    );
+  }
+
+  Future<void> _closeBackup() async {
+    try {
+      await MetadataBackup.instance?.close();
+    } catch (e) {
+      log(LogLevel.warn, '[WalletManager] Metadata backup did not close: $e');
     }
   }
 
   /// Deletes every wallet file and clears the keys this layer owns.
   ///
-  /// [extraPrefKeys] lets the app clear its own (contacts, pending txs,
-  /// notification state) in the same pass; the manager does not know them.
+  /// [extraPrefKeys] lets the app clear its own (pending txs, notification
+  /// state) in the same pass; the manager does not know them. The address book
+  /// and the app's settings outlive the wallet.
   Future<void> deleteAll({List<String> extraPrefKeys = const []}) async {
+    AppSession.lock();
+    // The guard first: one left behind by a delete cut short would make the
+    // next wallet look guarded, and release this one's password for it.
+    try {
+      await passwordGuard?.walletDeleted();
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Failed to clear the password guard: $e');
+    }
+    try {
+      await MetadataBackup.instance?.deleteLocal();
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Failed to delete the local metadata backup: $e');
+    }
+
     for (final w in _wallets.values) {
       try {
         await w.delete();
@@ -598,15 +1023,24 @@ class WalletManager with ChangeNotifier {
     } catch (e) {
       log(LogLevel.error, '[WalletManager] Failed to delete stored seed: $e');
     }
+    await SeedCheckStore.delete();
 
     _password = null;
+    final store = WalletPasswordStore.current;
     try {
-      await deleteMobileWalletPassword();
+      await store.deleteCopy();
     } catch (e) {
-      log(LogLevel.error, '[WalletManager] Failed to delete stored password: $e');
+      log(LogLevel.error, '[WalletManager] Failed to delete the kept password: $e');
+    }
+    store.endSession();
+    // After the guard: its file may be bound too. Nothing bound is left.
+    try {
+      await PcBinding.deleteRecord();
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Failed to delete the PC binding: $e');
     }
 
-    await SharedPreferencesService.remove(DomainPreferenceKeys.appLockEnabled);
+    await SharedPreferencesService.remove(DomainPreferenceKeys.legacyAppLockEnabled);
     for (final key in extraPrefKeys) {
       await SharedPreferencesService.remove(key);
     }
@@ -637,4 +1071,16 @@ class WalletManager with ChangeNotifier {
     }
     super.dispose();
   }
+}
+
+/// Where [WalletManager]'s in-memory password came from.
+enum _PasswordSource {
+  /// Typed by the user (Linux, Windows).
+  typed,
+
+  /// Minted by [WalletManager.useGeneratedPassword] (mobile, macOS).
+  generated,
+
+  /// Supplied or released by [WalletManager.passwordGuard].
+  guard,
 }

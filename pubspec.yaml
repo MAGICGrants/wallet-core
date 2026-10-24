@@ -3,8 +3,8 @@ description: "Shared wallet packages for Skylight Wallet and Spice Wallet."
 publish_to: "none"
 
 environment:
-  sdk: 3.11.5
-  flutter: 3.41.7
+  sdk: 3.13.5
+  flutter: 3.47.7
 
 # Dart pub workspaces (Dart >=3.6). One shared lockfile, one `flutter pub get`
 # at the root, packages resolve each other by name without path deps.
@@ -12,6 +12,9 @@ workspace:
   - packages/wallet_infra
   - packages/wallet_domain
   - packages/wallet_openalias
+  - packages/wallet_fhse
+  - packages/wallet_backup
+  - packages/wallet_backup_platform
   - packages/wallet_monero
   - packages/wallet_bitcoin
   - packages/wallet_ethereum
@@ -25,7 +28,9 @@ dependency_overrides:
     git:
       url: https://github.com/cake-tech/web3dart.git
       ref: aa3f932dbf54eda651b7bd01ad00204acf998bd0 # cake
-  intl: any
+  # Only bitcoin_base needs this (its unused `intl: ^0.19.0`). Pinned rather than
+  # `any`, so every other package still gets the version Flutter requires.
+  intl: 0.20.3
 
   # bitcoin_base names blockchain_utils by BRANCH, so our own SHA pin on it
   # conflicts with bitcoin_base's constraint. An override is the only way to fix

@@ -15,7 +15,12 @@ const _labels = ConfirmSendLabels(
   cancel: 'Cancel',
 );
 
-Future<bool?> _open(WidgetTester tester, {required Future<void> Function() onConfirm}) async {
+Future<bool?> _open(
+  WidgetTester tester, {
+  required Future<void> Function() onConfirm,
+  String? contactName,
+  String? contactAddress,
+}) async {
   bool? result;
   await tester.pumpWidget(
     MaterialApp(
@@ -31,6 +36,8 @@ Future<bool?> _open(WidgetTester tester, {required Future<void> Function() onCon
                   amountText: '1 ETH',
                   feeText: '0.001 ETH',
                   address: '0xabc',
+                  contactName: contactName,
+                  contactAddress: contactAddress,
                   onConfirm: onConfirm,
                 );
               },
@@ -68,5 +75,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Send'), findsNothing, reason: 'sheet popped on success');
+  });
+
+  // A contact's name vouches for one address. The sheet names the contact only
+  // when the address it pays is that one, so a form changed after the contact
+  // was picked (a Paste on desktop) cannot label another address as theirs.
+  testWidgets('names the contact when the tx pays the contact\'s address', (tester) async {
+    await _open(tester, onConfirm: () async {}, contactName: 'Alice', contactAddress: '0xabc');
+
+    expect(find.text('(Alice)'), findsOneWidget);
+  });
+
+  testWidgets('does not name the contact beside another address', (tester) async {
+    await _open(tester, onConfirm: () async {}, contactName: 'Alice', contactAddress: '0xdef');
+
+    expect(find.text('0xabc', findRichText: true), findsOneWidget);
+    expect(find.text('(Alice)'), findsNothing);
   });
 }

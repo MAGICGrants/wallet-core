@@ -39,6 +39,9 @@ class TorService {
   /// Concurrent callers join the attempt already running rather than starting
   /// a second Tor; the app calls this from startup, from the settings screen
   /// and from a connection retry, so overlap is normal rather than exotic.
+  ///
+  /// Bootstrap has the plugin's two-minute deadline; past it this throws
+  /// `TorBootstrapTimeout`, and [waitUntilConnected] retries the start.
   Future<void> start() async {
     if (_status == TorConnectionStatus.connected) return;
 
@@ -71,12 +74,20 @@ class TorService {
     }
   }
 
+  /// Stops the proxy and releases the native client.
+  ///
+  /// The plugin's `disable()` is the same call as `stop()`, so only `stop()` is
+  /// made. It can throw when the release fails; the plugin keeps the handles
+  /// and retries them on the next start or stop. The proxy is no longer usable
+  /// either way, so the status is reset before the error reaches the caller.
   Future<void> disable() async {
     if (_status == TorConnectionStatus.disconnected) return;
 
-    _tor?.disable();
-    await _tor?.stop();
-    _status = TorConnectionStatus.disconnected;
+    try {
+      await _tor?.stop();
+    } finally {
+      _status = TorConnectionStatus.disconnected;
+    }
   }
 
   /// Waits for Tor to come up, returning whether it did.

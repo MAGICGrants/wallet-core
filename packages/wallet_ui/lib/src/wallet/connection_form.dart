@@ -7,6 +7,7 @@ import '../design/brand_button.dart';
 import '../design/brand_card.dart';
 import '../design/brand_segmented.dart';
 import '../design/section_header.dart';
+import '../design/warning_callout.dart';
 import 'connection_pills.dart';
 
 /// Which test-card state the [ConnectionFormView] renders. The wrapper maps its
@@ -17,22 +18,6 @@ import 'connection_pills.dart';
 /// - [success] — the last probe reached the server (green result card).
 /// - [failure] — the last probe failed (red result card).
 enum ConnectionTestState { startingTor, idle, testing, success, failure }
-
-/// One optional checkbox row below the Tor toggle (background / foreground sync).
-/// Apps/modes without sync options pass an empty list.
-class ConnectionSyncRow {
-  final String label;
-  final String help;
-  final bool checked;
-  final ValueChanged<bool> onToggle;
-
-  const ConnectionSyncRow({
-    required this.label,
-    required this.help,
-    required this.checked,
-    required this.onToggle,
-  });
-}
 
 /// Plain strings the [ConnectionFormView] renders. Injected so the view stays
 /// localization-agnostic — each app passes its own generated l10n.
@@ -108,8 +93,6 @@ class ConnectionFormView extends StatelessWidget {
   final String pillProxyPort;
   final String pillAddress;
 
-  final List<ConnectionSyncRow> syncRows;
-
   // Test card.
   final ConnectionTestState testState;
   final VoidCallback onTest;
@@ -161,7 +144,6 @@ class ConnectionFormView extends StatelessWidget {
     required this.onSave,
     this.onScan,
     this.successLatency,
-    this.syncRows = const [],
     this.pinnedSave = false,
     this.showSave = true,
   });
@@ -260,20 +242,13 @@ class ConnectionFormView extends StatelessWidget {
         label: labels.useTorLabel,
         trailing: Row(mainAxisSize: MainAxisSize.min, spacing: 6, children: _routePills()),
       ),
-      for (final row in syncRows)
-        _CheckRow(
-          checked: row.checked,
-          onTap: () => row.onToggle(!row.checked),
-          label: row.label,
-          help: row.help,
-        ),
       const SizedBox(height: 16),
       _buildTestCard(),
     ];
 
     final saveButton = BrandButton(label: saveButtonLabel, onPressed: canSave ? onSave : null);
 
-    final warningCallout = warning != null ? _ConnectionWarningCallout(warning!) : null;
+    final warningCallout = warning != null ? WarningCallout(warning!) : null;
 
     if (pinnedSave) {
       return Column(
@@ -311,37 +286,6 @@ class ConnectionFormView extends StatelessWidget {
         if (warningCallout != null) ...[const SizedBox(height: 16), warningCallout],
         if (showSave) ...[const SizedBox(height: 16), saveButton],
       ],
-    );
-  }
-}
-
-/// Amber warning callout shown above the Save button.
-class _ConnectionWarningCallout extends StatelessWidget {
-  final String message;
-
-  const _ConnectionWarningCallout(this.message);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: BrandColors.warningBg,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.warning_rounded, size: 18, color: BrandColors.warning),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: BrandText.caption.copyWith(color: BrandColors.warning, height: 1.4),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -448,22 +392,14 @@ class _FieldIconButton extends StatelessWidget {
   }
 }
 
-/// A square check + label row (Use Tor, sync toggles), with optional trailing
-/// pills or a "?" help affordance.
+/// A square check + label row (Use Tor), with optional trailing pills.
 class _CheckRow extends StatelessWidget {
   final bool checked;
   final VoidCallback? onTap;
   final String label;
-  final String? help;
   final Widget? trailing;
 
-  const _CheckRow({
-    required this.checked,
-    required this.onTap,
-    required this.label,
-    this.help,
-    this.trailing,
-  });
+  const _CheckRow({required this.checked, required this.onTap, required this.label, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -508,31 +444,6 @@ class _CheckRow extends StatelessWidget {
               ),
             ),
           ),
-          if (help != null) ...[
-            const SizedBox(width: 8),
-            Tooltip(
-              message: help!,
-              triggerMode: TooltipTriggerMode.tap,
-              child: Container(
-                width: 17,
-                height: 17,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: BrandColors.inputBorder, width: 1.4),
-                ),
-                child: Text(
-                  '?',
-                  style: TextStyle(
-                    fontSize: 10,
-                    height: 1,
-                    fontWeight: FontWeight.w700,
-                    color: BrandColors.inkMuted,
-                  ),
-                ),
-              ),
-            ),
-          ],
           const Spacer(),
           ?trailing,
         ],

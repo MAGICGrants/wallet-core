@@ -122,11 +122,9 @@ void main() {
       expect(wallet.isAddressValid('8${'A' * 94}'), isFalse, reason: 'subaddress shape only');
       expect(wallet.isAddressValid('4${'A' * 105}'), isFalse, reason: 'integrated shape only');
 
-      expect(
-        backend.addressValidCalls.map((c) => c.networkType).toSet(),
-        {0},
-        reason: 'checked against mainnet, the network the wallet is built for',
-      );
+      expect(backend.addressValidCalls.map((c) => c.networkType).toSet(), {
+        0,
+      }, reason: 'checked against mainnet, the network the wallet is built for');
     });
 
     test('an address monero_c accepts is payable, whatever its shape', () {
@@ -825,6 +823,31 @@ void main() {
       backend.storeThrows = true;
       await expectLater(wallet.commitTx(tx, '4${'A' * 94}'), completes);
     });
+
+    test('a clean commit hands the payment and its key to the metadata backup', () async {
+      final backup = _RecordingBackup();
+      MetadataBackup.instance = backup;
+      addTearDown(() => MetadataBackup.instance = null);
+      final tx = await pending();
+      backend.pendingIds = ['ab' * 32];
+      backend.committedTxKeys['ab' * 32] = '11' * 32;
+      await wallet.commitTx(tx, '4${'A' * 94}');
+      expect(backup.sent.single.txid, 'ab' * 32);
+      expect(backup.sent.single.txKey, '11' * 32);
+      expect(backup.sent.single.recipients.single.address, '4${'A' * 94}');
+    });
+
+    test('a failed broadcast hands nothing to the backup', () async {
+      final backup = _RecordingBackup();
+      MetadataBackup.instance = backup;
+      addTearDown(() => MetadataBackup.instance = null);
+      final tx = await pending();
+      backend.pendingIds = ['ab' * 32];
+      backend.commitResult = false;
+      await expectLater(wallet.commitTx(tx, '4${'A' * 94}'), throwsA(isA<BroadcastFailure>()));
+      expect(backup.sent, isEmpty);
+      expect(backend.called('txKey'), isFalse);
+    });
   });
 
   group('node-mode sync reporting', () {
@@ -1511,4 +1534,40 @@ void main() {
     expect(wallet.getPrimaryAddress(), isEmpty);
     expect(wallet.getReceiveAddress(), isNull);
   });
+}
+
+class _RecordingBackup implements MetadataBackup {
+  final sent = <({String txid, String txKey, List<TxRecipient> recipients})>[];
+
+  @override
+  void outgoingPaymentSent(
+    CryptoWallet wallet, {
+    required String txid,
+    required int accountIndex,
+    required BigInt fee,
+    required List<TxRecipient> recipients,
+    required String txKey,
+  }) => sent.add((txid: txid, txKey: txKey, recipients: recipients));
+
+  @override
+  BackedUpPayment? outgoingPayment(CryptoWallet wallet, String txid) => null;
+
+  @override
+  void historyChanged(CryptoWallet wallet) {}
+
+  @override
+  void contactsChanged() {}
+
+  @override
+  Future<void> open(
+    SeedSource seed, {
+    required List<CryptoWallet> wallets,
+    bool restored = false,
+  }) async {}
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  Future<void> deleteLocal() async {}
 }

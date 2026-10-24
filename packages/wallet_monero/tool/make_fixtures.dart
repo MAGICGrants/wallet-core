@@ -273,9 +273,9 @@ void _verifyAgainst(
 
 /// The repo root, from this script's own location rather than the working
 /// directory; so it does not matter where it is invoked from.
-String _repoRoot() => Directory.fromUri(
-  Platform.script.resolve('../../../'),
-).absolute.path.replaceAll(RegExp(r'/$'), '');
+String _repoRoot() =>
+    Directory.fromUri(Platform.script.resolve('../../../')).absolute.path
+        .replaceAll(RegExp(r'/$'), '');
 
 /// Verifies every seed constant in pure Dart, and stops if one is bad.
 ///

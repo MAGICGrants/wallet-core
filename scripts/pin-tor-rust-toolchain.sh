@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 #
-# Pin cargokit's Rust toolchain for a reproducible tor_ffi_plugin build.
+# Pin cargokit's Rust toolchain for a reproducible Rust-plugin build.
 #
-# cargokit (used by the tor plugin) hardcodes the toolchain to "stable" and runs
-# `rustup run stable cargo ...` — a MOVING channel, so tor would be built with
-# whatever stable is latest at build time (non-reproducible across time, and
-# RUSTUP_TOOLCHAIN can't override an explicit `rustup run`). Its config only allows
-# the channel enum (stable/beta/nightly), not an exact version — so we patch the
-# default in the fetched package instead.
+# cargokit hardcodes the toolchain to "stable" and runs `rustup run stable cargo
+# ...` — a MOVING channel, so the plugin would be built with whatever stable is
+# latest at build time (non-reproducible across time, and RUSTUP_TOOLCHAIN can't
+# override an explicit `rustup run`). Its config only allows the channel enum
+# (stable/beta/nightly), not an exact version — so we patch the default in the
+# fetched package instead.
 #
-# Run AFTER `flutter pub get` (so the tor package is in PUB_CACHE) and BEFORE the
+# tor_ffi_plugin no longer uses cargokit (since cypherstack/tor native-0.2.0): its
+# native-assets build hook builds with the toolchain pinned in the package's own
+# rust/rust-toolchain.toml and `cargo --locked`. The only cargokit copy left to
+# patch is wallet_openalias's.
+#
+# Run AFTER `flutter pub get` (so the packages are in PUB_CACHE) and BEFORE the
 # flutter build. Idempotent; safe if the string is already pinned.
 #
 set -euo pipefail

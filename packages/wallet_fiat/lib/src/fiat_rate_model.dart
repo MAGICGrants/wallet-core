@@ -17,6 +17,32 @@ const int maxFiatResponseBytes = 256 * 1024;
 
 enum FiatApiMode { torOnly, clearnet, disabled }
 
+/// The price in a Kraken `Ticker` reply for [pair]: the last trade (`c[0]`),
+/// which is the price Kraken itself shows.
+///
+/// Not `o`, the day's opening price: that is fixed at 00:00 UTC, so late in a
+/// day with a large move it is off by the whole move.
+///
+/// Throws when Kraken reports an error (it does so as HTTP 200 with a populated
+/// `error` array and an empty `result`) or the reply has no usable price.
+@visibleForTesting
+double krakenLastTradePrice(Object? body, String pair) {
+  final reply = body is Map ? body : null;
+  final errors = reply?['error'];
+  if (errors is List && errors.isNotEmpty) {
+    throw Exception('Kraken error: ${errors.join(', ')}');
+  }
+  final result = reply?['result'];
+  final ticker = result is Map ? result[pair] : null;
+  final lastTrade = ticker is Map ? ticker['c'] : null;
+  final price = lastTrade is List && lastTrade.isNotEmpty ? lastTrade.first : null;
+  final value = price is String ? double.tryParse(price) : null;
+  if (value == null || !value.isFinite || value <= 0) {
+    throw Exception('Could not find rate for $pair');
+  }
+  return value;
+}
+
 /// The app's Tor SOCKS proxy, or null when unavailable. The apps run their own
 /// `TorService`, the one everything else connects through, so the fiat model
 /// asks the app for the proxy rather than owning Tor.
@@ -222,18 +248,7 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
       if (response.statusCode != 200) {
         throw Exception('Status code: ${response.statusCode}');
       }
-      final jsonBody = jsonDecode(body) as Map<String, dynamic>;
-      // Kraken reports rate limits / errors as HTTP 200 with a populated `error`
-      // array and an empty `result`; surface that rather than a vague "no rate".
-      final errors = jsonBody['error'];
-      if (errors is List && errors.isNotEmpty) {
-        throw Exception('Kraken error: ${errors.join(', ')}');
-      }
-      final rate = jsonBody['result']?[pair]?['o'];
-      if (rate is! String) {
-        throw Exception('Could not find rate for $pair');
-      }
-      return double.parse(rate);
+      return krakenLastTradePrice(jsonDecode(body), pair);
     } finally {
       client.close(force: true);
     }
@@ -263,17 +278,7 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
         timeout: const Duration(seconds: 20),
       );
       if (response.statusCode == 200) {
-        // Kraken reports rate limits / errors as HTTP 200 with a populated
-        // `error` array and an empty `result`; surface that specifically.
-        final errors = response.jsonBody?['error'];
-        if (errors is List && errors.isNotEmpty) {
-          throw Exception('Kraken error: ${errors.join(', ')}');
-        }
-        final rate = response.jsonBody?['result']?[pair]?['o'];
-        if (rate is! String) {
-          throw Exception('Could not find rate for $pair');
-        }
-        return double.parse(rate);
+        return krakenLastTradePrice(response.jsonBody, pair);
       } else {
         throw Exception('Status code: ${response.statusCode}');
       }

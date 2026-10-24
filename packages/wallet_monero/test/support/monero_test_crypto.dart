@@ -77,10 +77,9 @@ abstract final class MoneroTestCrypto {
   ], byteOrder: Endian.little);
 
   /// The 8 bytes an amount is XORed with.
-  static List<int> amountPad(BigInt sharedSecret) => QuickCrypto.keccack256Hash([
-    ...utf8.encode('amount'),
-    ...scalarBytes(sharedSecret),
-  ]).sublist(0, 8);
+  static List<int> amountPad(BigInt sharedSecret) =>
+      QuickCrypto.keccack256Hash([...utf8.encode('amount'), ...scalarBytes(sharedSecret)])
+          .sublist(0, 8);
 
   /// `rct::commit`: mask·G + amount·H. The point library cannot add the point
   /// at infinity, so a zero amount is the blinding term alone.

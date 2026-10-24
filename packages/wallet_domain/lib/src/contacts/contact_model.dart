@@ -1,18 +1,37 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:wallet_infra/wallet_infra.dart';
 
+import '../metadata_backup.dart';
 import 'contact.dart';
 import 'contacts_store.dart';
+
+/// A new contact id: 16 random bytes, as 32 hex characters.
+///
+/// Random rather than the creation time, because the metadata backup merges
+/// address books from several devices by id, and two devices adding a contact
+/// in the same millisecond would otherwise become one contact.
+String newContactId() {
+  final random = Random.secure();
+  return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+}
 
 /// The address book, as both apps present it.
 class ContactModel with ChangeNotifier {
   ContactModel({Future<List<String>?> Function()? read, Future<void> Function(List<String>)? write})
     : _read = read ?? readEncodedContacts,
       _write = write ?? writeEncodedContacts {
+    ContactsSync.attach(_applyRemote);
     load();
+  }
+
+  @override
+  void dispose() {
+    ContactsSync.detach(_applyRemote);
+    super.dispose();
   }
 
   final Future<List<String>?> Function() _read;
@@ -61,24 +80,69 @@ class ContactModel with ChangeNotifier {
     }
   }
 
-  Future<void> _saveContacts() async {
+  /// Writes the address book, then lets a metadata backup record the change
+  /// ([MetadataBackup.contactsChanged]). Throws when nothing was written: over
+  /// an address book that was not read it refuses, and a failed write is
+  /// logged and rethrown.
+  Future<void> _store() async {
     if (!_loaded) {
-      unawaited(
-        log(LogLevel.error, 'Refusing to save contacts over an address book that was not read.'),
-      );
-      return;
+      throw StateError('Refusing to save contacts over an address book that was not read');
     }
-
     try {
       await _write(_contacts.map((contact) => json.encode(contact.toJson())).toList());
     } catch (e) {
       unawaited(log(LogLevel.error, 'Error saving contacts: $e'));
+      rethrow;
     }
+    MetadataBackup.instance?.contactsChanged();
+  }
+
+  /// [_store] for the user's own edits, which stay in memory when it fails.
+  Future<void> _saveContacts() async {
+    try {
+      await _store();
+    } on StateError catch (e) {
+      unawaited(log(LogLevel.error, '${e.message}.'));
+    } catch (_) {
+      // Logged by _store.
+    }
+  }
+
+  /// Changes merged in from a metadata backup; see [ContactsSync]. Throws when
+  /// they were not stored, so the backup does not count them as this device's
+  /// address book: a contact it then lacks would read as deleted here.
+  Future<void> _applyRemote(Map<String, Contact?> changes) async {
+    if (!_loaded) {
+      // Nothing in memory to keep in step yet: change storage, then read it.
+      final stored = await _read();
+      if (stored == null) {
+        throw StateError('Address book unreadable; backup changes not applied');
+      }
+      await _write(applyContactChanges(stored, changes));
+      await load();
+      return;
+    }
+    final remaining = Map.of(changes);
+    final updated = <Contact>[];
+    for (final contact in _contacts) {
+      if (!remaining.containsKey(contact.id)) {
+        updated.add(contact);
+        continue;
+      }
+      final replacement = remaining.remove(contact.id);
+      if (replacement != null) updated.add(replacement);
+    }
+    updated.addAll(remaining.values.whereType<Contact>());
+    _contacts = updated;
+    notifyListeners();
+    // Kept in memory if this fails: the next save of any edit writes them, and
+    // the next sync applies them again meanwhile.
+    await _store();
   }
 
   Future<void> addContact(String name, Map<String, String> addresses) async {
     final contact = Contact(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: newContactId(),
       name: name.trim(),
       addresses: _normalizeAddresses(addresses),
     );
@@ -102,6 +166,21 @@ class ContactModel with ChangeNotifier {
 
   Future<void> deleteContact(String id) async {
     _contacts.removeWhere((contact) => contact.id == id);
+    await _saveContacts();
+    notifyListeners();
+  }
+
+  /// Deletes every contact: the user's own "Delete Address Book". A metadata
+  /// backup that syncs to a location records the deletions there too
+  /// ([MetadataBackup.contactsChanged]). Deleting a wallet does not call this:
+  /// the address book outlives it.
+  ///
+  /// Unlike an edit, it may write over an address book that could not be read:
+  /// the user asked for all of it to go.
+  Future<void> deleteAll() async {
+    _contacts = [];
+    _loaded = true;
+    _unreadable = false;
     await _saveContacts();
     notifyListeners();
   }

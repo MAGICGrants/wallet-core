@@ -28,7 +28,7 @@ void main() {
     useTestCaBundle();
     logs = MemoryLogSink();
     WalletLog.sink = logs;
-    WalletLog.isVerbose = () async => true;
+    WalletLog.isLoggingOn = () async => true;
     backend = FakeMoneroBackend();
     wallet = MoneroWallet(backend: backend);
   });

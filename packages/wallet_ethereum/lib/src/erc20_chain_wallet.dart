@@ -13,20 +13,17 @@ class Erc20ChainWallet extends EthereumChainWallet {
     required super.chainId,
     required super.coinSymbol,
     required super.blockchainName,
-    required String assetName,
+    required this._assetName,
     required super.iconAsset,
     required super.isTestnet,
     required this.tokenContractAddress,
     required this.tokenDecimals,
     required this.parentCoinSymbol,
-    int displayDecimals = 6,
-    int displaySmallerDigits = 2,
+    this._displayDecimals = 6,
+    this._displaySmallerDigits = 2,
     super.rpc,
     super.explorer,
-  }) : _assetName = assetName,
-       _displayDecimals = displayDecimals,
-       _displaySmallerDigits = displaySmallerDigits,
-       super(connectionAddressExample: '');
+  }) : super(connectionAddressExample: '');
 
   final String tokenContractAddress;
   final int tokenDecimals;
@@ -122,6 +119,7 @@ class Erc20ChainWallet extends EthereumChainWallet {
     bool isSweepAll, {
     int priority = 0,
   }) async {
+    await waitForSpendKeys();
     if (_mnemonic == null || _address == null) throw Exception('Wallet is not loaded.');
     if (!_rpc.isConfigured) throw Exception('Not connected to an RPC endpoint.');
     if (!isAddressValid(destinationAddress)) throw Exception('Invalid Ethereum address.');
