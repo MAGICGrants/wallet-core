@@ -26,9 +26,10 @@ void main() {
     });
 
     test('carries the roots behind the certificates LWS and node operators use', () {
-      // Each certificate is preceded by its root's name, underlined with '='.
+      // Each certificate is preceded by its root's name, underlined with '=',
+      // and then by comment lines (curl's "# Fingerprint (SHA-256): ...").
       final roots = RegExp(
-        r'^(.+)\n=+\n-----BEGIN CERTIFICATE-----',
+        r'^(.+)\n=+\n(?:#.*\n)*-----BEGIN CERTIFICATE-----',
         multiLine: true,
       ).allMatches(pem).map((m) => m.group(1)!.trim()).toSet();
       expect(roots, hasLength(certificates), reason: 'every certificate is named');
