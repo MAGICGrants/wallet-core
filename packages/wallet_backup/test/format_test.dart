@@ -13,7 +13,6 @@ BackupFileBody body({List<BackupRecord> records = const [], int seq = 1, Uint8Li
       deviceId: device ?? Uint8List(16)
         ..fillRange(0, 16, 0xaa),
       seq: seq,
-      kind: FileKind.change,
       lamport: 3,
       created: 1791000000,
       seen: {toHex(Uint8List(16)..fillRange(0, 16, 0xbb)): 9},
@@ -276,26 +275,50 @@ void main() {
       expect(opened.records.single.raw, unknownRaw);
     });
 
-    test('a snapshot chunk is exactly 64 KiB', () {
+    test('the body has keys 0–5, and a file with any other is rejected', () {
       final keys = testKeys();
-      final chunk = BackupFileBody(
-        deviceId: Uint8List(16),
-        seq: 1,
-        kind: FileKind.snapshotChunk,
-        lamport: 1,
-        created: 0,
-        seen: const {},
-        records: const [],
-        snapshotId: Uint8List(16)..fillRange(0, 16, 3),
-        chunkIndex: 0,
-        chunkCount: 1,
-        covers: {toHex(Uint8List(16)): 4},
+      final decoded = Map<Object, Object?>.from(cborDecode(body().encode())! as Map);
+      expect(decoded.keys.toSet(), {0, 1, 2, 3, 4, 5});
+      final extra = cborEncode({...decoded, 6: 0});
+      expect(
+        () => openBackupFile(keys, sealRaw(keys, plaintextFor(extra, 1024))),
+        throwsA(isA<BackupFileException>().having((e) => e.error, 'e', BackupFileError.malformed)),
       );
-      final file = sealBackupFile(keys, chunk);
-      expect(file.length, 65536);
-      final opened = openBackupFile(keys, file);
-      expect(BackupNames.plainNameOf(opened), startsWith('s-03030303'));
-      expect(opened.covers, {toHex(Uint8List(16)): 4});
+    });
+
+    test('body integers are 0 to 2^63 − 1, so they fit an int64_t', () {
+      final keys = testKeys();
+      final decoded = Map<Object, Object?>.from(cborDecode(body().encode())! as Map);
+      Uint8List withField(int key, Object value) =>
+          sealRaw(keys, plaintextFor(cborEncode({...decoded, key: value}), 1024));
+      final malformed = throwsA(
+        isA<BackupFileException>().having((e) => e.error, 'e', BackupFileError.malformed),
+      );
+
+      // The largest int64 is read back as written.
+      final int64Max = ((BigInt.one << 63) - BigInt.one).toInt();
+      expect(openBackupFile(keys, withField(3, int64Max)).created, int64Max);
+
+      // seq, lamport and created: negative, or past int64 (CBOR still encodes
+      // it, as an 8-byte unsigned integer).
+      for (final key in [1, 2, 3]) {
+        for (final value in <Object>[-1, BigInt.one << 63]) {
+          expect(() => openBackupFile(keys, withField(key, value)), malformed);
+        }
+      }
+      // And each seq in seen.
+      expect(
+        () => openBackupFile(
+          keys,
+          withField(4, [
+            [Uint8List(16), -1],
+          ]),
+        ),
+        malformed,
+      );
+
+      // The writer never produces a file a reader rejects.
+      expect(() => body(seq: -1).encode(), throwsArgumentError);
     });
   });
 

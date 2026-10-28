@@ -1,12 +1,13 @@
+import 'dart:ffi';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:pointycastle/export.dart';
+import 'package:ffi/ffi.dart';
 
-/// XChaCha20-Poly1305, as libsodium's `crypto_aead_xchacha20poly1305_ietf_*`:
-/// HChaCha20 turns the key and the first 16 nonce bytes into a subkey, and
-/// ChaCha20-Poly1305 (RFC 8439) runs under it with the nonce
-/// `0x00000000 ‖ nonce[16:24]`.
+import 'native.dart';
+
+/// XChaCha20-Poly1305: libsodium's `crypto_aead_xchacha20poly1305_ietf_*`,
+/// through fhse_native ([BackupNative]).
 ///
 /// Random 24-byte nonces are safe to draw independently on every device, which
 /// is why the backup uses the X variant: no counter has to be shared.
@@ -18,95 +19,66 @@ class XChaCha20Poly1305 {
   static const tagLength = 16;
 
   /// `ciphertext ‖ tag`.
-  static Uint8List seal(Uint8List key, Uint8List nonce, Uint8List ad, Uint8List plaintext) =>
-      _run(true, key, nonce, ad, plaintext);
+  static Uint8List seal(Uint8List key, Uint8List nonce, Uint8List ad, Uint8List plaintext) {
+    final native = BackupNative.instance;
+    return _run(native, native.encrypt, key, nonce, ad, plaintext, plaintext.length + tagLength);
+  }
 
   /// The plaintext, or throws [AuthenticationFailed] if any byte of the
   /// ciphertext, tag, nonce or [ad] was changed.
   static Uint8List open(Uint8List key, Uint8List nonce, Uint8List ad, Uint8List sealed) {
     if (sealed.length < tagLength) throw const AuthenticationFailed();
-    try {
-      return _run(false, key, nonce, ad, sealed);
-    } on ArgumentError {
-      // pointycastle reports a tag mismatch as an ArgumentError.
-      throw const AuthenticationFailed();
-    }
+    final native = BackupNative.instance;
+    return _run(native, native.decrypt, key, nonce, ad, sealed, sealed.length - tagLength);
   }
 
+  /// Runs [operation] with every buffer copied into native memory, and wipes
+  /// each before it is freed, so no key or plaintext is left in the native
+  /// heap.
   static Uint8List _run(
-    bool encrypt,
+    BackupNative native,
+    AeadD operation,
     Uint8List key,
     Uint8List nonce,
     Uint8List ad,
     Uint8List input,
+    int outputLength,
   ) {
     if (key.length != keyLength) throw ArgumentError('key must be 32 bytes');
     if (nonce.length != nonceLength) throw ArgumentError('nonce must be 24 bytes');
-    final subkey = hChaCha20(key, Uint8List.sublistView(nonce, 0, 16));
-    final ietfNonce = Uint8List(12)..setRange(4, 12, nonce, 16);
-    final aead = ChaCha20Poly1305(ChaCha7539Engine(), Poly1305())
-      ..init(encrypt, AEADParameters(KeyParameter(subkey), tagLength * 8, ietfNonce, ad));
-    final out = Uint8List(encrypt ? input.length + tagLength : input.length - tagLength);
+    final buffers = <(Pointer<Uint8>, int)>[];
+    // calloc(0) may return null; one byte keeps a valid pointer for empty input.
+    Pointer<Uint8> copy(Uint8List bytes) {
+      final size = bytes.isEmpty ? 1 : bytes.length;
+      final ptr = calloc<Uint8>(size);
+      buffers.add((ptr, size));
+      ptr.asTypedList(bytes.length).setAll(0, bytes);
+      return ptr;
+    }
+
     try {
-      var n = aead.processBytes(input, 0, input.length, out, 0);
-      n += aead.doFinal(out, n);
-      return n == out.length ? out : Uint8List.sublistView(out, 0, n);
-    } catch (_) {
-      // Decryption writes plaintext before it checks the tag; drop it.
-      out.fillRange(0, out.length, 0);
-      rethrow;
+      final out = copy(Uint8List(outputLength));
+      final rc = operation(
+        out,
+        outputLength,
+        copy(input),
+        input.length,
+        copy(ad),
+        ad.length,
+        copy(nonce),
+        nonce.length,
+        copy(key),
+        key.length,
+      );
+      if (rc == BackupNative.decryptionFailure) throw const AuthenticationFailed();
+      if (rc != 0) throw StateError('XChaCha20-Poly1305 failed: error $rc');
+      return Uint8List.fromList(out.asTypedList(outputLength));
     } finally {
-      subkey.fillRange(0, subkey.length, 0);
+      for (final (ptr, size) in buffers) {
+        native.memzero(ptr.cast(), size);
+        calloc.free(ptr);
+      }
     }
-  }
-
-  /// HChaCha20 (draft-irtf-cfrg-xchacha §2.2): 20 ChaCha rounds over
-  /// constants ‖ key ‖ nonce16, output words 0–3 and 12–15, no feed-forward.
-  static Uint8List hChaCha20(Uint8List key, Uint8List nonce16) {
-    final s = Uint32List(16);
-    s[0] = 0x61707865;
-    s[1] = 0x3320646e;
-    s[2] = 0x79622d32;
-    s[3] = 0x6b206574;
-    final k = ByteData.sublistView(key);
-    for (var i = 0; i < 8; i++) {
-      s[4 + i] = k.getUint32(4 * i, Endian.little);
-    }
-    final n = ByteData.sublistView(nonce16);
-    for (var i = 0; i < 4; i++) {
-      s[12 + i] = n.getUint32(4 * i, Endian.little);
-    }
-    for (var round = 0; round < 10; round++) {
-      _qr(s, 0, 4, 8, 12);
-      _qr(s, 1, 5, 9, 13);
-      _qr(s, 2, 6, 10, 14);
-      _qr(s, 3, 7, 11, 15);
-      _qr(s, 0, 5, 10, 15);
-      _qr(s, 1, 6, 11, 12);
-      _qr(s, 2, 7, 8, 13);
-      _qr(s, 3, 4, 9, 14);
-    }
-    final out = Uint8List(32);
-    final o = ByteData.sublistView(out);
-    for (var i = 0; i < 4; i++) {
-      o.setUint32(4 * i, s[i], Endian.little);
-      o.setUint32(16 + 4 * i, s[12 + i], Endian.little);
-    }
-    s.fillRange(0, 16, 0);
-    return out;
-  }
-
-  static int _rotl(int v, int c) => ((v << c) | (v >> (32 - c))) & 0xffffffff;
-
-  static void _qr(Uint32List s, int a, int b, int c, int d) {
-    s[a] = s[a] + s[b];
-    s[d] = _rotl(s[d] ^ s[a], 16);
-    s[c] = s[c] + s[d];
-    s[b] = _rotl(s[b] ^ s[c], 12);
-    s[a] = s[a] + s[b];
-    s[d] = _rotl(s[d] ^ s[a], 8);
-    s[c] = s[c] + s[d];
-    s[b] = _rotl(s[b] ^ s[c], 7);
   }
 }
 

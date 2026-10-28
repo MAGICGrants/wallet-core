@@ -17,15 +17,9 @@ abstract final class BackupNames {
   static String change(Uint8List deviceId, int seq) =>
       'c-${toHex(deviceId)}-${seq.toRadixString(16).padLeft(16, '0')}';
 
-  /// `s-<snapshot_id, 32 hex>-<chunk_index, 4 hex>`.
-  static String snapshotChunk(Uint8List snapshotId, int chunkIndex) =>
-      's-${toHex(snapshotId)}-${chunkIndex.toRadixString(16).padLeft(4, '0')}';
+  static String plainNameOf(BackupFileBody body) => change(body.deviceId, body.seq);
 
-  static String plainNameOf(BackupFileBody body) => body.kind == FileKind.snapshotChunk
-      ? snapshotChunk(body.snapshotId!, body.chunkIndex ?? 0)
-      : change(body.deviceId, body.seq);
-
-  static final _plain = RegExp(r'^(c-[0-9a-f]{32}-[0-9a-f]{16}|s-[0-9a-f]{32}-[0-9a-f]{4})$');
+  static final _plain = RegExp(r'^c-[0-9a-f]{32}-[0-9a-f]{16}$');
 
   static bool isPlainName(String name) => _plain.hasMatch(name);
 

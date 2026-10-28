@@ -91,7 +91,9 @@ jobs:
 
       # The real native library: fhse_native's sources (FHSE, libsodium,
       # libcbor) at the commit pub resolved, built for the host. The tests load
-      # it rather than a stand-in.
+      # it rather than a stand-in: wallet_fhse's, and wallet_backup's and
+      # wallet_backup_platform's, which seal their files with its libsodium
+      # (their test/flutter_test_config.dart). Keep this step before them.
       - name: Build fhse_native for the host
         working-directory: packages/wallet_fhse
         run: dart run tool/build_host_library.dart

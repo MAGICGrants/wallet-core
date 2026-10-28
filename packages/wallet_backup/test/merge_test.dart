@@ -11,7 +11,6 @@ BackupFileBody file(int device, int seq, List<BackupRecord> records, {Map<String
     BackupFileBody(
       deviceId: dev(device),
       seq: seq,
-      kind: FileKind.change,
       lamport: seq,
       created: 0,
       seen: seen ?? const {},

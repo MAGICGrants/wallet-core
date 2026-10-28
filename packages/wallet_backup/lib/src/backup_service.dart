@@ -1147,7 +1147,6 @@ class MetadataBackupService extends ChangeNotifier
       final body = BackupFileBody(
         deviceId: state.deviceId,
         seq: seq,
-        kind: FileKind.change,
         lamport: lamport,
         created: _clock().millisecondsSinceEpoch ~/ 1000,
         seen: _merged.seenExcept(toHex(state.deviceId)),
@@ -1349,7 +1348,6 @@ class MetadataBackupService extends ChangeNotifier
       final body = BackupFileBody(
         deviceId: deviceId,
         seq: files.length + 1,
-        kind: FileKind.change,
         lamport: lamport,
         created: _clock().millisecondsSinceEpoch ~/ 1000,
         seen: _merged.seenExcept(toHex(deviceId)),

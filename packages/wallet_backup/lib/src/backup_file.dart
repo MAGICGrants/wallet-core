@@ -13,8 +13,15 @@ import 'records.dart';
 /// header     = format_version (u8, = 1) ‖ key_epoch (u16, big-endian)   authenticated as AD
 /// ciphertext = XChaCha20-Poly1305(k_enc(key_epoch), nonce, AD = header, plaintext)  (+16 B tag)
 /// plaintext  = body_len (u32, big-endian) ‖ body ‖ zero padding
-/// body       = deterministic CBOR map, keys 0–10
+/// body       = deterministic CBOR map, keys 0–5
 /// ```
+///
+/// Every integer in the body (seq, lamport, created, and each seq in seen) is
+/// 0 to 2^63 − 1, so it fits an int64_t, and is written in CBOR's shortest
+/// unsigned form as deterministic CBOR requires. A reader rejects any other.
+///
+/// Every file holds one change from one device: a payment, or what one sync
+/// recorded. Readers merge all of them; no file replaces another.
 ///
 /// Only the version and the epoch are visible. There is no magic number, so a
 /// file does not announce what it is.
@@ -29,12 +36,6 @@ const _overhead = headerLength + XChaCha20Poly1305.nonceLength + XChaCha20Poly13
 
 /// The largest body that fits in one file.
 const maxBodyLength = maxFileSize - _overhead;
-
-/// The kinds of file.
-abstract final class FileKind {
-  static const change = 0;
-  static const snapshotChunk = 1;
-}
 
 enum BackupFileError {
   unknownVersion,
@@ -60,15 +61,10 @@ class BackupFileBody {
   BackupFileBody({
     required this.deviceId,
     required this.seq,
-    required this.kind,
     required this.lamport,
     required this.created,
     required this.seen,
     required this.records,
-    this.snapshotId,
-    this.chunkIndex,
-    this.chunkCount,
-    this.covers,
   });
 
   /// 16 random bytes per wallet instance.
@@ -76,7 +72,6 @@ class BackupFileBody {
 
   /// Per device, from 1, never reused.
   final int seq;
-  final int kind;
 
   /// The writer's Lamport clock.
   final int lamport;
@@ -88,28 +83,23 @@ class BackupFileBody {
   final Map<String, int> seen;
   final List<BackupRecord> records;
 
-  final Uint8List? snapshotId;
-  final int? chunkIndex;
-  final int? chunkCount;
-
-  /// For a snapshot chunk: hex device id → highest seq it includes.
-  final Map<String, int>? covers;
-
   String get deviceIdHex => toHex(deviceId);
 
-  Uint8List encode() => cborEncode({
-    0: deviceId,
-    1: seq,
-    2: kind,
-    3: lamport,
-    4: created,
-    5: _pairs(seen),
-    6: [for (final r in records) CborRaw(r.raw)],
-    if (snapshotId != null) 7: snapshotId,
-    if (chunkIndex != null) 8: chunkIndex,
-    if (chunkCount != null) 9: chunkCount,
-    if (covers != null) 10: _pairs(covers!),
-  });
+  Uint8List encode() {
+    // The range a reader enforces ([_bodyInt]); a Dart int holds nothing
+    // above it, so only the sign needs checking.
+    for (final v in [seq, lamport, created, ...seen.values]) {
+      if (v < 0) throw ArgumentError('body integers are 0 to 2^63 - 1: $v');
+    }
+    return cborEncode({
+      0: deviceId,
+      1: seq,
+      2: lamport,
+      3: created,
+      4: _pairs(seen),
+      5: [for (final r in records) CborRaw(r.raw)],
+    });
+  }
 
   static List<Object?> _pairs(Map<String, int> m) {
     final keys = m.keys.toList()..sort();
@@ -143,12 +133,12 @@ class BackupFileBody {
     for (var i = 0; i < count; i++) {
       final key = r.read();
       if (key is! int) throw const RecordFormatException('body key');
-      if (key == 6) {
+      if (key == 5) {
         final n = r.readArrayHeader();
         records = [for (var j = 0; j < n; j++) BackupRecord.parse(Uint8List.fromList(r.readRaw()))];
       } else {
-        // Unknown body keys are a format change; keys 0–10 are fixed by v1.
-        if (key > 10) throw const RecordFormatException('unknown body key');
+        // Unknown body keys are a format change; keys 0–5 are fixed by v1.
+        if (key > 5) throw const RecordFormatException('unknown body key');
         fields[key] = r.read();
       }
     }
@@ -156,26 +146,13 @@ class BackupFileBody {
     if (deviceId is! Uint8List || deviceId.length != 16) {
       throw const RecordFormatException('device id');
     }
-    final kind = fields[2] as int;
-    if (kind != FileKind.change && kind != FileKind.snapshotChunk) {
-      throw const RecordFormatException('file kind');
-    }
-    final snapshotId = fields[7] as Uint8List?;
-    if (kind == FileKind.snapshotChunk && (snapshotId == null || snapshotId.length != 16)) {
-      throw const RecordFormatException('snapshot id');
-    }
     return BackupFileBody(
       deviceId: deviceId,
-      seq: fields[1] as int,
-      kind: kind,
-      lamport: fields[3] as int,
-      created: fields[4] as int,
-      seen: _readPairs(fields[5]),
+      seq: _bodyInt(fields[1], 'seq'),
+      lamport: _bodyInt(fields[2], 'lamport'),
+      created: _bodyInt(fields[3], 'created'),
+      seen: _readPairs(fields[4]),
       records: records ?? (throw const RecordFormatException('records')),
-      snapshotId: snapshotId,
-      chunkIndex: fields[8] as int?,
-      chunkCount: fields[9] as int?,
-      covers: fields[10] == null ? null : _readPairs(fields[10]),
     );
   }
 
@@ -185,37 +162,28 @@ class BackupFileBody {
     for (final pair in v) {
       if (pair is! List || pair.length != 2) throw const RecordFormatException('pair');
       final id = pair[0];
-      final seq = pair[1];
-      if (id is! Uint8List || id.length != 16 || seq is! int) {
-        throw const RecordFormatException('pair');
-      }
-      out[toHex(id)] = seq;
+      if (id is! Uint8List || id.length != 16) throw const RecordFormatException('pair');
+      out[toHex(id)] = _bodyInt(pair[1], 'pair');
     }
     return out;
+  }
+
+  /// A body integer: 0 to 2^63 − 1, so it fits an int64_t. CBOR decodes a
+  /// larger one as a BigInt, not an int, so the type test rejects it too.
+  static int _bodyInt(Object? v, String what) {
+    if (v is! int || v < 0) throw RecordFormatException(what);
+    return v;
   }
 }
 
 /// Seals [body] into a complete file, padded to its final size.
-Uint8List sealBackupFile(BackupKeys keys, BackupFileBody body, {int epoch = currentEpoch}) {
-  final encoded = body.encode();
-  return sealEncodedBody(
-    keys,
-    encoded,
-    epoch: epoch,
-    exactSize: body.kind == FileKind.snapshotChunk,
-  );
-}
+Uint8List sealBackupFile(BackupKeys keys, BackupFileBody body, {int epoch = currentEpoch}) =>
+    sealEncodedBody(keys, body.encode(), epoch: epoch);
 
-/// Seals an already-encoded body. Snapshot chunks ([exactSize]) are always
-/// exactly [maxFileSize].
-Uint8List sealEncodedBody(
-  BackupKeys keys,
-  Uint8List encoded, {
-  int epoch = currentEpoch,
-  bool exactSize = false,
-}) {
+/// Seals an already-encoded body.
+Uint8List sealEncodedBody(BackupKeys keys, Uint8List encoded, {int epoch = currentEpoch}) {
   if (encoded.length > maxBodyLength) throw ArgumentError('body too large: ${encoded.length}');
-  final total = exactSize ? maxFileSize : paddedFileSize(_overhead + encoded.length);
+  final total = paddedFileSize(_overhead + encoded.length);
   final plaintextLength =
       total - headerLength - XChaCha20Poly1305.nonceLength - XChaCha20Poly1305.tagLength;
   final plaintext = Uint8List(plaintextLength);

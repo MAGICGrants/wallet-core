@@ -32,7 +32,7 @@ dependencies:
   fhse_native:
     git:
       url: https://github.com/MAGICGrants/fhse_native
-      ref: 5b2da7c75e270e64d7e7ea881540f494b4ea594e # main
+      ref: 115ae4c269fb3ada18819c2436009d247b3c2dff # main
 
 dev_dependencies:
   flutter_test:

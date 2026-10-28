@@ -31,7 +31,17 @@ They are never written to disk.
 ```
 file      = version (1) ‖ key_epoch (u16 BE) ‖ nonce (24) ‖ XChaCha20-Poly1305(k_enc, AD = header)
 plaintext = body_len (u32 BE) ‖ deterministic CBOR body ‖ zero padding
+body      = {0: device id (16 B), 1: seq, 2: lamport, 3: created (Unix seconds),
+             4: seen ([device id, seq] pairs), 5: records}
 ```
+
+Every integer in the body is 0 to 2^63 − 1, so it fits an int64_t, and is
+written in CBOR's shortest unsigned form; a reader rejects a file with any
+other.
+
+Every file is one change from one device: a payment, or what one sync
+recorded. Readers merge them all, and no file replaces another, so devices
+never overwrite each other's writes.
 
 Every file is at least 1 KiB, rounded up with PADMÉ, at most 64 KiB. A reader
 rejects an unknown version or epoch, a failed seal, non-zero padding and a body
@@ -48,10 +58,12 @@ Records written by this version (registry in `lib/src/records.dart`):
 Names: `c-<device>-<seq>` locally; elsewhere `b32(H_16[k_name]("file name" ‖ plain))`
 inside a folder named `b32(H_16[k_name]("folder name"))`.
 
-XChaCha20 is HChaCha20 (here) over pointycastle's RFC 8439 ChaCha20-Poly1305.
-The tests check it against libsodium 1.0.22 (the copy vendored in
-`wallet_fhse`) and draft-irtf-cfrg-xchacha's vectors, and check `M` against
-independently computed vectors.
+XChaCha20-Poly1305 is libsodium's `crypto_aead_xchacha20poly1305_ietf_*`, from
+fhse_native (`wfhse.h`), the library wallet_fhse also uses. The tests check it
+against draft-irtf-cfrg-xchacha's vector and libsodium's own outputs, and check
+`M` against independently computed vectors. They need fhse_native built for the
+host: run `dart run tool/build_host_library.dart` in `packages/wallet_fhse`
+first, or set `WALLET_FHSE_LIBRARY` to a build of it.
 
 ## Service
 

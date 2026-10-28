@@ -216,8 +216,8 @@ packages:
     dependency: transitive
     description:
       path: "."
-      ref: "5b2da7c75e270e64d7e7ea881540f494b4ea594e"
-      resolved-ref: "5b2da7c75e270e64d7e7ea881540f494b4ea594e"
+      ref: "115ae4c269fb3ada18819c2436009d247b3c2dff"
+      resolved-ref: "115ae4c269fb3ada18819c2436009d247b3c2dff"
       url: "https://github.com/MAGICGrants/fhse_native"
     source: git
     version: "0.1.0"

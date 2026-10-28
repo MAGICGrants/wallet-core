@@ -10,25 +10,19 @@ Uint8List seq(int start, int n) => Uint8List.fromList(List.generate(n, (i) => (s
 
 String blake256(Uint8List data) => toHex(Blake2bDigest(digestSize: 32).process(data));
 
-/// Expected values come from libsodium 1.0.22 (the copy vendored in
-/// wallet_fhse), `crypto_aead_xchacha20poly1305_ietf_encrypt` with
-/// key = 80..9f, nonce = 40..57, AD = 01 00 00, and plaintext byte i =
-/// (31 i + 7) mod 256; the long ciphertexts are given by their BLAKE2b-256.
+/// XChaCha20-Poly1305 is libsodium itself (fhse_native), so these pin the
+/// binding: argument order, the AD, the nonce and where the tag goes. The
+/// draft's vector is independent of libsodium. The others are libsodium 1.0.22's
+/// `crypto_aead_xchacha20poly1305_ietf_encrypt` with key = 80..9f, nonce =
+/// 40..57, AD = 01 00 00, and plaintext byte i = (31 i + 7) mod 256; the long
+/// ciphertexts are given by their BLAKE2b-256.
 void main() {
   final key = seq(0x80, 32);
   final nonce = seq(0x40, 24);
   final ad = Uint8List.fromList([1, 0, 0]);
   Uint8List message(int n) => Uint8List.fromList(List.generate(n, (i) => (i * 31 + 7) & 0xff));
 
-  test('HChaCha20 matches draft-irtf-cfrg-xchacha §2.2.1', () {
-    final out = XChaCha20Poly1305.hChaCha20(
-      seq(0, 32),
-      fromHex('000000090000004a0000000031415927'),
-    );
-    expect(toHex(out), '82413b4227b27bfed30e42508a877d73a0f9e4d58a74a853c12ec41326d3ecdc');
-  });
-
-  test('XChaCha20-Poly1305 matches draft-irtf-cfrg-xchacha A.3.1 (via libsodium)', () {
+  test('XChaCha20-Poly1305 matches draft-irtf-cfrg-xchacha A.3.1', () {
     const pt =
         "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the "
         'future, sunscreen would be it.';

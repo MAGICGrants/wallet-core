@@ -25,9 +25,6 @@ class BackupState {
   /// Per device: the highest seq any file says it has seen of it.
   final Map<String, int> _seenBy = {};
 
-  /// Per device: the highest seq covered by a snapshot.
-  final Map<String, int> _covered = {};
-
   int _maxLamport = 0;
 
   int get maxLamport => _maxLamport;
@@ -36,34 +33,25 @@ class BackupState {
 
   /// Highest change seq present for [deviceIdHex], or 0.
   int maxSeqOf(String deviceIdHex) {
-    final s = _seqs[deviceIdHex];
-    var max = _covered[deviceIdHex] ?? 0;
-    if (s != null) {
-      for (final v in s) {
-        if (v > max) max = v;
-      }
+    var max = 0;
+    for (final v in _seqs[deviceIdHex] ?? const <int>{}) {
+      if (v > max) max = v;
     }
     return max;
   }
 
   /// Every other device's highest seq, for a new file's `seen`.
   Map<String, int> seenExcept(String deviceIdHex) => {
-    for (final d in {..._seqs.keys, ..._covered.keys})
+    for (final d in _seqs.keys)
       if (d != deviceIdHex) d: maxSeqOf(d),
   };
 
   /// Merges one opened file. Returns false if it was already merged.
   bool add(String plainName, BackupFileBody body) {
     if (!_files.add(plainName)) return false;
-    final device = body.deviceIdHex;
-    if (body.kind == FileKind.change) {
-      (_seqs[device] ??= {}).add(body.seq);
-    }
+    (_seqs[body.deviceIdHex] ??= {}).add(body.seq);
     for (final e in body.seen.entries) {
       if ((_seenBy[e.key] ?? 0) < e.value) _seenBy[e.key] = e.value;
-    }
-    for (final e in (body.covers ?? const <String, int>{}).entries) {
-      if ((_covered[e.key] ?? 0) < e.value) _covered[e.key] = e.value;
     }
     if (body.lamport > _maxLamport) _maxLamport = body.lamport;
     for (final r in body.records) {
@@ -121,14 +109,13 @@ class BackupState {
   int get unknownRecordCount => _unknown.length;
 
   /// Sequence gaps per device: seqs below the highest present that no file
-  /// holds and no snapshot covers.
+  /// holds.
   Map<String, List<int>> get gaps {
     final out = <String, List<int>>{};
     for (final e in _seqs.entries) {
-      final covered = _covered[e.key] ?? 0;
-      final max = e.value.fold<int>(covered, (a, b) => a > b ? a : b);
+      final max = e.value.fold<int>(0, (a, b) => a > b ? a : b);
       final missing = [
-        for (var s = covered + 1; s <= max; s++)
+        for (var s = 1; s <= max; s++)
           if (!e.value.contains(s)) s,
       ];
       if (missing.isNotEmpty) out[e.key] = missing;
