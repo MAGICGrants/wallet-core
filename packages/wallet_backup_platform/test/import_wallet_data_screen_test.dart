@@ -11,7 +11,9 @@ import 'package:wallet_domain/wallet_domain.dart';
 import 'package:wallet_infra/testing.dart';
 import 'package:wallet_infra/wallet_infra.dart';
 
-/// "Import wallet data?" after a restore, against real services over an
+import 'support/fake_sync_folder.dart';
+
+/// "Import Wallet Data?" after a restore, against real services over an
 /// in-memory iCloud: the backup is turned on only when an import succeeds.
 
 const raven =
@@ -22,12 +24,13 @@ const abandon =
 
 /// One install: its own files and address book, sharing [cloud].
 class Install {
-  Install(this.root, MemoryLocation cloud, {FolderLocation? onDevice}) {
+  Install(this.root, MemoryLocation cloud, {FolderLocation? onDevice, FakeSyncFolder? syncFolder}) {
     service = MetadataBackupService(
       localRoot: () async => Directory('${root.path}/local'),
       locations: [
         BackupLocationConfig(location: cloud),
         if (onDevice != null) BackupLocationConfig(location: onDevice, onDevice: true),
+        if (syncFolder != null) BackupLocationConfig(location: syncFolder, retryUnreadable: true),
       ],
       paymentUploadDelay: Duration.zero,
       observeLifecycle: false,
@@ -96,9 +99,18 @@ void main() {
   /// The phone being restored. Built in real time (runAsync): the service's
   /// futures must not belong to the test's fake-time zone, or its file work
   /// would wait on frames that never come.
-  Future<Install> restoredInstall(WidgetTester tester, {FolderLocation? onDevice}) async {
+  Future<Install> restoredInstall(
+    WidgetTester tester, {
+    FolderLocation? onDevice,
+    FakeSyncFolder? syncFolder,
+  }) async {
     return (await tester.runAsync(() async {
-      final b = Install(Directory('${tmp.path}/new'), cloud, onDevice: onDevice);
+      final b = Install(
+        Directory('${tmp.path}/new'),
+        cloud,
+        onDevice: onDevice,
+        syncFolder: syncFolder,
+      );
       await b.service.open(const PolyseedSeed(raven), wallets: const [], restored: true);
       return b;
     }))!;
@@ -135,7 +147,7 @@ void main() {
     );
     await tester.tap(find.text('home'));
     await tester.pumpAndSettle();
-    expect(find.text('Import wallet data'), findsOneWidget);
+    expect(find.text('Import Wallet Data'), findsOneWidget);
   }
 
   /// Lets real file and storage work run between frames until [done].
@@ -158,7 +170,7 @@ void main() {
     await pumpScreen(tester, b);
 
     await tester.tap(find.text('From iCloud'));
-    await settle(tester, () => shows('Wallet data imported'));
+    await settle(tester, () => shows('Wallet Data Imported'));
 
     expect(shows('Restored 0 payments and 1 contact'), isTrue);
     expect(shows('Backup to iCloud is on'), isTrue);
@@ -179,19 +191,69 @@ void main() {
     await pumpScreen(tester, b);
 
     await tester.tap(find.text('From iCloud'));
-    await settle(tester, () => shows('No backup found'));
-    expect(find.text('No backup found'), findsOneWidget);
+    await settle(tester, () => shows('No Backup Found'));
+    expect(find.text('No Backup Found'), findsOneWidget);
     expect(find.text('No backup of this wallet in iCloud.'), findsOneWidget);
 
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-    expect(find.text('No backup found'), findsNothing);
+    expect(find.text('No Backup Found'), findsNothing);
     expect(find.text('From iCloud'), findsOneWidget);
 
     expect(b.service.enabled, isFalse);
     expect(await tester.runAsync(() => b.service.isLocationEnabled('icloud')), isFalse);
     expect(cloud.folders, isEmpty, reason: 'nothing uploaded');
     expect(await tester.runAsync(() => Directory('${tmp.path}/new').exists()), isFalse);
+    await tester.runAsync(b.service.close);
+  });
+
+  testWidgets('from a sync folder with a backup there: imports, and turns only it on', (
+    tester,
+  ) async {
+    await tester.runAsync(() => earlierInstall(const PolyseedSeed(raven)));
+    // What a sync app brought over from the other device.
+    final folder = FakeSyncFolder()..files.folders.addAll(cloud.folders);
+    final b = await restoredInstall(tester, syncFolder: folder);
+    await pumpScreen(tester, b);
+
+    await tester.tap(find.text('From a Sync Folder'));
+    await settle(tester, () => shows('Wallet Data Imported'));
+    expect(folder.picks, 1);
+    expect(shows('Restored 0 payments and 1 contact'), isTrue);
+    expect(shows('Backup to Documents/Skylight Backup is on'), isTrue);
+    expect(b.names, ['Alice']);
+    expect(await tester.runAsync(() => b.service.isLocationEnabled(folder.id)), isTrue);
+    expect(await tester.runAsync(() => b.service.isLocationEnabled('icloud')), isFalse);
+    await tester.runAsync(b.service.close);
+  });
+
+  testWidgets('nothing in the sync folder: a pop-up, and the folder is forgotten', (tester) async {
+    final folder = FakeSyncFolder();
+    final b = await restoredInstall(tester, syncFolder: folder);
+    await pumpScreen(tester, b);
+
+    await tester.tap(find.text('From a Sync Folder'));
+    await settle(tester, () => shows('No Backup Found'));
+    expect(find.text('No backup of this wallet in Documents/Skylight Backup.'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(folder.chosen, isNull);
+    expect(b.service.enabled, isFalse);
+    expect(folder.files.folders, isEmpty, reason: 'nothing written');
+    await tester.runAsync(b.service.close);
+  });
+
+  testWidgets('nothing in iCloud, with no sync folder chosen: not found, not unreachable', (
+    tester,
+  ) async {
+    final b = await restoredInstall(tester, syncFolder: FakeSyncFolder());
+    await pumpScreen(tester, b);
+
+    await tester.tap(find.text('From iCloud'));
+    await settle(tester, () => shows('No Backup Found'));
+    expect(find.text('No backup of this wallet in iCloud.'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
     await tester.runAsync(b.service.close);
   });
 
@@ -215,8 +277,8 @@ void main() {
     final b = await restoredInstall(tester);
     await pumpScreen(tester, b, pickFile: () async => bundle);
 
-    await tester.tap(find.text('From a backup file'));
-    await settle(tester, () => shows('Wallet data imported'));
+    await tester.tap(find.text('From a Backup File'));
+    await settle(tester, () => shows('Wallet Data Imported'));
 
     expect(shows('Automatic backups are off'), isTrue);
     expect(b.names, ['Alice'], reason: 'the contacts stay in the address book');
@@ -232,10 +294,10 @@ void main() {
     final b = await restoredInstall(tester);
     await pumpScreen(tester, b, pickFile: () async => other);
 
-    await tester.tap(find.text('From a backup file'));
+    await tester.tap(find.text('From a Backup File'));
     await settle(tester, () => shows("That file isn't a backup of this wallet"));
 
-    expect(find.text('From a backup file'), findsOneWidget);
+    expect(find.text('From a Backup File'), findsOneWidget);
     expect(b.service.enabled, isFalse);
     expect(await tester.runAsync(() => isEmptyDir(Directory('${tmp.path}/new/local'))), isTrue);
     await tester.runAsync(b.service.close);
@@ -252,7 +314,7 @@ void main() {
     });
     await pumpScreen(tester, b, pickFile: () async => other);
 
-    await tester.tap(find.text('From a backup file'));
+    await tester.tap(find.text('From a Backup File'));
     await settle(tester, () => shows("That file isn't a backup of this wallet"));
 
     expect(b.service.enabled, isFalse);
@@ -263,9 +325,9 @@ void main() {
   testWidgets('a cancelled file pick changes nothing', (tester) async {
     final b = await restoredInstall(tester);
     await pumpScreen(tester, b, pickFile: () async => null);
-    await tester.tap(find.text('From a backup file'));
+    await tester.tap(find.text('From a Backup File'));
     await tester.pumpAndSettle();
-    expect(find.text('From a backup file'), findsOneWidget);
+    expect(find.text('From a Backup File'), findsOneWidget);
     expect(b.service.enabled, isFalse);
     await tester.runAsync(b.service.close);
   });

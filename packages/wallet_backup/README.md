@@ -83,12 +83,14 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   choose.
 - **Only the user deletes a backup.** The one way a location's files are
   deleted is the user's delete for that location (`deleteFromLocation`:
-  "Delete the iCloud copy", "Delete the Android backup copy"). Otherwise:
+  "Delete the iCloud Copy", "Delete the Android Backup Copy"), or, for a sync
+  folder, the user deleting them in the folder. Otherwise:
   - Turning a location on reads what is there and adds what it lacks. It
     never removes a file or replaces one (a different file under one of our
     names is left as it is).
   - Turning a location off only stops adding. Its files stay, and Android
-    backup keeps carrying an on-device location's.
+    backup keeps carrying an on-device location's. A sync folder turned off is
+    also forgotten (its access given up); its files stay in it.
   - Turning the whole backup off (also when the last location is turned
     off, and after saving or importing a file with none on) and deleting the
     wallet remove only the app's own local copy and device state, never a
@@ -100,7 +102,8 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   records (its address-book changes, or the payments a history scan
   backfills). The seq is saved first, the file goes to the local copy
   (temporary name, flushed, renamed), then to every enabled location. Payment
-  files reach iCloud after a random delay of up to 10 minutes.
+  files reach iCloud and the sync folder after a random delay of up to 10
+  minutes.
 - **Payments.** `MoneroWallet.commitTx` hands the payment over straight after
   the broadcast, with the key read from the wallet. A history scan also records
   every outgoing payment this wallet built that has no record yet, including
@@ -138,13 +141,18 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   own and a Lamport clock kept in the preferences (`exportLamportPrefKey`), so a
   newer file's contacts win over an older one's; importing a file applies it as
   a join applies the backup.
-- **Reading.** On open, on resume, every 5 minutes, and after every change:
-  list each location, open anything new, merge, apply, upload what is missing.
+- **Reading.** On open, on resume, every 5 minutes, after every change, and a
+  few seconds after a location that watches its folder (the sync folder)
+  reports one: list each location, open anything new, merge, apply, upload
+  what is missing. A file that fails to open is set aside until the next
+  unlock, except at a location where files can show up before they are whole
+  (`retryUnreadable`: a sync app's empty placeholder, a copy still arriving),
+  where it is read again at every sync.
 - **Restore.** A new device id, then every enabled location is read. With the
   backup off, nothing is read until the user chooses to import: after a
   restore, `findBackups` looks in each location without writing or turning
   anything on, and the backup is turned on only with the locations where one
-  was found (`wallet_backup_platform`'s "Import wallet data" screen). A wallet's history
+  was found (`wallet_backup_platform`'s "Import Wallet Data" screen). A wallet's history
   takes destinations and keys from the backup for payments it lost
   (`CryptoWallet._withCarriedFields`). The report lists unreadable files,
   sequence gaps, and payments with two different records.
@@ -160,6 +168,83 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   A TODO there notes the next step: handing the keys to wallet2 itself with a
   `set_tx_key` binding in monero_c.
 
+## Where the backup goes
+
+The user turns on one or more automatic locations, and can save a backup file
+at any time. They do different jobs:
+
+| | Keeps up with every change | Shares changes between devices in use | Restores a new or reinstalled device |
+|---|---|---|---|
+| **iCloud** (iOS) | Yes | Yes, between iPhones and iPads on one Apple ID | Yes |
+| **Android backup** | About once a day | **No** | Yes |
+| **Sync folder** (every platform) | Yes | Yes, once a sync app or a network drive shares the folder | Yes |
+| **Backup file** (manual) | No: a snapshot | No | Yes, imported by hand |
+
+### Android backup restores; it does not sync
+
+Android's Auto Backup is a backup of the app's files, not a sync service:
+
+- Android keeps a **separate copy for each device** in the user's Google
+  account (or the phone's own backup service), and only the latest one.
+- It uploads that copy **about once a day**, when the phone is idle and on
+  Wi-Fi; the app cannot make it run sooner.
+- It **puts a copy back only when the app is installed**: on a new phone, or
+  after a reinstall. A running app can never read another device's copy, and
+  cannot ask for a restore.
+
+So two Android phones in use at once never see each other's changes; the
+second one gets them only when the app is installed on it again. It is a good
+safety net (nothing to set up, and it brings everything back on a new phone),
+but not a way to keep devices in step. Android has no built-in equivalent of
+iCloud for apps; the sync folder is the way here.
+
+### The sync folder: what the user sets up
+
+The app writes every change to a folder the user chooses and watches it for
+files other devices add. The app does not copy the folder anywhere: on its own
+it is just a second copy on the same device, lost with the device. It becomes
+a backup once something else keeps it:
+
+1. **Something that copies the folder off the device.** Either a folder sync
+   app that syncs it, both ways, with the user's other devices (Syncthing,
+   on Android Syncthing-Fork; or an app such as Dropsync, Autosync, FolderSync,
+   MEGA or Synology Drive for a cloud or NAS), or, on a desktop OS, a folder
+   on a network drive (NAS).
+2. **The folder, chosen in the app:** Settings > Backup > Sync Folder. On
+   Android, a folder such as `Documents/Skylight Backup` (not the storage
+   root or `Download` itself, which Android does not offer). Each wallet's
+   files go in a subfolder named from its seed; a file renamed there is no
+   longer read.
+3. **Each other device pointed at its copy of that folder** in the same way.
+   After restoring a wallet, "Import Wallet Data" offers "From a Sync Folder".
+4. **The sync app kept running:** on Android, with battery optimization off for
+   it. Check how it handles deletions: some (FolderSync) do not sync them
+   unless told to, so a file deleted on one device comes back.
+
+Changes reach other devices as fast as the sync app brings them, while the
+wallet is open there. The sync app or the NAS does the networking, outside the
+app's Tor, and sees what any storage location sees (below); a closed-source
+sync app with ads or analytics (Dropsync and Autosync include some) also
+reports to those. Two apps pointed at the same folder share the backup of a
+seed they both hold.
+
+### Sync folder or backup file
+
+- **The sync folder is automatic and continuous.** Every payment and contact
+  change is written as it happens, and other devices' changes are read back,
+  so the copy elsewhere is always current. It is what keeps devices in step,
+  and it counts as an automatic backup for the security checklist.
+- **The backup file is a one-time snapshot.** "Save a Backup File" puts
+  everything the backup holds at that moment into one file, saved wherever the
+  user picks (the share sheet on a phone, a save dialog on a desktop OS). It
+  never updates: changes made after it are not in it, so it needs saving again
+  to stay current. Nothing reads it until the user imports it. It suits an
+  offline or archived copy, moving a backup between apps, and a device with no
+  automatic location on.
+
+They work together: the sync folder for everyday changes, a saved file now
+and then for a copy kept apart from every device and sync service.
+
 ## What a storage location can see
 
 The files are sealed and their names hashed, so a location cannot read who was
@@ -170,9 +255,12 @@ still see:
 - **Whose files they are.** iCloud and Android backup keep them under the
   user's Apple or Google account (or the phone's own backup service), and the
   operating system uploads them outside Tor, from the device's own network
-  address.
+  address. A sync folder's files are seen by the sync app and wherever it
+  sends them (a cloud account, a NAS; Syncthing's relay and discovery servers
+  see only which devices connect), and that traffic is outside Tor too.
 - **Which app.** Each app has its own iCloud container and Android package, so
-  the location knows Skylight or Spice is in use.
+  the location knows Skylight or Spice is in use. A sync folder says so only
+  through the name the user gives it.
 - **That the files belong to one wallet.** The folder name comes from the seed,
   so it is the same on every device and never changes: the location can link a
   wallet's files across devices and over time, though not to its addresses.
@@ -180,9 +268,9 @@ still see:
   that changed the address book (all its edits together) or backfilled
   payments. Files are deleted only when the user deletes them there, so their
   count roughly tracks payments and editing sessions.
-- **Roughly when.** Upload times. A payment's file reaches iCloud after a
-  random delay of up to 10 minutes; contact changes are not delayed. Android
-  backup runs about once a day, which blurs timing there.
+- **Roughly when.** Upload times. A payment's file reaches iCloud or the sync
+  folder after a random delay of up to 10 minutes; contact changes are not
+  delayed. Android backup runs about once a day, which blurs timing there.
 - **Roughly how much a file holds.** Files are padded to at least 1 KiB and
   rounded up with PADMÉ, so a size says only roughly how many records it
   carries.
@@ -203,7 +291,5 @@ location holding the same files is the remedy.
 
 - **Compaction.** The backups can be periodically compacted to reduce storage use.
 - **Backup to LWS.** The intent is to support using a LWS as a backup location.
-- **Live folder locations** (SAF, a desktop sync folder). The backup file
-  covers "anywhere else".
 - **Other coins' labels and notes, incoming annotations, settings.**
 - **Testnet and stagenet.** Only mainnet Monero is backed up.

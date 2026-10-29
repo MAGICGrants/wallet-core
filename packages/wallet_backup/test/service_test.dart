@@ -36,6 +36,7 @@ class Device {
         ...?extra,
       ],
       paymentUploadDelay: delay,
+      watchDelay: Duration.zero,
       observeLifecycle: false,
       readContacts: () async => contacts,
       applyContactChanges: (changes) async {
@@ -338,6 +339,116 @@ void main() {
       expect(b.contactList.map((c) => c.name), ['Alice']);
       expect(b.service.failedFiles.map((f) => f.reason), contains('too large'));
       expect(b.service.statusOf('icloud').lastError, isNull);
+      await a.service.close();
+      await b.service.close();
+    });
+  });
+
+  group('a sync folder', () {
+    /// A device whose only location is a folder that a sync app fills.
+    Device withFolder(String name, MemoryLocation folder) => Device(
+      Directory('${tmp.path}/$name'),
+      MemoryLocation('unused'),
+      extra: [BackupLocationConfig(location: folder, retryUnreadable: true)],
+    );
+
+    test('a file still arriving is read again at the next sync, then merged', () async {
+      final a = device('a')
+        ..setContacts([
+          const Contact(id: 'alice', name: 'Alice', addresses: {'XMR': recipient}),
+        ]);
+      await a.open(const PolyseedSeed(raven));
+      final folder = a.service.folderName!;
+      final (name, bytes) = cloud.folders[folder]!.entries.map((e) => (e.key, e.value)).single;
+
+      // The sync app has made the file but not filled it yet.
+      final synced = MemoryLocation('elsewhere')..folders[folder] = {name: Uint8List(0)};
+      final b = withFolder('b', synced);
+      await b.open(const PolyseedSeed(raven), restored: true);
+      expect(b.service.failedFiles, hasLength(1));
+      expect(b.contactList, isEmpty);
+
+      synced.folders[folder]![name] = bytes;
+      await b.service.sync();
+      expect(b.contactList.map((c) => c.name), ['Alice']);
+      expect(b.service.failedFiles, isEmpty, reason: 'it opened after all');
+      await a.service.close();
+      await b.service.close();
+    });
+
+    test('elsewhere, a file that fails to open stays set aside until the next unlock', () async {
+      final a = device('a')
+        ..setContacts([
+          const Contact(id: 'alice', name: 'Alice', addresses: {'XMR': recipient}),
+        ]);
+      await a.open(const PolyseedSeed(raven));
+      final folder = a.service.folderName!;
+      final (name, bytes) = cloud.folders[folder]!.entries.map((e) => (e.key, e.value)).single;
+
+      final other = MemoryLocation('icloud')..folders[folder] = {name: Uint8List(0)};
+      final b = Device(Directory('${tmp.path}/b'), other);
+      await b.open(const PolyseedSeed(raven), restored: true);
+      other.folders[folder]![name] = bytes;
+      await b.service.sync();
+      expect(b.contactList, isEmpty);
+      await a.service.close();
+      await b.service.close();
+    });
+
+    test('a change there starts a sync without waiting for the timer', () async {
+      final synced = MemoryLocation('elsewhere');
+      final b = Device(
+        Directory('${tmp.path}/b'),
+        MemoryLocation('unused'),
+        extra: [BackupLocationConfig(location: synced, retryUnreadable: true)],
+      );
+      await b.open(const PolyseedSeed(raven));
+      final folder = b.service.folderName!;
+      expect(synced.changes.hasListener, isTrue, reason: 'watched once on');
+
+      final a = device('a')
+        ..setContacts([
+          const Contact(id: 'alice', name: 'Alice', addresses: {'XMR': recipient}),
+        ]);
+      await a.open(const PolyseedSeed(raven));
+      (synced.folders[folder] ??= {}).addAll(cloud.folders[folder]!);
+      expect(b.contactList, isEmpty, reason: 'not read until something says so');
+      synced.changes.add(null);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await b.service.idle();
+      expect(b.contactList.map((c) => c.name), ['Alice']);
+
+      await b.service.setLocationEnabled('elsewhere', false);
+      expect(synced.changes.hasListener, isFalse, reason: 'not watched once off');
+      await a.service.close();
+      await b.service.close();
+    });
+
+    test('another folder chosen: what failed at the old one is read again', () async {
+      final a = device('a')
+        ..setContacts([
+          const Contact(id: 'alice', name: 'Alice', addresses: {'XMR': recipient}),
+        ]);
+      await a.open(const PolyseedSeed(raven));
+      final folder = a.service.folderName!;
+      final (name, bytes) = cloud.folders[folder]!.entries.map((e) => (e.key, e.value)).single;
+
+      // Set aside at the first place (no retry there)...
+      final place = MemoryLocation('elsewhere')..folders[folder] = {name: Uint8List(0)};
+      final b = Device(
+        Directory('${tmp.path}/b'),
+        MemoryLocation('unused'),
+        extra: [BackupLocationConfig(location: place)],
+      );
+      await b.open(const PolyseedSeed(raven), restored: true);
+      expect(b.contactList, isEmpty);
+
+      // ...then the user chooses another folder, where the file is whole.
+      place.folders[folder] = {name: bytes};
+      await b.service.locationChanged('elsewhere');
+      await b.service.idle();
+      expect(b.contactList.map((c) => c.name), ['Alice']);
+      expect(b.service.failedFiles, isEmpty);
       await a.service.close();
       await b.service.close();
     });

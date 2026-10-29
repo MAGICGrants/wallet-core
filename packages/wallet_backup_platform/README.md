@@ -26,26 +26,65 @@ nothing is written anywhere, on the device or off it.
   restored: nothing reads it while the location is off, and nothing deletes it
   (not Skip on the import screen, saving or importing a file, turning the
   backup off or deleting the wallet). Turning Android backup on
-  reads it in; only "Delete the Android backup copy", in its card while it is
-  off, removes it. No Kotlin.
+  reads it in; only "Delete the Android Backup Copy", in its card while it is
+  off, removes it. It restores; it does not sync: Android keeps one copy per
+  device and puts it back only when the app is installed, so phones in use
+  never see each other's changes (`wallet_backup`'s README, "Where the backup
+  goes"). No Kotlin for this one.
+- **Sync folder, on every platform** (`SyncFolderLocation`): a folder the user
+  chooses, meant to be kept in step with their other devices by a folder sync
+  app (Syncthing and the like) or to sit on a network drive. Files are written
+  to it as changes happen, and the wallet's subfolder is watched for files
+  other devices add (as well as checked every 5 minutes and on resume). Files
+  there can be seen before they are whole, so one that fails to open is read
+  again at the next sync (`retryUnreadable`). Payments are delayed as for
+  iCloud. One folder per app, for all its wallets; two apps pointed at the same
+  folder share the backup of a seed they both hold.
+  - *Android* (Kotlin, `SyncFolderChannel.kt`): the system folder picker and a
+    persisted grant, which reads every file in the folder whoever wrote it, so
+    the app needs no permission. One `DocumentsContract` query per listing,
+    after asking the provider to refresh. A file is created only after
+    checking its name is free, with the `application/octet-stream` type (no
+    extension added), and removed again if the provider stored it under
+    another name; a start of the same bytes (an empty or cut-short file) is
+    completed. Changes are reported through an open listing's observer. A
+    folder that cannot take new files is refused when picked.
+  - *iOS* (Swift, `SyncFolder.swift`): the Files folder picker and a bookmark.
+    Every read and write is coordinated, which also downloads a file another
+    app's file provider holds only as a placeholder. Changes are reported by
+    a file-system watch on the folder.
+  - *macOS*: file_selector's open panel, then a security-scoped bookmark
+    (`macos/Classes`) to open the folder again at each launch; files are read
+    and written from Dart, and watched with `Directory.watch`.
+  - *Windows and Linux*: file_selector's folder dialog and a path; files and
+    watching as on macOS.
+
+  Turning it on asks for the folder (a cancelled pick leaves it off), "Change
+  Folder" picks another while it is on (read in full and given every file;
+  `locationChanged`), and turning it off forgets the folder and gives up its
+  access, leaving its files.
 - **Everywhere:** saving the whole backup as one file (the share sheet on a
   phone, a save dialog on a desktop OS) and importing one.
 - **The screens:** Settings > Backup (`MetadataBackupScreen`): the automatic
-  locations as toggles, and the backup file below them, usable at any time
-  and alongside them. There is no switch of its own: the copy on this device
+  locations as toggles (with the sync folder's folder, status and "Change
+  Folder" in its card while on), and the backup file below them, usable at
+  any time and alongside them. There is no switch of its own: the copy on this device
   is kept only while a location is on, and turning the last one off deletes it,
   leaving iCloud's, Android backup's, every saved file, the wallets and the
   address book. With none on, saving a file or importing one uses the copy for
   that step alone. The only deletes of a
-  location's files are its own links, "Delete the iCloud copy" and "Delete the
-  Android backup copy", each shown in its card while that location is off. Then "Import wallet data" after
+  location's files are its own links, "Delete the iCloud Copy" and "Delete the
+  Android Backup Copy", each shown in its card while that location is off. Then "Import Wallet Data" after
   a restore from the seed (`ImportWalletDataScreen`, shown by
   `scheduleImportWalletData`), with three choices:
-  - *From iCloud / Android backup:* looks there first without writing
+  - *From iCloud / Android Backup:* looks there first without writing
     anything (`findBackups`). Only if a backup is found is the backup turned on,
     with the location(s) it was found in; otherwise a pop-up says none was
     found and OK returns to the same screen, nothing turned on.
-  - *From a backup file:* imports a backup file: its contacts go into the
+  - *From a Sync Folder:* the user picks the folder, which is looked in the
+    same way. Only if a backup is found there is the backup turned on, with
+    the sync folder; otherwise the folder is forgotten again.
+  - *From a Backup File:* imports a backup file: its contacts go into the
     address book and its payment details into the wallets (for Monero, the
     wallet file), synced yet or not. Nothing else is kept, and every automatic
     location stays off.
@@ -53,7 +92,8 @@ nothing is written anywhere, on the device or off it.
 
   Never shown for a legacy 25-word Monero seed or a polyseed with an offset
   passphrase: they have no backup, so nothing is derived or looked for. Desktop
-  has no automatic location, so it offers the file and No. Strings are in
+  has no other automatic location, so it offers the sync folder, the file and
+  Skip. Strings are in
   `lib/src/l10n` (`BackupLocalizations`; regenerate with `flutter gen-l10n`).
 
 The device state (device id, next seq, Lamport clock, the address-book base)
@@ -62,7 +102,9 @@ the phone's own backups and Android's rules never include, so a phone restored
 from a backup starts a new device id.
 
 iCloud and Auto Backup are run by the operating system, so they ignore the
-app's Tor setting; the Backup screen says so.
+app's Tor setting; the Backup screen says so. A sync folder is local to the
+app: the sync app or network drive behind it does the networking, outside the
+app's Tor.
 
 ## What an app does
 
@@ -94,7 +136,11 @@ app's Tor setting; the Backup screen says so.
    encrypted seed store and wallet files along. `disableIfNoEncryptionCapabilities`
    is not set: the files are sealed already.
 5. **macOS.** `com.apple.security.files.user-selected.read-write` in both
-   entitlements files, for the save and open dialogs.
+   entitlements files, for the save and open dialogs and the sync folder, and
+   `com.apple.security.files.bookmarks.app-scope`, so the sync folder opens
+   again at the next launch.
+6. **Android, iOS, Windows, Linux:** nothing more for the sync folder. Android
+   needs no permission: the user grants the folder itself.
 
 ## Testing on a device
 
@@ -103,5 +149,15 @@ app's Tor setting; the Backup screen says so.
   inspecting the backup transport; only `app_flutter/metadata_backup/` should
   be there.
 - iOS: two devices on one Apple ID; send from one, unlock the other.
+- Sync folder: two devices sharing a folder through Syncthing (on Android,
+  Syncthing-Fork); turn the sync folder on in both, pointed at the shared
+  folder, send or edit a contact on one, and watch it arrive on the other
+  while open.
 
-Neither check has been run on devices yet.
+Tried so far (2026-10-29, Skylight, one device each): the sync folder on an
+Android 16 emulator and an iOS 26.5 simulator. Android's picker refused the
+storage root and took `Documents/Skylight Backup`; the Files picker took a new
+folder in On My iPhone. On both, a new contact's file appeared in the folder at
+once, and a file sealed by a second install and dropped into the folder showed
+up in the address book within seconds, through the folder watch. The macOS
+half type-checks but has not run; none of the other checks has been run yet.

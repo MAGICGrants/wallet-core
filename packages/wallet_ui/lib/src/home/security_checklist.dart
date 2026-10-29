@@ -12,7 +12,8 @@ enum SecurityStep {
   /// [SeedCheckState.validFor].
   verifySeed,
 
-  /// iCloud or Android Auto Backup is on; a saved backup file does not count.
+  /// An automatic backup location is on: iCloud, Android Auto Backup or a
+  /// sync folder. A saved backup file does not count.
   autoBackup,
 
   /// Tor is on, built in or external.

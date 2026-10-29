@@ -1,5 +1,5 @@
 name: wallet_backup_platform
-description: "The metadata backup's platform side: the iCloud location (Swift), Android Auto Backup's folder, export and import of a backup file, and the shared Backup screens."
+description: "The metadata backup's platform side: the iCloud location (Swift), Android Auto Backup's folder, the sync folder (Kotlin, Swift, Dart), export and import of a backup file, and the shared Backup screens."
 publish_to: "none"
 version: 0.1.0
 resolution: workspace
@@ -25,8 +25,9 @@ dependencies:
     path: ../wallet_ui
 
   # Importing a backup file on every platform, and choosing where to save one
-  # on a desktop OS. Mobile saves through the share sheet (share_plus, already
-  # in wallet_infra), which reaches Files, Proton Drive and the like.
+  # (or the sync folder) on a desktop OS. Mobile saves through the share sheet
+  # (share_plus, already in wallet_infra), which reaches Files, Proton Drive
+  # and the like.
   file_selector: 1.1.0
   share_plus: 11.1.0
   path_provider: 2.1.5
@@ -40,7 +41,15 @@ flutter:
   generate: true
   plugin:
     platforms:
-      # iOS only: the iCloud Drive container. Android's Auto Backup is the
-      # manifest's rules over a plain folder, which needs no plugin code.
+      # The sync folder through the Storage Access Framework. Auto Backup is
+      # the manifest's rules over a plain folder, which needs no plugin code.
+      android:
+        package: org.magicgrants.wallet_backup_platform
+        pluginClass: WalletBackupPlatformPlugin
+      # The iCloud Drive container, and the sync folder from the Files picker.
       ios:
         pluginClass: WalletBackupPlatformPlugin
+      # The sync folder's security-scoped bookmark; the files are Dart's.
+      macos:
+        pluginClass: WalletBackupPlatformPlugin
+      # Linux and Windows need nothing native: the sync folder is a path.

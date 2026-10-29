@@ -1,4 +1,4 @@
-/// The shared Backup screen and the after-restore "Import wallet data?" screen.
+/// The shared Backup screen and the after-restore "Import Wallet Data?" screen.
 ///
 /// An app adds [BackupLocalizations.delegate] to its localizationsDelegates,
 /// routes to [MetadataBackupScreen] from Settings, and calls

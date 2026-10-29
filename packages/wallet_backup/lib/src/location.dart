@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -32,6 +33,13 @@ abstract class BackupLocation {
   /// Whether the provider reports [name] as uploaded, or null when it cannot
   /// say (a local folder; a sync app that only takes files over).
   Future<bool?> isUploaded(String folder, String name) async => null;
+
+  /// Fires when files in [folder] may have changed, for a location other
+  /// programs write to (a folder a sync app keeps in step); the service syncs
+  /// soon after. None by default: the service also syncs on a timer and each
+  /// time the app comes back to the foreground. An error ends the watch until
+  /// the next sync starts it again.
+  Stream<void> watch(String folder) => const Stream.empty();
 }
 
 /// A file at a location larger than any backup file can be ([maxFileSize]).
@@ -148,8 +156,14 @@ class MemoryLocation extends BackupLocation {
   bool available = true;
   bool failWrites = false;
 
+  /// What [watch] reports: add to it to say the files changed.
+  final changes = StreamController<void>.broadcast();
+
   @override
   Future<bool> isAvailable() async => available;
+
+  @override
+  Stream<void> watch(String folder) => changes.stream;
 
   @override
   Future<List<String>> list(String folder) async {

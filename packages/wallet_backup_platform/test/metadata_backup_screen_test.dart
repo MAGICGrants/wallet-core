@@ -7,17 +7,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_backup/wallet_backup.dart' show MetadataBackupService;
 import 'package:wallet_backup_platform/backup_ui.dart';
 import 'package:wallet_backup_platform/wallet_backup_platform.dart';
-import 'package:wallet_ui/wallet_ui.dart' show BrandButton, BrandSwitch;
+import 'package:wallet_ui/wallet_ui.dart' show BrandButton, BrandSwitch, OptionCard;
 import 'package:wallet_domain/wallet_domain.dart';
 import 'package:wallet_infra/testing.dart';
 import 'package:wallet_infra/wallet_infra.dart';
 
+import 'support/fake_sync_folder.dart';
+
 /// Settings > Backup, with the real service (no platform locations on the
 /// test host): the manual backup file, and what is kept on this device.
-
-const raven =
-    'raven tail swear infant grief assist regular lamp duck valid someone little harsh puppy '
-    'airport language';
 
 void main() {
   late Directory tmp;
@@ -43,6 +41,7 @@ void main() {
   }
 
   late MetadataBackupService service;
+  late FakeSyncFolder syncFolder;
   final i18n = lookupBackupLocalizations(const Locale('en'));
 
   /// The copy on this device (`MetadataBackupSetup`'s local root).
@@ -56,6 +55,8 @@ void main() {
     Future<Uint8List?> Function()? pickFile,
     bool enabledBefore = false,
   }) async {
+    syncFolder = FakeSyncFolder();
+    MetadataBackupSetup.syncFolderForTesting = syncFolder;
     service = (await tester.runAsync(() async {
       final service = MetadataBackupSetup.install(
         const MetadataBackupConfig(
@@ -90,6 +91,19 @@ void main() {
     }
   }
 
+  /// One contact in the address book, so turning a location on writes a file.
+  Future<void> addContact(WidgetTester tester) => tester.runAsync(
+    () => writeEncodedContacts([
+      json.encode(const Contact(id: 'c1', name: 'Alice', addresses: {}).toJson()),
+    ]),
+  );
+
+  /// The switch in the card titled [title].
+  Finder switchOf(String title) => find.descendant(
+    of: find.widgetWithText(OptionCard, title),
+    matching: find.byType(BrandSwitch),
+  );
+
   Future<void> tapText(WidgetTester tester, String text) async {
     await tester.ensureVisible(find.text(text));
     await tester.tap(find.text(text));
@@ -106,6 +120,122 @@ void main() {
     expect(find.text(i18n.backupComingSoon), findsOneWidget);
     expect(find.text(i18n.backupExport), findsOneWidget);
     expect(find.text(i18n.backupImport), findsOneWidget);
+
+    await tester.runAsync(service.close);
+  });
+
+  testWidgets('Android: says it restores, and does not sync between devices', (tester) async {
+    MetadataBackupSetup.androidForTesting = true;
+    await openScreen(tester);
+    expect(
+      find.text(
+        'For restoring on a new phone or after reinstalling. Does not sync between devices. '
+        'Not protected with Tor.',
+      ),
+      findsOneWidget,
+    );
+    await tester.runAsync(service.close);
+  });
+
+  testWidgets('sync folder: offered here, with the network drive wording on a desktop OS', (
+    tester,
+  ) async {
+    await openScreen(tester);
+    expect(find.text(i18n.backupSyncFolder), findsOneWidget);
+    expect(find.text(i18n.backupSyncFolderDescriptionNas), findsOneWidget);
+    expect(await tester.runAsync(MetadataBackupSetup.automaticBackupOn), isFalse);
+    await tester.runAsync(service.close);
+  });
+
+  testWidgets('sync folder: on asks for the folder, and a cancelled pick leaves it off', (
+    tester,
+  ) async {
+    await addContact(tester);
+    await openScreen(tester);
+    syncFolder.next = null;
+    await tester.tap(switchOf(i18n.backupSyncFolder));
+    await waitIdle(tester);
+    expect(syncFolder.picks, 1);
+    expect(service.enabled, isFalse);
+    expect(find.text(i18n.backupSyncFolderChange), findsNothing);
+
+    syncFolder.next = 'Documents/Skylight Backup';
+    await tester.tap(switchOf(i18n.backupSyncFolder));
+    await waitIdle(tester);
+    expect(service.enabled, isTrue);
+    expect(find.text('Documents/Skylight Backup'), findsOneWidget);
+    expect(find.text(i18n.backupSyncFolderChange), findsOneWidget);
+    expect(
+      await tester.runAsync(MetadataBackupSetup.automaticBackupOn),
+      isTrue,
+      reason: 'it counts for the security checklist',
+    );
+    expect(syncFolder.files.folders[service.folderName], isNotEmpty, reason: 'written right away');
+
+    await tester.runAsync(service.close);
+  });
+
+  testWidgets('Android: Android backup and the sync folder on together both get every file', (
+    tester,
+  ) async {
+    MetadataBackupSetup.androidForTesting = true;
+    await addContact(tester);
+    await openScreen(tester);
+    await tester.tap(switchOf(i18n.backupAndroid));
+    await waitIdle(tester);
+    await tester.ensureVisible(switchOf(i18n.backupSyncFolder));
+    await tester.tap(switchOf(i18n.backupSyncFolder));
+    await waitIdle(tester);
+    // A second location's first sync runs after its switch: wait for it.
+    await tester.runAsync(service.idle);
+    await settle(tester);
+
+    final folder = service.folderName!;
+    final android = Directory('${tmp.path}/metadata_backup/$folder');
+    final inAndroid = (await tester.runAsync(
+      () async => [await for (final f in android.list()) f.uri.pathSegments.last],
+    ))!;
+    expect(inAndroid, isNotEmpty);
+    expect(syncFolder.files.folders[folder]?.keys, unorderedEquals(inAndroid));
+    expect(find.text(i18n.backupStatusUpToDate), findsNWidgets(2));
+
+    await tester.runAsync(service.close);
+  });
+
+  testWidgets('sync folder: off forgets the folder and leaves its files', (tester) async {
+    await addContact(tester);
+    await openScreen(tester);
+    await tester.tap(switchOf(i18n.backupSyncFolder));
+    await waitIdle(tester);
+    final written = Map.of(syncFolder.files.folders[service.folderName]!);
+    expect(written, isNotEmpty);
+
+    await tester.tap(switchOf(i18n.backupSyncFolder));
+    await waitIdle(tester);
+    expect(syncFolder.chosen, isNull);
+    expect(service.enabled, isFalse, reason: 'the last location off');
+    expect(syncFolder.files.folders[service.folderName], written);
+    expect(await tester.runAsync(MetadataBackupSetup.automaticBackupOn), isFalse);
+
+    await tester.runAsync(service.close);
+  });
+
+  testWidgets('sync folder: another folder chosen gets every file', (tester) async {
+    await addContact(tester);
+    await openScreen(tester);
+    await tester.tap(switchOf(i18n.backupSyncFolder));
+    await waitIdle(tester);
+    final folder = service.folderName!;
+    final written = Map.of(syncFolder.files.folders[folder]!);
+
+    // The new folder starts empty.
+    syncFolder.files.folders.clear();
+    syncFolder.next = 'Documents/Other';
+    await tapText(tester, i18n.backupSyncFolderChange);
+    await tester.runAsync(service.idle);
+    await waitIdle(tester);
+    expect(find.text('Documents/Other'), findsOneWidget);
+    expect(syncFolder.files.folders[folder]?.keys, unorderedEquals(written.keys));
 
     await tester.runAsync(service.close);
   });
@@ -181,8 +311,8 @@ void main() {
       await kept.writeAsBytes([1]);
     });
 
-    // On, then off: the only switch on this host is Android's.
-    await tester.tap(find.byType(BrandSwitch));
+    // On, then off.
+    await tester.tap(switchOf(i18n.backupAndroid));
     await waitIdle(tester);
     expect(
       await tester.runAsync(
@@ -190,7 +320,7 @@ void main() {
       ),
       isTrue,
     );
-    await tester.tap(find.byType(BrandSwitch));
+    await tester.tap(switchOf(i18n.backupAndroid));
     await waitIdle(tester);
     expect(
       await tester.runAsync(kept.exists),

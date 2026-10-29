@@ -9,11 +9,16 @@ import 'package:wallet_ui/wallet_ui.dart';
 import '../icloud_location.dart';
 import '../l10n/backup_localizations.dart';
 import '../setup.dart';
+import '../sync_folder_location.dart';
 
 /// Settings > Backup: the automatic places a backup can go, each a toggle
-/// (iCloud on iOS, Android backup on Android, and the light-wallet server,
-/// coming soon), and below them the manual backup file, which works at any
-/// time and alongside them.
+/// (iCloud on iOS, Android backup on Android, a sync folder everywhere, and
+/// the light-wallet server, coming soon), and below them the manual backup
+/// file, which works at any time and alongside them.
+///
+/// The sync folder is chosen when it is turned on (a cancelled pick leaves it
+/// off), can be changed while on, and is forgotten when turned off; its files
+/// stay in the folder.
 ///
 /// Opt-in, with no switch of its own. The copy on this device is kept only
 /// while a place is on, since that copy is what syncs: turning the last one off
@@ -49,6 +54,17 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
 
   MetadataBackupService? get _service => MetadataBackupSetup.service;
 
+  /// Whether the user can pick a folder on a network drive (NAS) here: a
+  /// desktop OS mounts one like any other folder.
+  ///
+  /// ", or pick a location on a network drive (NAS)." should be included in
+  /// the sync folder's description (backupSyncFolderDescriptionNas) for any OS
+  /// for which the user can pick a NAS location.
+  static bool get _canPickNas => Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+
+  SyncFolderLocation? get _syncFolder =>
+      _service?.locations.map((c) => c.location).whereType<SyncFolderLocation>().firstOrNull;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +89,7 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
   Future<void> _loadSettings() async {
     final service = _service;
     if (service == null) return;
+    await _syncFolder?.load();
     _on = await service.isEnabled();
     for (final c in service.locations) {
       _enabled[c.location.id] = await service.isLocationEnabled(c.location.id);
@@ -101,6 +118,47 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
       }
       await _loadSettings();
     });
+  }
+
+  /// The sync folder on: the user picks the folder first, and nothing changes
+  /// if they cancel. Off: nothing more is written there, and the folder is
+  /// forgotten (its access given up); its files stay.
+  Future<void> _setSyncFolder(SyncFolderLocation folder, bool value) async {
+    if (!value) {
+      await _setLocation(folder.id, false);
+      await folder.forget();
+      if (mounted) setState(() {});
+      return;
+    }
+    if (await _chooseFolder(folder)) await _setLocation(folder.id, true);
+  }
+
+  /// Another folder, while the sync folder is on: read in full, and given
+  /// every file it lacks. The old folder keeps its files.
+  Future<void> _changeFolder(SyncFolderLocation folder) async {
+    if (!await _chooseFolder(folder)) return;
+    await _service?.locationChanged(folder.id);
+    if (mounted) setState(() {});
+  }
+
+  /// The platform's folder picker. True when a folder was chosen.
+  Future<bool> _chooseFolder(SyncFolderLocation folder) async {
+    if (_busy) return false;
+    final i18n = BackupLocalizations.of(context);
+    setState(() => _busy = true);
+    try {
+      return await folder.choose();
+    } on SyncFolderException catch (e) {
+      if (mounted) {
+        showBrandToast(
+          context,
+          e.code == 'read_only' ? i18n.backupSyncFolderReadOnly : i18n.backupFailed('$e'),
+        );
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   static Future<bool> _anyLocationOn(MetadataBackupService service) async {
@@ -209,12 +267,16 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
   }
 
   /// A red link inside a place's card, for deleting its copy.
-  Widget _deleteLink(String label, VoidCallback onPressed) => TextButton(
+  Widget _deleteLink(String label, VoidCallback onPressed) =>
+      _link(label, onPressed, color: BrandColors.error);
+
+  /// A link inside a place's card.
+  Widget _link(String label, VoidCallback onPressed, {Color? color}) => TextButton(
     style: TextButton.styleFrom(
       padding: EdgeInsets.zero,
       minimumSize: const Size(0, 36),
       alignment: Alignment.centerLeft,
-      foregroundColor: BrandColors.error,
+      foregroundColor: color ?? BrandColors.primaryDeep,
     ),
     onPressed: _busy ? null : onPressed,
     child: Text(label),
@@ -224,7 +286,11 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
   String _locationStatus(BackupLocalizations i18n, String id) {
     final service = _service!;
     final s = service.statusOf(id);
-    if (s.available == false) return i18n.backupStatusUnavailable;
+    if (s.available == false) {
+      return id == SyncFolderLocation.locationId
+          ? i18n.backupSyncFolderUnavailable
+          : i18n.backupStatusUnavailable;
+    }
     if (s.lastError != null) return i18n.backupStatusError;
     if (s.pendingUploads > 0) return i18n.backupStatusPending(s.pendingUploads);
     if (s.awaitingConfirmation > 0) return i18n.backupStatusAwaiting;
@@ -270,6 +336,8 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
     final autoId = MetadataBackupSetup.autoBackupLocationId;
     final hasAuto = service.locations.any((c) => c.location.id == autoId);
     final autoBytes = hasAuto ? service.statusOf(autoId).bytes ?? 0 : 0;
+    final syncFolder = _syncFolder;
+    final syncOn = syncFolder != null && (_enabled[syncFolder.id] ?? false);
 
     Widget status(String id) =>
         Text(_locationStatus(i18n, id), style: BrandText.caption.copyWith(color: BrandColors.ink));
@@ -358,6 +426,38 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
               // Android keeps carrying them, until deleted here.
               : _autoLeftover
               ? _deleteLink(i18n.backupDeleteAndroid, _deleteAndroid)
+              : null,
+        ),
+        const SizedBox(height: BrandSpacing.md),
+      ],
+      if (syncFolder != null) ...[
+        OptionCard(
+          icon: Icons.folder_outlined,
+          title: i18n.backupSyncFolder,
+          description: _canPickNas
+              ? i18n.backupSyncFolderDescriptionNas
+              : i18n.backupSyncFolderDescription,
+          trailing: BrandSwitch(value: syncOn, onChanged: (v) => _setSyncFolder(syncFolder, v)),
+          child: syncOn
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.folder_outlined, size: 14, color: BrandColors.inkMuted),
+                        const SizedBox(width: BrandSpacing.xs),
+                        Expanded(
+                          child: Text(
+                            syncFolder.folderName ?? '',
+                            style: BrandText.caption.copyWith(color: BrandColors.ink),
+                          ),
+                        ),
+                      ],
+                    ),
+                    status(syncFolder.id),
+                    _link(i18n.backupSyncFolderChange, () => _changeFolder(syncFolder)),
+                  ],
+                )
               : null,
         ),
         const SizedBox(height: BrandSpacing.md),

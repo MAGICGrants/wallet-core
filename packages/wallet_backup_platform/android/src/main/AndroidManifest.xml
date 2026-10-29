@@ -1,0 +1,3 @@
+<!-- No `package` attribute: AGP 8 takes the namespace from build.gradle. The
+     sync folder needs no permission: the user grants the folder itself. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

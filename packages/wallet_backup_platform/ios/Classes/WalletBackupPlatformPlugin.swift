@@ -18,6 +18,7 @@ public class WalletBackupPlatformPlugin: NSObject, FlutterPlugin {
       name: "org.magicgrants.wallet_backup_platform/icloud",
       binaryMessenger: registrar.messenger())
     registrar.addMethodCallDelegate(WalletBackupPlatformPlugin(), channel: channel)
+    SyncFolder.register(with: registrar)
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

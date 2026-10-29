@@ -44,6 +44,7 @@ class BackupLocationConfig {
     required this.location,
     this.delayPayments = false,
     this.onDevice = false,
+    this.retryUnreadable = false,
   });
 
   final BackupLocation location;
@@ -56,6 +57,11 @@ class BackupLocationConfig {
   /// The location is a folder on this device that the OS copies off it
   /// (Android Auto Backup). Deleting the wallet deletes it.
   final bool onDevice;
+
+  /// Files there can be seen before they are whole: a sync app's empty
+  /// placeholder, or a copy still arriving. One that fails to open is read
+  /// again at the next sync, rather than set aside until the next unlock.
+  final bool retryUnreadable;
 }
 
 /// What the service last saw at one location.
@@ -241,6 +247,7 @@ class MetadataBackupService extends ChangeNotifier
     this._locations = const [],
     this.paymentUploadDelay = const Duration(minutes: 10),
     this.pollInterval = const Duration(minutes: 5),
+    this.watchDelay = const Duration(seconds: 3),
     this.observeLifecycle = true,
     Future<List<String>?> Function()? readContacts,
     Future<void> Function(Map<String, Contact?> changes)? applyContactChanges,
@@ -273,6 +280,11 @@ class MetadataBackupService extends ChangeNotifier
   final List<BackupLocationConfig> _locations;
   final Duration paymentUploadDelay;
   final Duration pollInterval;
+
+  /// How long after a location reports a change ([BackupLocation.watch]) the
+  /// sync starts, so a burst of changes (a sync app copying many files) is
+  /// read in one go.
+  final Duration watchDelay;
   final bool observeLifecycle;
   final Future<List<String>?> Function() _readContacts;
   final Future<void> Function(Map<String, Contact?>) _applyContacts;
@@ -292,6 +304,10 @@ class MetadataBackupService extends ChangeNotifier
   /// Names at a location that failed to open, so they are not fetched again
   /// every sync. Per location id.
   final Map<String, Set<String>> _rejected = {};
+
+  /// Names that failed to open at a [BackupLocationConfig.retryUnreadable]
+  /// location, read again each sync; each is reported once in [failedFiles].
+  final Map<String, Set<String>> _retrying = {};
   final List<FailedFile> _failed = [];
 
   /// Payment files held back from delayed locations until this time.
@@ -311,6 +327,10 @@ class MetadataBackupService extends ChangeNotifier
   Timer? _pollTimer;
   Timer? _delayTimer;
   Timer? _historyDebounce;
+
+  /// Each enabled location's [BackupLocation.watch], while the backup is on.
+  final Map<String, StreamSubscription<void>> _watches = {};
+  Timer? _watchTimer;
   bool _observing = false;
   Future<void> _chain = Future.value();
   DateTime? _lastSync;
@@ -445,8 +465,26 @@ class MetadataBackupService extends ChangeNotifier
       });
     }
     _locationStatus[id] = LocationStatus(id: id, enabled: enabled);
+    if (!enabled) await _watches.remove(id)?.cancel();
     notifyListeners();
     if (enabled) unawaited(sync());
+  }
+
+  /// [id] now points somewhere else (the user chose another folder): what
+  /// this session learned about the old place is dropped, and the new one is
+  /// read in full and given every file it lacks.
+  Future<void> locationChanged(String id) async {
+    await _serial(() async {
+      _rejected.remove(id);
+      _retrying.remove(id);
+      _failed.removeWhere((f) => f.locationId == id);
+      _awaiting.remove(id);
+      _uploadChecked.remove(id);
+      await _watches.remove(id)?.cancel();
+      _locationStatus[id] = LocationStatus(id: id, enabled: await isLocationEnabled(id));
+    });
+    notifyListeners();
+    if (await isLocationEnabled(id)) unawaited(sync());
   }
 
   /// Looks in every location for this wallet's backup without writing anything
@@ -492,6 +530,7 @@ class MetadataBackupService extends ChangeNotifier
     if (folder == null) return;
     await _locations.firstWhere((c) => c.location.id == id).location.deleteFolder(folder);
     _rejected.remove(id);
+    _retrying.remove(id);
     _awaiting.remove(id);
     _uploadChecked.remove(id);
     _locationStatus[id] = LocationStatus(id: id, enabled: await isLocationEnabled(id));
@@ -689,7 +728,7 @@ class MetadataBackupService extends ChangeNotifier
       if (!await isLocationEnabled(id)) continue;
       syncing = true;
       try {
-        listings[id] = await _ingest(config.location);
+        listings[id] = await _ingest(config);
         final read = _locationStatus[id];
         if (read?.available != true || read?.lastError != null) readAll = false;
       } catch (e) {
@@ -712,6 +751,7 @@ class MetadataBackupService extends ChangeNotifier
       log(LogLevel.warn, '[Backup] Payment scan failed: $e');
     }
     await _upload(listings: listings);
+    _watchLocations();
 
     _lastSync = _clock();
     if (reportRestore) {
@@ -729,9 +769,10 @@ class MetadataBackupService extends ChangeNotifier
     notifyListeners();
   });
 
-  /// Reads every file at [location] this device has not seen. Returns the
+  /// Reads every file at a location this device has not seen. Returns the
   /// names listed, for the upload step.
-  Future<Set<String>> _ingest(BackupLocation location) async {
+  Future<Set<String>> _ingest(BackupLocationConfig config) async {
+    final location = config.location;
     final id = location.id;
     if (!await location.isAvailable()) {
       _locationStatus[id] = LocationStatus(id: id, enabled: true, available: false);
@@ -766,13 +807,20 @@ class MetadataBackupService extends ChangeNotifier
       }
       if (bytes == null) continue; // removed since the listing; not an error
       final BackupFileBody body;
+      final retrying = _retrying[id] ??= {};
       try {
         body = openBackupFile(keys, bytes);
       } on BackupFileException catch (e) {
+        // Perhaps still arriving: read again next sync, reported once.
+        if (config.retryUnreadable) {
+          if (retrying.add(name)) _failed.add(FailedFile(id, name, e.error.name));
+          continue;
+        }
         rejected.add(name);
         _failed.add(FailedFile(id, name, e.error.name));
         continue;
       }
+      if (retrying.remove(name)) _failed.removeWhere((f) => f.locationId == id && f.name == name);
       final plain = BackupNames.plainNameOf(body);
       if (BackupNames.hashed(keys, plain) != name) {
         // Names are locators only; the sealed content is what is trusted. It
@@ -1498,6 +1546,7 @@ class MetadataBackupService extends ChangeNotifier
     _merged = BackupState();
     _hashedNames.clear();
     _rejected.clear();
+    _retrying.clear();
     _failed.clear();
     _notBefore.clear();
     _awaiting.clear();
@@ -1517,6 +1566,7 @@ class MetadataBackupService extends ChangeNotifier
     _wallets = const [];
     _hashedNames.clear();
     _rejected.clear();
+    _retrying.clear();
     _failed.clear();
     _notBefore.clear();
     _awaiting.clear();
@@ -1540,9 +1590,44 @@ class MetadataBackupService extends ChangeNotifier
     _delayTimer = null;
     _historyDebounce?.cancel();
     _historyDebounce = null;
+    _watchTimer?.cancel();
+    _watchTimer = null;
+    for (final w in _watches.values) {
+      unawaited(w.cancel());
+    }
+    _watches.clear();
     if (_observing) {
       WidgetsBinding.instance.removeObserver(this);
       _observing = false;
+    }
+  }
+
+  /// Watches each enabled location that can say when its files change, and
+  /// stops watching the rest. Run after every sync, so a watch that ended
+  /// (the folder was not there yet) starts again.
+  void _watchLocations() {
+    final folder = _folder;
+    for (final c in _locations) {
+      final id = c.location.id;
+      if (!_active || folder == null || !(_enabled[id] ?? false)) {
+        final w = _watches.remove(id);
+        if (w != null) unawaited(w.cancel());
+        continue;
+      }
+      if (_watches.containsKey(id)) continue;
+      _watches[id] = c.location
+          .watch(folder)
+          .listen(
+            (_) {
+              _watchTimer?.cancel();
+              _watchTimer = Timer(watchDelay, () => unawaited(sync()));
+            },
+            onError: (Object e) {
+              log(LogLevel.warn, '[Backup] Location $id stopped watching: $e');
+              unawaited(_watches.remove(id)?.cancel());
+            },
+            onDone: () => _watches.remove(id),
+          );
     }
   }
 

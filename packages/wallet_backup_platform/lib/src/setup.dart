@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -10,6 +11,7 @@ import 'package:wallet_domain/wallet_domain.dart';
 import 'package:wallet_infra/wallet_infra.dart';
 
 import 'icloud_location.dart';
+import 'sync_folder_location.dart';
 
 /// What an app supplies to the metadata backup.
 class MetadataBackupConfig {
@@ -46,8 +48,16 @@ class MetadataBackupConfig {
 ///   adding them; what is there stays, and Android keeps carrying it. So does a
 ///   copy Android puts back with the app's files (a new phone, or the app
 ///   reinstalled), unread while the location is off. Only "Delete the Android
-///   backup copy" in Settings > Backup removes them; turning the location on
+///   Backup Copy" in Settings > Backup removes them; turning the location on
 ///   reads them.
+///   Auto Backup is for restoring, not syncing: Android keeps a separate copy
+///   per device and puts it back only when the app is installed, so two
+///   phones in use never see each other's changes.
+/// - **Sync folder, on every platform**: a folder the user chooses
+///   ([SyncFolderLocation]) and pairs with a folder sync app (Syncthing and
+///   the like), or one on a network drive. Files are written to it right away
+///   and it is watched, so devices sharing it pick up each other's changes as
+///   the sync app brings them.
 /// - **Everywhere**: the local copy (`<app dir>/metadata_backup_local/`, not
 ///   backed up by Android), kept only while a location is on, and the
 ///   single-file export.
@@ -62,12 +72,17 @@ class MetadataBackupSetup {
 
   static MetadataBackupService? _service;
   static MetadataBackupConfig? _config;
+  static SyncFolderLocation? _syncFolder;
 
   static MetadataBackupService? get service => _service;
 
-  /// Whether a location that backs up by itself (iCloud, Android Auto Backup)
-  /// is on. A saved backup file does not count: it is a copy the user made
-  /// once, not a backup that keeps up.
+  /// The sync folder location, once installed.
+  static SyncFolderLocation? get syncFolder => _syncFolder;
+
+  /// Whether a location that backs up by itself (iCloud, Android Auto Backup,
+  /// a sync folder) is on: what the security checklist's backup step asks. A
+  /// saved backup file does not count: it is a copy the user made once, not a
+  /// backup that keeps up.
   ///
   /// Null where there is nothing to turn on: no service, a device with no such
   /// location, or a seed the backup cannot key (25 words, an offset
@@ -94,12 +109,18 @@ class MetadataBackupSetup {
     if (identical(MetadataBackup.instance, _service)) MetadataBackup.instance = null;
     _service = null;
     _config = null;
+    _syncFolder = null;
     androidForTesting = null;
+    syncFolderForTesting = null;
   }
 
   /// Sets up Android's location whatever the host, for tests of its screens.
   @visibleForTesting
   static bool? androidForTesting;
+
+  /// Stands in for the platform's sync folder, for tests of its screens.
+  @visibleForTesting
+  static SyncFolderLocation? syncFolderForTesting;
 
   static MetadataBackupConfig get config =>
       _config ?? (throw StateError('MetadataBackupSetup.install was not called'));
@@ -108,6 +129,8 @@ class MetadataBackupSetup {
     final existing = _service;
     if (existing != null) return existing;
     _config = config;
+    final syncFolder = _syncFolder = syncFolderForTesting ?? SyncFolderLocation.forPlatform();
+    unawaited(syncFolder.load());
 
     final locations = <BackupLocationConfig>[
       if (Platform.isIOS)
@@ -120,6 +143,8 @@ class MetadataBackupSetup {
           ),
           onDevice: true,
         ),
+      // Payments held back like iCloud's: the sync app sees when files land.
+      BackupLocationConfig(location: syncFolder, delayPayments: true, retryUnreadable: true),
     ];
     final service = MetadataBackupService(
       localRoot: () async => Directory('${(await getAppDir()).path}/metadata_backup_local'),

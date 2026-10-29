@@ -8,6 +8,7 @@ import 'package:wallet_ui/wallet_ui.dart';
 import '../icloud_location.dart';
 import '../l10n/backup_localizations.dart';
 import '../setup.dart';
+import '../sync_folder_location.dart';
 
 /// After a restore from the seed: once the wallet's backup keys are ready,
 /// asks whether to import wallet data ([ImportWalletDataScreen]).
@@ -63,14 +64,17 @@ void scheduleImportWalletData(
   }());
 }
 
-/// "Import wallet data", after a restore from the seed:
+/// "Import Wallet Data", after a restore from the seed:
 ///
-/// - **From iCloud / Android backup**: looks there first without writing
+/// - **From iCloud / Android Backup**: looks there first without writing
 ///   anything ([MetadataBackupService.findBackups]). Only when a backup is
 ///   found does it turn the backup on, with the location(s) it was found in.
 ///   Otherwise a pop-up says so and the user is back on this screen, with
 ///   nothing turned on.
-/// - **From a backup file**: imports a backup file: its contacts go into the
+/// - **From a Sync Folder**: the user picks the folder, which is looked in
+///   the same way. Only when a backup is found there does the backup go on,
+///   with the sync folder; otherwise the folder is forgotten again.
+/// - **From a Backup File**: imports a backup file: its contacts go into the
 ///   address book, and its payment details into the wallets (for Monero, the
 ///   wallet file), synced yet or not. Nothing else is kept, and every automatic
 ///   location stays off; the user turns them on in Settings > Backup.
@@ -78,7 +82,8 @@ void scheduleImportWalletData(
 ///   Settings > Backup, and a copy Android restored is neither read nor
 ///   deleted.
 ///
-/// Desktop has no automatic location, so it offers the file and Skip.
+/// Desktop has no other automatic location, so it offers the sync folder, the
+/// file and Skip.
 class ImportWalletDataScreen extends StatefulWidget {
   const ImportWalletDataScreen({super.key, this.service, this.pickFile});
 
@@ -102,17 +107,29 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
   int _contacts = 0;
   String? _turnedOnAt;
 
+  /// Where [_Step.looking] looks, when not the platform's own locations.
+  String? _lookingIn;
+
   MetadataBackupService get _service => widget.service ?? MetadataBackupSetup.service!;
+
+  SyncFolderLocation? get _syncFolder =>
+      _service.locations.map((c) => c.location).whereType<SyncFolderLocation>().firstOrNull;
 
   Future<void> _fromLocation(String where) async {
     final i18n = BackupLocalizations.of(context);
     setState(() {
       _step = _Step.looking;
+      _lookingIn = null;
       _error = null;
     });
     var turnedOn = false;
     try {
-      final probes = await _service.findBackups();
+      // The sync folder has its own choice: until one is picked, there is
+      // nothing to look in.
+      final probes = [
+        for (final p in await _service.findBackups())
+          if (p.id != SyncFolderLocation.locationId) p,
+      ];
       final found = [
         for (final p in probes)
           if (p.found) p.id,
@@ -137,6 +154,59 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
       });
     } catch (e) {
       if (turnedOn) await _service.setEnabled(false);
+      if (!mounted) return;
+      setState(() {
+        _step = _Step.choose;
+        _error = i18n.backupFailed('$e');
+      });
+    }
+  }
+
+  Future<void> _fromSyncFolder(SyncFolderLocation folder) async {
+    final i18n = BackupLocalizations.of(context);
+    try {
+      if (!await folder.choose()) return;
+    } on SyncFolderException catch (e) {
+      setState(
+        () => _error = e.code == 'read_only'
+            ? i18n.backupSyncFolderReadOnly
+            : i18n.backupFailed('$e'),
+      );
+      return;
+    }
+    final where = folder.folderName ?? i18n.backupSyncFolder;
+    if (!mounted) return;
+    setState(() {
+      _step = _Step.looking;
+      _lookingIn = where;
+      _error = null;
+    });
+    var turnedOn = false;
+    try {
+      final probe = (await _service.findBackups()).firstWhere((p) => p.id == folder.id);
+      if (!probe.found) {
+        await folder.forget();
+        if (!mounted) return;
+        setState(() => _step = _Step.choose);
+        await _notFound(
+          probe.available ? i18n.importNotFound(where) : i18n.importUnavailable(where),
+        );
+        return;
+      }
+      turnedOn = !_service.enabled;
+      await _service.setEnabled(true, locations: [folder.id], reportRestore: true);
+      final report = _service.lastRestoreReport;
+      if (!mounted) return;
+      setState(() {
+        _step = _Step.done;
+        _fromFile = false;
+        _payments = report?.payments ?? 0;
+        _contacts = report?.contactsRestored ?? 0;
+        _turnedOnAt = where;
+      });
+    } catch (e) {
+      if (turnedOn) await _service.setEnabled(false);
+      await folder.forget();
       if (!mounted) return;
       setState(() {
         _step = _Step.choose;
@@ -210,6 +280,7 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
   /// The three ways on, as the create/restore screen lays out its two.
   List<Widget> _choices(BackupLocalizations i18n) {
     final where = _locationNames(i18n, _service);
+    final syncFolder = _syncFolder;
     return [
       Text(i18n.importIntro, style: BrandText.bodyMuted),
       const SizedBox(height: BrandSpacing.xl),
@@ -221,6 +292,15 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
             _locationNames(i18n, _service, short: true) ?? where,
           ),
           onTap: () => _fromLocation(where),
+        ),
+        const SizedBox(height: BrandSpacing.md),
+      ],
+      if (syncFolder != null) ...[
+        OptionCard(
+          icon: Icons.folder_open_outlined,
+          title: i18n.importFromSyncFolder,
+          description: i18n.importFromSyncFolderNote,
+          onTap: () => _fromSyncFolder(syncFolder),
         ),
         const SizedBox(height: BrandSpacing.md),
       ],
@@ -284,7 +364,9 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
     final busy = _step == _Step.looking || _step == _Step.reading;
     final content = switch (_step) {
       _Step.choose => _choices(i18n),
-      _Step.looking => _working(i18n.importLooking(_locationNames(i18n, _service) ?? '')),
+      _Step.looking => _working(
+        i18n.importLooking(_lookingIn ?? _locationNames(i18n, _service) ?? ''),
+      ),
       _Step.reading => _working(i18n.importReading),
       _Step.done => _done(i18n),
     };
@@ -326,7 +408,7 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
   }
 }
 
-/// The automatic locations by name ("iCloud", "Android backup", or with
+/// The automatic locations by name ("iCloud", "Android Backup", or with
 /// [short] "iCloud", "Android"), all of this platform's or those in [only];
 /// null where there is none (desktop).
 String? _locationNames(

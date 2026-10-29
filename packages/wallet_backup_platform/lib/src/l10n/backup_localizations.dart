@@ -169,13 +169,13 @@ abstract class BackupLocalizations {
   /// No description provided for @backupAndroid.
   ///
   /// In en, this message translates to:
-  /// **'Android backup'**
+  /// **'Android Backup'**
   String get backupAndroid;
 
   /// No description provided for @backupAndroidDescription.
   ///
   /// In en, this message translates to:
-  /// **'Android backups are performed by your operating system and are not protected with Tor.'**
+  /// **'For restoring on a new phone or after reinstalling. Does not sync between devices. Not protected with Tor.'**
   String get backupAndroidDescription;
 
   /// No description provided for @backupAndroidShort.
@@ -184,10 +184,46 @@ abstract class BackupLocalizations {
   /// **'Android'**
   String get backupAndroidShort;
 
+  /// No description provided for @backupSyncFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Folder'**
+  String get backupSyncFolder;
+
+  /// No description provided for @backupSyncFolderDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Saves backups to a folder and watches for changes. Pair with a manual folder backup or sync (e.g. Syncthing).'**
+  String get backupSyncFolderDescription;
+
+  /// No description provided for @backupSyncFolderDescriptionNas.
+  ///
+  /// In en, this message translates to:
+  /// **'Saves backups to a folder and watches for changes. Pair with a manual folder backup or sync (e.g. Syncthing), or pick a location on a network drive (NAS).'**
+  String get backupSyncFolderDescriptionNas;
+
+  /// No description provided for @backupSyncFolderChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change Folder'**
+  String get backupSyncFolderChange;
+
+  /// No description provided for @backupSyncFolderUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t reach this folder. If it was moved or removed, choose it again.'**
+  String get backupSyncFolderUnavailable;
+
+  /// No description provided for @backupSyncFolderReadOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'That folder can\'t take new files. Choose another one.'**
+  String get backupSyncFolderReadOnly;
+
   /// No description provided for @backupLws.
   ///
   /// In en, this message translates to:
-  /// **'Light wallet server'**
+  /// **'Light Wallet Server'**
   String get backupLws;
 
   /// No description provided for @backupComingSoon.
@@ -235,13 +271,13 @@ abstract class BackupLocalizations {
   /// No description provided for @backupFileSection.
   ///
   /// In en, this message translates to:
-  /// **'Backup file'**
+  /// **'Backup File'**
   String get backupFileSection;
 
   /// No description provided for @backupExport.
   ///
   /// In en, this message translates to:
-  /// **'Save a backup file'**
+  /// **'Save a Backup File'**
   String get backupExport;
 
   /// No description provided for @backupExported.
@@ -253,7 +289,7 @@ abstract class BackupLocalizations {
   /// No description provided for @backupImport.
   ///
   /// In en, this message translates to:
-  /// **'Import a backup file'**
+  /// **'Import a Backup File'**
   String get backupImport;
 
   /// No description provided for @backupImported.
@@ -289,7 +325,7 @@ abstract class BackupLocalizations {
   /// No description provided for @backupRestoreTitle.
   ///
   /// In en, this message translates to:
-  /// **'Last restore'**
+  /// **'Last Restore'**
   String get backupRestoreTitle;
 
   /// No description provided for @backupRestoreSummary.
@@ -319,7 +355,7 @@ abstract class BackupLocalizations {
   /// No description provided for @backupDeleteICloud.
   ///
   /// In en, this message translates to:
-  /// **'Delete the iCloud copy'**
+  /// **'Delete the iCloud Copy'**
   String get backupDeleteICloud;
 
   /// No description provided for @backupDeleteICloudBody.
@@ -331,7 +367,7 @@ abstract class BackupLocalizations {
   /// No description provided for @backupDeleteAndroid.
   ///
   /// In en, this message translates to:
-  /// **'Delete the Android backup copy'**
+  /// **'Delete the Android Backup Copy'**
   String get backupDeleteAndroid;
 
   /// No description provided for @backupDeleteAndroidBody.
@@ -373,7 +409,7 @@ abstract class BackupLocalizations {
   /// No description provided for @backupEnable.
   ///
   /// In en, this message translates to:
-  /// **'Back up payment details'**
+  /// **'Back Up Payment Details'**
   String get backupEnable;
 
   /// No description provided for @backupAutomaticSection.
@@ -397,7 +433,7 @@ abstract class BackupLocalizations {
   /// No description provided for @importTitle.
   ///
   /// In en, this message translates to:
-  /// **'Import wallet data'**
+  /// **'Import Wallet Data'**
   String get importTitle;
 
   /// No description provided for @importIntro.
@@ -415,13 +451,13 @@ abstract class BackupLocalizations {
   /// No description provided for @importFromLocationNote.
   ///
   /// In en, this message translates to:
-  /// **'If found, this also turns on automatic {where} backups.'**
+  /// **'If found, this also enables automatic {where} backups, which you can disable in settings.'**
   String importFromLocationNote(String where);
 
   /// No description provided for @importFromFile.
   ///
   /// In en, this message translates to:
-  /// **'From a backup file'**
+  /// **'From a Backup File'**
   String get importFromFile;
 
   /// No description provided for @importFromFileNote.
@@ -429,6 +465,18 @@ abstract class BackupLocalizations {
   /// In en, this message translates to:
   /// **'This will not turn on automatic backups, which we suggest enabling in settings.'**
   String get importFromFileNote;
+
+  /// No description provided for @importFromSyncFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'From a Sync Folder'**
+  String get importFromSyncFolder;
+
+  /// No description provided for @importFromSyncFolderNote.
+  ///
+  /// In en, this message translates to:
+  /// **'If found, the same folder will be used for automatic backups, which you can disable in settings.'**
+  String get importFromSyncFolderNote;
 
   /// No description provided for @importNo.
   ///
@@ -457,7 +505,7 @@ abstract class BackupLocalizations {
   /// No description provided for @importNotFoundTitle.
   ///
   /// In en, this message translates to:
-  /// **'No backup found'**
+  /// **'No Backup Found'**
   String get importNotFoundTitle;
 
   /// No description provided for @importOk.
@@ -481,7 +529,7 @@ abstract class BackupLocalizations {
   /// No description provided for @importDoneTitle.
   ///
   /// In en, this message translates to:
-  /// **'Wallet data imported'**
+  /// **'Wallet Data Imported'**
   String get importDoneTitle;
 
   /// No description provided for @importScanNote.

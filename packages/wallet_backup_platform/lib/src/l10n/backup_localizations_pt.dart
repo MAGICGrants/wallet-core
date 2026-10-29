@@ -72,13 +72,34 @@ class BackupLocalizationsPt extends BackupLocalizations {
 
   @override
   String get backupAndroidDescription =>
-      'Os backups do Android são feitos pelo seu sistema operacional e não são protegidos pelo Tor.';
+      'Para restaurar em um celular novo ou após reinstalar. Não sincroniza entre dispositivos. Não é protegido pelo Tor.';
 
   @override
   String get backupAndroidShort => 'Android';
 
   @override
-  String get backupLws => 'Servidor de carteira leve';
+  String get backupSyncFolder => 'Pasta Sincronizada';
+
+  @override
+  String get backupSyncFolderDescription =>
+      'Salva backups em uma pasta e acompanha as mudanças. Combine com um backup manual da pasta ou com sincronização (ex.: Syncthing).';
+
+  @override
+  String get backupSyncFolderDescriptionNas =>
+      'Salva backups em uma pasta e acompanha as mudanças. Combine com um backup manual da pasta ou com sincronização (ex.: Syncthing), ou escolha um local em uma unidade de rede (NAS).';
+
+  @override
+  String get backupSyncFolderChange => 'Trocar de Pasta';
+
+  @override
+  String get backupSyncFolderUnavailable =>
+      'Não foi possível acessar esta pasta. Se ela foi movida ou removida, escolha-a de novo.';
+
+  @override
+  String get backupSyncFolderReadOnly => 'Essa pasta não aceita novos arquivos. Escolha outra.';
+
+  @override
+  String get backupLws => 'Servidor de Carteira Leve';
 
   @override
   String get backupComingSoon => 'Em breve';
@@ -110,16 +131,16 @@ class BackupLocalizationsPt extends BackupLocalizations {
   String get backupAndroidLarge => 'A cópia do Android está chegando ao limite de 25 MB.';
 
   @override
-  String get backupFileSection => 'Arquivo de backup';
+  String get backupFileSection => 'Arquivo de Backup';
 
   @override
-  String get backupExport => 'Salvar um arquivo de backup';
+  String get backupExport => 'Salvar um Arquivo de Backup';
 
   @override
   String get backupExported => 'Arquivo de backup salvo';
 
   @override
-  String get backupImport => 'Importar um arquivo de backup';
+  String get backupImport => 'Importar um Arquivo de Backup';
 
   @override
   String backupImported(int count) {
@@ -156,7 +177,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
   }
 
   @override
-  String get backupRestoreTitle => 'Última restauração';
+  String get backupRestoreTitle => 'Última Restauração';
 
   @override
   String backupRestoreSummary(int payments, int contacts) {
@@ -202,14 +223,14 @@ class BackupLocalizationsPt extends BackupLocalizations {
   }
 
   @override
-  String get backupDeleteICloud => 'Apagar a cópia do iCloud';
+  String get backupDeleteICloud => 'Apagar a Cópia do iCloud';
 
   @override
   String get backupDeleteICloudBody =>
       'Remove do iCloud o backup desta carteira. A carteira e a agenda de endereços neste aparelho não são afetadas.';
 
   @override
-  String get backupDeleteAndroid => 'Apagar a cópia do backup do Android';
+  String get backupDeleteAndroid => 'Apagar a Cópia do Backup do Android';
 
   @override
   String get backupDeleteAndroidBody =>
@@ -245,7 +266,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
   }
 
   @override
-  String get backupEnable => 'Fazer backup dos detalhes dos pagamentos';
+  String get backupEnable => 'Fazer Backup dos Detalhes dos Pagamentos';
 
   @override
   String get backupAutomaticSection => 'Automático (Recomendado)';
@@ -257,7 +278,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
   String get backupFileDescription => 'Salve manualmente uma cópia instantânea onde quiser.';
 
   @override
-  String get importTitle => 'Importar dados da carteira';
+  String get importTitle => 'Importar Dados da Carteira';
 
   @override
   String get importIntro =>
@@ -270,15 +291,22 @@ class BackupLocalizationsPt extends BackupLocalizations {
 
   @override
   String importFromLocationNote(String where) {
-    return 'Se encontrado, isto também ativa os backups automáticos no $where.';
+    return 'Se encontrado, isto também ativa os backups automáticos no $where, que você pode desativar nas configurações.';
   }
 
   @override
-  String get importFromFile => 'De um arquivo de backup';
+  String get importFromFile => 'De um Arquivo de Backup';
 
   @override
   String get importFromFileNote =>
       'Isto não ativa os backups automáticos, que sugerimos ativar nas configurações.';
+
+  @override
+  String get importFromSyncFolder => 'De uma Pasta Sincronizada';
+
+  @override
+  String get importFromSyncFolderNote =>
+      'Se encontrado, a mesma pasta será usada para os backups automáticos, que você pode desativar nas configurações.';
 
   @override
   String get importNo => 'Pular';
@@ -295,7 +323,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
   String get importReading => 'Lendo o arquivo de backup…';
 
   @override
-  String get importNotFoundTitle => 'Nenhum backup encontrado';
+  String get importNotFoundTitle => 'Nenhum Backup Encontrado';
 
   @override
   String get importOk => 'OK';
@@ -311,7 +339,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
   }
 
   @override
-  String get importDoneTitle => 'Dados da carteira importados';
+  String get importDoneTitle => 'Dados da Carteira Importados';
 
   @override
   String get importScanNote =>

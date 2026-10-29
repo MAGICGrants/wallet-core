@@ -68,17 +68,38 @@ class BackupLocalizationsEn extends BackupLocalizations {
       'iCloud backups are performed by your operating system and are not protected with Tor.';
 
   @override
-  String get backupAndroid => 'Android backup';
+  String get backupAndroid => 'Android Backup';
 
   @override
   String get backupAndroidDescription =>
-      'Android backups are performed by your operating system and are not protected with Tor.';
+      'For restoring on a new phone or after reinstalling. Does not sync between devices. Not protected with Tor.';
 
   @override
   String get backupAndroidShort => 'Android';
 
   @override
-  String get backupLws => 'Light wallet server';
+  String get backupSyncFolder => 'Sync Folder';
+
+  @override
+  String get backupSyncFolderDescription =>
+      'Saves backups to a folder and watches for changes. Pair with a manual folder backup or sync (e.g. Syncthing).';
+
+  @override
+  String get backupSyncFolderDescriptionNas =>
+      'Saves backups to a folder and watches for changes. Pair with a manual folder backup or sync (e.g. Syncthing), or pick a location on a network drive (NAS).';
+
+  @override
+  String get backupSyncFolderChange => 'Change Folder';
+
+  @override
+  String get backupSyncFolderUnavailable =>
+      'Can\'t reach this folder. If it was moved or removed, choose it again.';
+
+  @override
+  String get backupSyncFolderReadOnly => 'That folder can\'t take new files. Choose another one.';
+
+  @override
+  String get backupLws => 'Light Wallet Server';
 
   @override
   String get backupComingSoon => 'Coming soon';
@@ -110,16 +131,16 @@ class BackupLocalizationsEn extends BackupLocalizations {
   String get backupAndroidLarge => 'Android\'s copy is getting close to its 25 MB limit.';
 
   @override
-  String get backupFileSection => 'Backup file';
+  String get backupFileSection => 'Backup File';
 
   @override
-  String get backupExport => 'Save a backup file';
+  String get backupExport => 'Save a Backup File';
 
   @override
   String get backupExported => 'Backup file saved';
 
   @override
-  String get backupImport => 'Import a backup file';
+  String get backupImport => 'Import a Backup File';
 
   @override
   String backupImported(int count) {
@@ -156,7 +177,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
   }
 
   @override
-  String get backupRestoreTitle => 'Last restore';
+  String get backupRestoreTitle => 'Last Restore';
 
   @override
   String backupRestoreSummary(int payments, int contacts) {
@@ -202,14 +223,14 @@ class BackupLocalizationsEn extends BackupLocalizations {
   }
 
   @override
-  String get backupDeleteICloud => 'Delete the iCloud copy';
+  String get backupDeleteICloud => 'Delete the iCloud Copy';
 
   @override
   String get backupDeleteICloudBody =>
       'Removes this wallet\'s backup from iCloud. The wallet and address book on this device are not affected.';
 
   @override
-  String get backupDeleteAndroid => 'Delete the Android backup copy';
+  String get backupDeleteAndroid => 'Delete the Android Backup Copy';
 
   @override
   String get backupDeleteAndroidBody =>
@@ -245,7 +266,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
   }
 
   @override
-  String get backupEnable => 'Back up payment details';
+  String get backupEnable => 'Back Up Payment Details';
 
   @override
   String get backupAutomaticSection => 'Automatic (Recommended)';
@@ -257,7 +278,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
   String get backupFileDescription => 'Manually save a snapshot anywhere you want.';
 
   @override
-  String get importTitle => 'Import wallet data';
+  String get importTitle => 'Import Wallet Data';
 
   @override
   String get importIntro =>
@@ -270,15 +291,22 @@ class BackupLocalizationsEn extends BackupLocalizations {
 
   @override
   String importFromLocationNote(String where) {
-    return 'If found, this also turns on automatic $where backups.';
+    return 'If found, this also enables automatic $where backups, which you can disable in settings.';
   }
 
   @override
-  String get importFromFile => 'From a backup file';
+  String get importFromFile => 'From a Backup File';
 
   @override
   String get importFromFileNote =>
       'This will not turn on automatic backups, which we suggest enabling in settings.';
+
+  @override
+  String get importFromSyncFolder => 'From a Sync Folder';
+
+  @override
+  String get importFromSyncFolderNote =>
+      'If found, the same folder will be used for automatic backups, which you can disable in settings.';
 
   @override
   String get importNo => 'Skip';
@@ -295,7 +323,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
   String get importReading => 'Reading the backup file…';
 
   @override
-  String get importNotFoundTitle => 'No backup found';
+  String get importNotFoundTitle => 'No Backup Found';
 
   @override
   String get importOk => 'OK';
@@ -311,7 +339,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
   }
 
   @override
-  String get importDoneTitle => 'Wallet data imported';
+  String get importDoneTitle => 'Wallet Data Imported';
 
   @override
   String get importScanNote => 'Each payment\'s details appear as the wallet finishes scanning.';
