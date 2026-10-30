@@ -547,7 +547,7 @@ class SOCKSSocket {
       // Never decode and log this body verbatim. A server
       // response carries addresses, amounts and output data; see
       // Size only; `kDebugMode` is not a safe guard, because
-      // verbose logs from debug builds still end up in bug reports.
+      // logs from debug builds still end up in bug reports.
       log(LogLevel.info, 'server.features response ${Redact.body(responseData.length)}');
     } else {
       _secureSocksSocket.writeln(command);

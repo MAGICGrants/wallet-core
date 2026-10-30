@@ -206,6 +206,55 @@ void main() {
     });
   });
 
+  // A user whose own server is on their tailnet: a node at its Tailscale IP
+  // (100.64/10, or fd7a:115c:a1e0::/48 for IPv6), reached over WireGuard. The
+  // tailnet is a network the user controls, so this is the LAN case: plaintext
+  // is fine, the view key may go, and Tor must not be asked to reach it.
+  group('a Tailscale user', () {
+    const tailscaleV4 = '100.101.102.103';
+    const tailscaleV6 = '[fd7a:115c:a1e0::1]';
+
+    test('their server is local, so plaintext to it is confidential', () {
+      for (final host in [tailscaleV4, tailscaleV6]) {
+        final uri = Uri.parse('http://$host:18090');
+        expect(classifyEndpoint(uri, viaTor: false), ChannelConfidentiality.local, reason: host);
+        expect(classifyEndpoint(uri, viaTor: false).isConfidential, isTrue, reason: host);
+      }
+    });
+
+    test('no TLS is forced on it', () {
+      // A self-hosted node or light-wallet server on a tailnet serves plain
+      // HTTP; forcing TLS would make it unreachable.
+      expect(requiresSecureTransport(tailscaleV4), isFalse);
+      expect(requiresSecureTransport('fd7a:115c:a1e0::1'), isFalse);
+    });
+
+    test('the private view key may be sent to it in plaintext', () {
+      expect(
+        () => requireConfidentialChannel(
+          Uri.parse('http://$tailscaleV4:18090/get_address_info'),
+          carrying: 'the private view key',
+          viaTor: false,
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('Tor is refused for it: an exit cannot reach a tailnet', () {
+      expect(isLocalHostRoutedThroughTor(tailscaleV4, viaTor: true), isTrue);
+      expect(isLocalHostRoutedThroughTor(tailscaleV4, viaTor: false), isFalse);
+    });
+
+    test('the whole Tailscale range counts, and nothing just outside it', () {
+      for (final host in ['100.64.0.0', '100.100.100.100', '100.127.255.255']) {
+        expect(isLocalHost(host), isTrue, reason: host);
+      }
+      for (final host in ['100.63.255.255', '100.128.0.0']) {
+        expect(isLocalHost(host), isFalse, reason: host);
+      }
+    });
+  });
+
   group('fails closed', () {
     test('a schemeless host:port is not confidential', () {
       // The trap this guards: connection addresses are stored as a bare

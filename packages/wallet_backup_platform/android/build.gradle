@@ -1,0 +1,58 @@
+// The sync folder channel (src/main/kotlin): a folder the user picks through
+// the Storage Access Framework. No dependencies beyond the platform.
+
+group = "org.magicgrants.wallet_backup_platform"
+version = "1.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.1.0")
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+// The Kotlin Gradle plugin comes from the app's settings.gradle(.kts), as for
+// every Flutter plugin written in Kotlin; AGP 9+ has Kotlin built in.
+def agpMajor = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')[0] as int
+if (agpMajor < 9) {
+    apply plugin: "kotlin-android"
+}
+
+android {
+    if (project.android.hasProperty("namespace")) {
+        namespace = "org.magicgrants.wallet_backup_platform"
+    }
+
+    compileSdk = 36
+
+    sourceSets {
+        main.java.srcDirs += "src/main/kotlin"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    if (agpMajor < 9) {
+        kotlinOptions {
+            jvmTarget = "17"
+        }
+    }
+
+    defaultConfig {
+        minSdk = 21
+    }
+}

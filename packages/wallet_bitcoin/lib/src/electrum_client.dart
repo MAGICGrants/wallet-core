@@ -57,9 +57,9 @@ class ElectrumClient implements ElectrumApi {
   /// Bytes, not a `String`, and an index rather than a re-slice. This was
   /// `_buffer += utf8.decode(chunk)` followed by `_buffer.substring(nl + 1)` per
   /// line; two full copies of everything still pending, per chunk and per line,
-  /// which is quadratic in the size of a frame. Three of the audit's reviewers
-  /// found it independently. Now each chunk is appended once, scanned once from
-  /// where the last scan stopped, and the consumed prefix is dropped once.
+  /// which is quadratic in the size of a frame. Now each chunk is appended once,
+  /// scanned once from where the last scan stopped, and the consumed prefix is
+  /// dropped once.
   final List<int> _buffer = [];
   int _scanned = 0;
   bool _connected = false;

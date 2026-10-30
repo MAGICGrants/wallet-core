@@ -34,21 +34,15 @@ import 'fees.dart';
 ///    clear. Use `Redact`.
 class BitcoinChainWallet extends CryptoWallet {
   BitcoinChainWallet({
-    required BitcoinNetwork network,
-    required String bip84AccountPath,
+    required this._network,
+    required this._bip84AccountPath,
     required String coinSymbol,
-    required String blockchainName,
-    required String iconAsset,
-    required String connectionAddressExample,
-    required bool isTestnet,
+    required this._blockchainName,
+    required this._iconAsset,
+    required this._connectionAddressExample,
+    required this._isTestnet,
     ElectrumApi? client,
-  }) : _network = network,
-       _bip84AccountPath = bip84AccountPath,
-       _coinSymbol = coinSymbol,
-       _blockchainName = blockchainName,
-       _iconAsset = iconAsset,
-       _connectionAddressExample = connectionAddressExample,
-       _isTestnet = isTestnet,
+  }) : _coinSymbol = coinSymbol,
        _client = client ?? ElectrumClient(coinSymbol: coinSymbol) {
     _client.onConnectionChanged = (connected) {
       if (!connected) {
@@ -120,6 +114,12 @@ class BitcoinChainWallet extends CryptoWallet {
   Bip32Slip10Secp256k1? _externalHd;
   Bip32Slip10Secp256k1? _internalHd;
   DateTime? _restoreDate;
+
+  /// The account's extended public key, for a view-only open ([openViewOnly]):
+  /// set only when [_mnemonic] is not. Addresses then come from public
+  /// derivation, and anything that signs fails as "not loaded".
+  String? _accountXpub;
+  Bip32Slip10Secp256k1? _watchAccountHd;
 
   /// Last password used for encryption. Required so `store()` (called from the
   /// periodic refresh task on the base class) can re-seal the file without
@@ -205,6 +205,9 @@ class BitcoinChainWallet extends CryptoWallet {
   int get requiredConfirmations => 1;
 
   @override
+  Duration get averageBlockTime => const Duration(minutes: 10);
+
+  @override
   bool get isTestnet => _isTestnet;
 
   @override
@@ -212,6 +215,10 @@ class BitcoinChainWallet extends CryptoWallet {
 
   @override
   String get connectionAddressExample => _connectionAddressExample;
+
+  /// Electrum is raw TCP: there is no path to send requests under.
+  @override
+  bool connectionAllowsPath(String connectionType) => false;
 
   // ----- Persistence -----
 
@@ -287,6 +294,7 @@ class BitcoinChainWallet extends CryptoWallet {
 
   void _applyOpenResult(BitcoinWalletOpenResult result, String password) {
     _mnemonic = result.mnemonic;
+    _accountXpub = null;
     _restoreDate = result.restoreDateIso != null ? DateTime.tryParse(result.restoreDateIso!) : null;
     _nextReceiveIndex = result.nextReceiveIndex;
     _nextChangeIndex = result.nextChangeIndex;
@@ -315,6 +323,20 @@ class BitcoinChainWallet extends CryptoWallet {
     _accountXprv = null;
     _externalHd = null;
     _internalHd = null;
+    _watchAccountHd = null;
+  }
+
+  /// Whether addresses can be derived: a full wallet, or a view-only one.
+  bool get _canDeriveAddresses => _mnemonic != null || _accountXpub != null;
+
+  /// The account node addresses derive from: the private one when the wallet
+  /// is open, the public one from [_accountXpub] in a view-only run. Never
+  /// for signing; that is [_requireAccountHd].
+  Bip32Slip10Secp256k1 _addressAccountHd() {
+    if (_mnemonic != null) return _requireAccountHd();
+    final xpub = _accountXpub;
+    if (xpub == null) throw StateError('Wallet is not loaded.');
+    return _watchAccountHd ??= Bip32Slip10Secp256k1.fromExtendedKey(xpub);
   }
 
   Bip32Slip10Secp256k1 _requireAccountHd() {
@@ -434,7 +456,7 @@ class BitcoinChainWallet extends CryptoWallet {
           },
       ],
     });
-    await file.writeAsString(await WalletFileCrypto.encryptToBase64(json, password));
+    await writeStringAtomic(file, await WalletFileCrypto.encryptToBase64(json, password));
   }
 
   /// This wallet's file holds the mnemonic, the account xprv, the two
@@ -617,6 +639,80 @@ class BitcoinChainWallet extends CryptoWallet {
     }
   }
 
+  // ----- View-only (unattended runs behind a password guard) -----
+
+  /// Where [prepareViewOnly] keeps the account xpub and the two next-index
+  /// counters: secure storage, per coin. The xpub spends nothing, but it does
+  /// reveal every address of the account, and so its whole history.
+  String get _viewOnlyKey => prefKey('viewOnlyAccountXpub');
+
+  @override
+  Future<void> prepareViewOnly() async {
+    if (_mnemonic == null) return;
+    final xpub = _requireAccountHd().publicKey.toExtended;
+    await WalletSecrets.store.write(
+      _viewOnlyKey,
+      jsonEncode({
+        'xpub': xpub,
+        'next_receive_index': _nextReceiveIndex,
+        'next_change_index': _nextChangeIndex,
+      }),
+    );
+    walletLog(LogLevel.info, 'Kept the account xpub for unattended checks.');
+  }
+
+  @override
+  Future<void> forgetViewOnly() => WalletSecrets.store.delete(_viewOnlyKey);
+
+  /// The spend wallet locked: keep watching with the account xpub, in place.
+  /// The mnemonic, every private node and the password the file re-seals with
+  /// leave memory; the addresses already derived stay, and new ones come from
+  /// the xpub. [store] then writes nothing, and a send fails as "not loaded".
+  @override
+  Future<bool> enterViewOnlyMode() => runWithSyncSuspended(() async {
+    if (_mnemonic == null) return false;
+    // While the private node can still give it.
+    final xpub = _requireAccountHd().publicKey.toExtended;
+    _mnemonic = null;
+    _lastPassword = null;
+    _clearHdCache();
+    _accountXpub = xpub;
+    return true;
+  });
+
+  /// Back with the password: the file opens as usual, keys and all.
+  @override
+  Future<bool> leaveViewOnlyMode(String password) => runWithSyncSuspended(() async {
+    await openExisting(password: password);
+    return _mnemonic != null;
+  });
+
+  /// Loads the account xpub only, and derives the addresses the walk starts
+  /// from. Refresh, balance and history work; with no mnemonic [store] writes
+  /// nothing, and any send fails as "not loaded".
+  @override
+  Future<bool> openViewOnly() async {
+    if (!unattended) return false;
+    final stored = await WalletSecrets.store.read(_viewOnlyKey);
+    if (stored == null || stored.isEmpty) return false;
+    final decoded = jsonDecode(stored) as Map<String, dynamic>;
+    final xpub = decoded['xpub'] as String?;
+    if (xpub == null || xpub.isEmpty) return false;
+
+    _mnemonic = null;
+    _lastPassword = null;
+    _clearHdCache();
+    _accountXpub = xpub;
+    _nextReceiveIndex = (decoded['next_receive_index'] as num?)?.toInt() ?? 0;
+    _nextChangeIndex = (decoded['next_change_index'] as num?)?.toInt() ?? 0;
+    _addresses.clear();
+    _ensureAddressesUpTo(_externalChain, _nextReceiveIndex + _gapLimit);
+    _ensureAddressesUpTo(_internalChain, _nextChangeIndex + _gapLimit);
+    setIsLoaded(true);
+    walletLog(LogLevel.info, 'Unattended run: checking with the account xpub only.');
+    return true;
+  }
+
   @override
   Future<void> deleteFiles() async {
     try {
@@ -624,7 +720,9 @@ class BitcoinChainWallet extends CryptoWallet {
     } catch (_) {}
     final file = await _walletFile();
     if (await file.exists()) await file.delete();
+    await WalletSecrets.store.delete(_viewOnlyKey);
     _mnemonic = null;
+    _accountXpub = null;
     _clearHdCache();
     _lastPassword = null;
     _addresses.clear();
@@ -691,7 +789,7 @@ class BitcoinChainWallet extends CryptoWallet {
     final cached = chain == _internalChain ? _internalHd : _externalHd;
     if (cached != null) return cached;
     final timer = Stopwatch()..start();
-    final derived = _requireAccountHd().childKey(Bip32KeyIndex(chain));
+    final derived = _addressAccountHd().childKey(Bip32KeyIndex(chain));
     timer.stop();
     walletLog(
       LogLevel.info,
@@ -722,7 +820,7 @@ class BitcoinChainWallet extends CryptoWallet {
   /// Ensures we have generated `count` addresses on the given [chain].
   /// Idempotent and cheap.
   void _ensureAddressesUpTo(int chain, int count) {
-    if (_mnemonic == null) return;
+    if (!_canDeriveAddresses) return;
     final existing = _addresses
         .where((a) => a.isChange == (chain == _internalChain))
         .map((a) => a.index)
@@ -866,6 +964,11 @@ class BitcoinChainWallet extends CryptoWallet {
   /// copies and one of them drifting would mean the setup form validating
   /// something different from what the wallet then dials.
   static (String host, int port) _splitHostPort(String address) {
+    if (address.contains('/')) {
+      throw FormatException(
+        'An Electrum server address is host:port, with no path (got "$address")',
+      );
+    }
     final parts = address.split(':');
     if (parts.length != 2) {
       throw FormatException('Electrum address must be host:port (got "$address")');
@@ -882,7 +985,7 @@ class BitcoinChainWallet extends CryptoWallet {
 
   @override
   Future<void> refresh() async {
-    if (_mnemonic == null || !_client.isConnected) return;
+    if (!_canDeriveAddresses || !_client.isConnected) return;
     if (_refreshing) return;
     _refreshing = true;
     final totalTimer = Stopwatch()..start();
@@ -1588,6 +1691,7 @@ class BitcoinChainWallet extends CryptoWallet {
     bool isSweepAll, {
     int priority = 0,
   }) async {
+    await waitForSpendKeys();
     _requireAccountHd();
 
     final feeRateSatVb = await _resolveFeeRateSatVb(priority);

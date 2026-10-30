@@ -1,0 +1,61 @@
+name: wallet_fhse
+description: "vtnerd's FHSE (FIDO2 hmac-secret encryption) guarding the wallet password, behind wallet_domain's WalletPasswordGuard. The C library (FHSE, libcbor, libsodium) is fhse_native."
+publish_to: "none"
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: 3.13.5
+  flutter: 3.47.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # The shared security-key screens (lib/security_keys_ui.dart) and their
+  # strings (lib/src/l10n).
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  # For `WalletPasswordGuard`, `SeedSource` and the stores. The dependency runs
+  # this way, as wallet_openalias's does: an app can take the wallet layer
+  # without this package's native build.
+  wallet_domain:
+    path: ../wallet_domain
+  wallet_infra:
+    path: ../wallet_infra
+  wallet_ui:
+    path: ../wallet_ui
+
+  ffi: 2.1.4
+  # The C library: FHSE, libcbor and libsodium behind wfhse.h, built for each
+  # platform. Pinned to a commit, as everything native is.
+  fhse_native:
+    git:
+      url: https://github.com/MAGICGrants/fhse_native
+      ref: 7aad37cb20b9cc7a545e0e3d044d18664a99d636 # main
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  polyseed: 0.0.7
+
+flutter:
+  # gen-l10n for lib/src/l10n (l10n.yaml); the output is committed.
+  generate: true
+  plugin:
+    platforms:
+      # The security key channel (WalletFhsePlugin, Kotlin + YubiKit). The C
+      # library is fhse_native's.
+      android:
+        package: org.magicgrants.wallet_fhse
+        pluginClass: WalletFhsePlugin
+      # On iOS and macOS the channel is the app's own Swift (apple/): YubiKit
+      # Swift is a Swift package, which a CocoaPods plugin cannot depend on.
+      # The source-less pod is declared so Flutter links this package into the
+      # app, which compiles apple/ through that link. See README.md.
+      ios:
+        ffiPlugin: true
+      macos:
+        ffiPlugin: true
+      # Linux and Windows need nothing native here: keys are reached from Dart
+      # (the system's libfido2, webauthn.dll; lib/src/backends).

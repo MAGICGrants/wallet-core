@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
 OpenAlias v1/v2 resolution with end-to-end DNSSEC validation, over Tor.
                        DESC
   s.homepage         = 'https://github.com/MAGICGrants/wallet-core'
-  s.license          = { :file => '../LICENSE' }
+  s.license          = { :type => 'MIT' }
   s.author           = { 'MAGIC Grants' => 'info@magicgrants.org' }
 
   s.source           = { :path => '.' }

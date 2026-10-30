@@ -201,9 +201,9 @@ void main() {
       if (spec == null) return markTestSkipped('not in this corpus');
 
       final dir = _fixtureDir(corpus, 'skylight_plaintext_prefs');
-      final prefs =
-          jsonDecode(File('${dir.path}/${spec['prefs']}').readAsStringSync())
-              as Map<String, dynamic>;
+      final prefs = jsonDecode(
+        File('${dir.path}/${spec['prefs']}').readAsStringSync(),
+      ) as Map<String, dynamic>;
 
       WalletAppConfig.install(WalletAppConfig.skylight, directories: FixedDirectories(dir));
       for (final e in prefs.entries) {

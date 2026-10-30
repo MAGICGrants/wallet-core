@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_infra/testing.dart';
 import 'package:wallet_infra/wallet_infra.dart';
@@ -79,23 +81,108 @@ void main() {
     expect(SharedPreferencesService.store, isA<SharedPreferencesStore>());
   });
 
-  test('verbose logging can be wired to preferences', () async {
+  test('the logging setting can be wired to preferences', () async {
     // The concrete reason this boundary is injectable: log() consults the
-    // user's verbose setting on every info record, so a plugin-backed store
+    // user's logging setting on every info record, so a plugin-backed store
     // would make every logging test need a device.
-    await SharedPreferencesService.set<bool>('verboseLoggingEnabled', true);
-    WalletLog.isVerbose = () async =>
-        await SharedPreferencesService.get<bool>('verboseLoggingEnabled') ?? false;
+    await SharedPreferencesService.set<bool>(SettingsKeys.loggingEnabled, true);
+    WalletLog.isLoggingOn = () async =>
+        await SharedPreferencesService.get<bool>(SettingsKeys.loggingEnabled) ?? false;
     final sink = MemoryLogSink();
     WalletLog.sink = sink;
 
     await log(LogLevel.info, 'visible');
     expect(sink.records, hasLength(1));
 
-    await SharedPreferencesService.set<bool>('verboseLoggingEnabled', false);
+    await SharedPreferencesService.set<bool>(SettingsKeys.loggingEnabled, false);
     await log(LogLevel.info, 'hidden');
     expect(sink.records, hasLength(1));
 
     WalletLog.resetForTesting();
+  });
+
+  group('Sync Frequency', () {
+    setUp(() {
+      SharedPreferencesService.store = MemoryPreferenceStore();
+      syncFrequencyPlatform = 'android';
+    });
+    tearDown(() {
+      SharedPreferencesService.resetForTesting();
+      syncFrequencyPlatform = Platform.operatingSystem;
+    });
+
+    test('periodic by default, so something runs without the user', () async {
+      expect(await loadSyncFrequency(), SyncFrequency.periodic);
+      expect(await unattendedRunsEnabled(), isTrue);
+    });
+
+    test('off runs nothing; continuous and periodic both run', () async {
+      for (final f in SyncFrequency.values) {
+        await saveSyncFrequency(f);
+        expect(await loadSyncFrequency(), f);
+        expect(await unattendedRunsEnabled(), f != SyncFrequency.off, reason: f.name);
+      }
+    });
+
+    test('iOS offers no Continuous, and a stored one reads as Periodic', () async {
+      syncFrequencyPlatform = 'ios';
+      expect(SyncFrequency.available, [SyncFrequency.periodic, SyncFrequency.off]);
+      await saveSyncFrequency(SyncFrequency.continuous);
+      expect(await loadSyncFrequency(), SyncFrequency.periodic);
+    });
+
+    test('desktop has no background runs, whatever is stored', () async {
+      syncFrequencyPlatform = 'linux';
+      await saveSyncFrequency(SyncFrequency.periodic);
+      expect(await loadSyncFrequency(), SyncFrequency.off);
+      expect(await unattendedRunsEnabled(), isFalse);
+    });
+
+    group('migrating the old toggles', () {
+      Future<SyncFrequency> migrate(Map<String, bool> old, {bool existingInstall = true}) async {
+        for (final e in old.entries) {
+          await SharedPreferencesService.set<bool>(e.key, e.value);
+        }
+        await migrateLegacySyncSettings(existingInstall: existingInstall);
+        return loadSyncFrequency();
+      }
+
+      test('Continuous Sync on becomes Continuous', () async {
+        expect(
+          await migrate({'foregroundSyncEnabled': true, 'backgroundSyncEnabled': true}),
+          SyncFrequency.continuous,
+        );
+      });
+
+      test('Background Sync on becomes Periodic', () async {
+        expect(await migrate({'backgroundSyncEnabled': true}), SyncFrequency.periodic);
+      });
+
+      test('notifications on alone become Periodic', () async {
+        expect(await migrate({SettingsKeys.notificationsEnabled: true}), SyncFrequency.periodic);
+      });
+
+      test('an existing install with everything off stays off', () async {
+        expect(await migrate({'backgroundSyncEnabled': false}), SyncFrequency.off);
+        expect(await unattendedRunsEnabled(), isFalse);
+      });
+
+      test('a fresh install gets Periodic, and keeps it once it has a wallet', () async {
+        expect(await migrate({}, existingInstall: false), SyncFrequency.periodic);
+        // The next launch, now with a wallet, must not read as "existing, all off".
+        expect(await migrate({}), SyncFrequency.periodic);
+      });
+
+      test('a choice already made is never overwritten', () async {
+        await saveSyncFrequency(SyncFrequency.off);
+        expect(await migrate({'foregroundSyncEnabled': true}), SyncFrequency.off);
+      });
+
+      test('the old toggles are removed', () async {
+        await migrate({'backgroundSyncEnabled': true, 'foregroundSyncEnabled': true});
+        expect(await SharedPreferencesService.get<bool>('backgroundSyncEnabled'), isNull);
+        expect(await SharedPreferencesService.get<bool>('foregroundSyncEnabled'), isNull);
+      });
+    });
   });
 }

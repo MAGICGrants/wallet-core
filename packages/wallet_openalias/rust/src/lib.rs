@@ -3,6 +3,12 @@
 //! validated locally by hickory (RRSIG → DS → root trust anchor), so no
 //! resolver is trusted and no DNS leaks outside Tor.
 //!
+//! When the user chose clearnet lookups instead, [`openalias_secure_txt_direct`]
+//! makes the same DNS-over-HTTPS queries without the proxy: the validation is
+//! identical, but the resolvers see the device's IP address. It is a separate
+//! entry point rather than a special port so that no value of the Tor port can
+//! ever turn a lookup into a direct one.
+//!
 //! The FFI surface is deliberately thin: it returns the DNSSEC-validated TXT
 //! records at a name, and Dart parses the OpenAlias v1 and v2 grammars on top
 //! (see `lib/src/openalias_records.dart`). That split keeps the record parsing
@@ -10,6 +16,8 @@
 //! to be trustworthy — "these bytes really are what the signed zone published"
 //! — stays here.
 
+#[cfg(test)]
+mod chain_tests;
 mod error;
 
 use std::ffi::{c_char, CStr, CString};
@@ -22,9 +30,9 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use hickory_proto::dnssec::rdata::RRSIG;
+use hickory_proto::dnssec::rdata::{DNSSECRData, NSEC3, RRSIG};
 use hickory_proto::dnssec::Proof;
-use hickory_proto::rr::{Name, RData, Record, RecordType};
+use hickory_proto::rr::{Name, RData, Record, RecordType, RecordTypeSet};
 use hickory_resolver::config::{NameServerConfig, ResolverConfig, ResolverOpts};
 use hickory_resolver::net::runtime::iocompat::AsyncIoTokioAsStd;
 use hickory_resolver::net::runtime::{RuntimeProvider, TokioHandle, TokioTime};
@@ -56,6 +64,11 @@ lazy_static! {
     /// a new port, builds a fresh one rather than dialing a dead proxy.
     static ref RESOLVERS: Mutex<HashMap<u16, Arc<Resolver<SocksRuntimeProvider>>>> =
         Mutex::new(HashMap::new());
+
+    /// The direct (clearnet) resolver, built on first use and shared for the
+    /// same reasons as [`RESOLVERS`].
+    static ref DIRECT_RESOLVER: Mutex<Option<Arc<Resolver<DirectRuntimeProvider>>>> =
+        Mutex::new(None);
 }
 
 /// Public recursive resolvers queried (over Tor) for the signed records, as
@@ -64,10 +77,11 @@ lazy_static! {
 /// resolver can withhold an answer but cannot forge one. Each entry is the
 /// resolver IP and the TLS/host name used for its certificate + DoH endpoint.
 ///
-/// "Cannot forge one" is a claim about [`secure_txt_answers`] as much as about
-/// DNSSEC: a signature chain to the root says who signed a record, and it takes
-/// a check of its own to establish that they were entitled to answer for the
-/// name that was asked. Read that function before touching this one.
+/// "Cannot forge one" is a claim about [`secure_txt_answers`] and
+/// [`denial_signers_enclose`] as much as about DNSSEC: a signature chain to the
+/// root says who signed a record or a denial, and it takes a check of its own to
+/// establish that they were entitled to answer for the name that was asked.
+/// Read those before touching this.
 const UPSTREAMS: &[(Ipv4Addr, &str)] = &[
     (Ipv4Addr::new(9, 9, 9, 9), "dns.quad9.net"),
     (Ipv4Addr::new(1, 1, 1, 1), "cloudflare-dns.com"),
@@ -171,6 +185,48 @@ impl RuntimeProvider for SocksRuntimeProvider {
     }
 }
 
+/// A hickory runtime provider that dials its TCP connections directly, for the
+/// user who chose clearnet lookups. Still DNS-over-HTTPS only: UDP is refused
+/// as in [`SocksRuntimeProvider`], so the query is never sent as plain DNS that
+/// anyone on the network could read.
+#[derive(Clone)]
+struct DirectRuntimeProvider {
+    handle: TokioHandle,
+}
+
+impl RuntimeProvider for DirectRuntimeProvider {
+    type Handle = TokioHandle;
+    type Timer = TokioTime;
+    type Udp = TokioUdpSocket;
+    type Tcp = AsyncIoTokioAsStd<TokioTcpStream>;
+
+    fn create_handle(&self) -> Self::Handle {
+        self.handle.clone()
+    }
+
+    fn connect_tcp(
+        &self,
+        server_addr: SocketAddr,
+        _bind_addr: Option<SocketAddr>,
+        _timeout: Option<Duration>,
+    ) -> Pin<Box<dyn Send + Future<Output = io::Result<Self::Tcp>>>> {
+        Box::pin(async move { Ok(AsyncIoTokioAsStd(TokioTcpStream::connect(server_addr).await?)) })
+    }
+
+    fn bind_udp(
+        &self,
+        _local_addr: SocketAddr,
+        _server_addr: SocketAddr,
+    ) -> Pin<Box<dyn Send + Future<Output = io::Result<Self::Udp>>>> {
+        Box::pin(async move {
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "UDP is unavailable: OpenAlias DNS goes over HTTPS only",
+            ))
+        })
+    }
+}
+
 /// Fetches the TXT records at `name` over Tor, requiring a DNSSEC-secure answer.
 ///
 /// Three outcomes, and the caller must keep them apart:
@@ -201,16 +257,17 @@ pub unsafe extern "C" fn openalias_secure_txt(
     socks_port: u16,
 ) -> *mut c_char {
     ffi_guard("openalias_secure_txt", std::ptr::null_mut(), || unsafe {
-        secure_txt_entry(name, socks_port)
+        txt_entry(name, Some(socks_port))
     })
 }
 
-/// The body of [`openalias_secure_txt`], separated so the guard above wraps
-/// every path out of it including the ones that panic.
+/// The body of both entry points, separated so the guard above wraps every
+/// path out of it including the ones that panic. `socks_port` is `None` only
+/// for [`openalias_secure_txt_direct`].
 ///
 /// # Safety
 /// `name` must be a valid NUL-terminated C string.
-unsafe fn secure_txt_entry(name: *const c_char, socks_port: u16) -> *mut c_char {
+unsafe fn txt_entry(name: *const c_char, socks_port: Option<u16>) -> *mut c_char {
     let name = match cstr(name) {
         Some(s) => s,
         None => return ret_err("invalid name"),
@@ -221,13 +278,38 @@ unsafe fn secure_txt_entry(name: *const c_char, socks_port: u16) -> *mut c_char 
         Err(e) => return ret_err(format!("tokio runtime: {e}")),
     };
 
-    match runtime.block_on(secure_txt(&name, socks_port)) {
+    let result = match socks_port {
+        Some(port) => runtime.block_on(async {
+            check_clock()?;
+            secure_txt(&name, &*resolver_for(port)?).await
+        }),
+        None => runtime.block_on(async {
+            check_clock()?;
+            secure_txt(&name, &*direct_resolver()?).await
+        }),
+    };
+    match result {
         Ok(records) => match CString::new(json_string_array(&records)) {
             Ok(c) => c.into_raw(),
             Err(_) => ret_err("record contained NUL"),
         },
         Err(msg) => ret_err(msg),
     }
+}
+
+/// [`openalias_secure_txt`] without Tor: the same DNS-over-HTTPS queries and the
+/// same DNSSEC validation, dialed directly, so the resolvers see this device's
+/// IP address. Only for a user who chose clearnet lookups.
+///
+/// Caller frees the returned string with `openalias_string_free`.
+///
+/// # Safety
+/// `name` must be a valid NUL-terminated C string.
+#[no_mangle]
+pub unsafe extern "C" fn openalias_secure_txt_direct(name: *const c_char) -> *mut c_char {
+    ffi_guard("openalias_secure_txt_direct", std::ptr::null_mut(), || unsafe {
+        txt_entry(name, None)
+    })
 }
 
 /// Frees a string returned by this library.
@@ -317,7 +399,28 @@ fn resolver_for(socks_port: u16) -> Result<Arc<Resolver<SocksRuntimeProvider>>, 
     }
 
     let proxy = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), socks_port);
+    let resolver =
+        Arc::new(build_resolver(SocksRuntimeProvider { proxy, handle: TokioHandle::default() })?);
+    cache.insert(socks_port, Arc::clone(&resolver));
+    Ok(resolver)
+}
 
+/// The direct (clearnet) resolver, building it on first use.
+fn direct_resolver() -> Result<Arc<Resolver<DirectRuntimeProvider>>, String> {
+    let mut cache = DIRECT_RESOLVER
+        .lock()
+        .map_err(|_| "resolver cache poisoned".to_string())?;
+    if let Some(existing) = cache.as_ref() {
+        return Ok(Arc::clone(existing));
+    }
+    let resolver = Arc::new(build_resolver(DirectRuntimeProvider { handle: TokioHandle::default() })?);
+    *cache = Some(Arc::clone(&resolver));
+    Ok(resolver)
+}
+
+/// A validating DNS-over-HTTPS resolver over [`UPSTREAMS`] that dials through
+/// `provider`.
+fn build_resolver<P: RuntimeProvider>(provider: P) -> Result<Resolver<P>, String> {
     // DNS-over-HTTPS (default /dns-query on 443). The TLS cert is verified
     // against `host`; the answer's DNSSEC chain is validated locally.
     let name_servers = UPSTREAMS
@@ -330,15 +433,10 @@ fn resolver_for(socks_port: u16) -> Result<Arc<Resolver<SocksRuntimeProvider>>, 
     opts.validate = true; // local DNSSEC validation against the root trust anchor
     opts.timeout = TCP_TIMEOUT;
 
-    let provider = SocksRuntimeProvider { proxy, handle: TokioHandle::default() };
-    let resolver = Arc::new(
-        Resolver::builder_with_config(config, provider)
-            .with_options(opts)
-            .build()
-            .map_err(|e| format!("resolver build failed: {e}"))?,
-    );
-    cache.insert(socks_port, Arc::clone(&resolver));
-    Ok(resolver)
+    Resolver::builder_with_config(config, provider)
+        .with_options(opts)
+        .build()
+        .map_err(|e| format!("resolver build failed: {e}"))
 }
 
 /// The TXT records at `name`, or an empty vector when their absence was proved.
@@ -346,14 +444,14 @@ fn resolver_for(socks_port: u16) -> Result<Arc<Resolver<SocksRuntimeProvider>>, 
 /// Those are different answers and only two call sites may produce them: the
 /// `Ok` arm below never returns an empty vector — [`secure_txt_answers`] fails
 /// instead — so an empty vector means the denial arm and nothing else.
-async fn secure_txt(name: &str, socks_port: u16) -> Result<Vec<String>, String> {
-    // Before anything is built or any circuit opened: a clock this wrong makes
-    // every signature check downstream meaningless, so there is no point paying
-    // for the lookup.
-    check_clock()?;
-
-    let resolver = resolver_for(socks_port)?;
-
+///
+/// The clock is checked by the caller before `resolver` is built or any circuit
+/// opened: a clock this wrong makes every signature check downstream
+/// meaningless, so there is no point paying for the lookup.
+async fn secure_txt<P: RuntimeProvider>(
+    name: &str,
+    resolver: &Resolver<P>,
+) -> Result<Vec<String>, String> {
     // Non-ASCII labels are converted to their A-label (Punycode) form by
     // hickory when it parses the name, as OpenAlias requires (RFC 5890).
     // Parsed once and reused: the same value is both what gets asked and what
@@ -384,25 +482,38 @@ async fn secure_txt(name: &str, socks_port: u16) -> Result<Vec<String>, String> 
     };
 
     match lookup {
-        Ok(lookup) => secure_txt_answers(&fqdn, lookup.answers()),
+        Ok(lookup) => {
+            let records = secure_txt_answers(&fqdn, lookup.answers())?;
+            // A record expanded from a wildcard stands only on the NSEC/NSEC3
+            // records proving no closer name exists, and hickory accepts those
+            // from a zone that does not contain `fqdn` (see
+            // `denial_is_proven`). Without this, a zone's signed catch-all
+            // could be replayed over a name that has a record of its own.
+            denial_signers_enclose(&fqdn, lookup.authorities())?;
+            Ok(records)
+        }
 
         // "There are no records here" — but only trustworthy if the zone said so
         // and signed it. hickory reaches this variant *through* the DNSSEC
         // handler: `verify_response` turns a negative answer back into a message,
         // validates the NSEC/NSEC3 denial, and hands back `Nsec` (below) when the
-        // proof fails. So the only thing left to separate here is a validated
-        // denial from a zone that is provably not signed at all.
+        // proof fails. What is left to separate here is a validated denial from
+        // a zone that is provably not signed at all, and a denial from the zone
+        // asked about from one that some other signed zone made.
         Err(NetError::Dns(DnsError::NoRecordsFound(no_records))) => {
             let authorities = no_records.authorities.as_deref().unwrap_or(&[]);
             if denial_is_proven(&fqdn, authorities) {
                 Ok(Vec::new())
             } else {
                 // Fails closed rather than reading as absence, and says which it
-                // is: an unsigned domain publishes nothing this resolver can use
-                // — at this name or at the alias itself — which is a different
-                // thing to tell the user than "publishes no v2 record". The
-                // second clause covers the corner where an answer came back that
-                // did not answer the question and left no denial either.
+                // is. A denial from some other zone is named as one, by
+                // `denial_signers_enclose`. An unsigned domain publishes nothing
+                // this resolver can use — at this name or at the alias itself —
+                // which is a different thing to tell the user than "publishes no
+                // v2 record". The message's second clause covers the corner
+                // where an answer came back that did not answer the question and
+                // left no denial either.
+                denial_signers_enclose(&fqdn, authorities)?;
                 Err(format!(
                     "nothing was proved about {}: no signed denial of existence \
                      (the zone is unsigned, or the answer did not answer the query)",
@@ -427,92 +538,199 @@ async fn secure_txt(name: &str, socks_port: u16) -> Result<Vec<String>, String> 
 /// **from a zone entitled to deny `name`**.
 ///
 /// Reaching `NoRecordsFound` at all under `validate = true` means the denial
-/// either validated or the zone was proved insecure. Telling those apart needs
-/// a Secure NSEC/NSEC3 record — but that alone is what [`secure_txt_answers`]
-/// exists to explain is not enough. `Proof::Secure` says "someone whose key
-/// chains to the root signed this"; it does not say they were entitled to speak
-/// about the name that was asked. This function used to ask only the first
-/// question, and did not even take `name` as an argument, so a denial signed by
-/// any attacker-controlled signed zone was accepted as proof that a recipient
-/// publishes no OpenAlias record.
+/// either validated or the zone was proved insecure, and a Secure NSEC/NSEC3
+/// record is what tells the two apart. But `Proof::Secure` on a denial says
+/// only "the zone that contains this NSEC signed it". hickory (0.26.2 and
+/// later) refuses a signer that does not contain the NSEC it signs, and
+/// nothing in 0.26.3 holds the NSEC to the zone that contains `name`: the SOA
+/// is the only zone it holds `name` to, and the answer can leave that out or
+/// replay the real zone's. So an attacker who owns any signed zone can sign
+/// an NSEC over a name in it whose next name, in canonical order, spans `name`,
+/// and hickory takes it as proof that `name` does not exist. That is checked
+/// here, by [`denial_signers_enclose`], and `chain_tests` forges it end to end.
 ///
-/// What that forges is a *suppression*, not a redirection — an attacker cannot
-/// point a payment somewhere with it. But it drives the OA2 → OA1 fallback and,
-/// together with a silent `_openalias-metadata` failure, the lookalike-name
-/// defence, so a forged absence is worth refusing.
+/// A forged absence would be a *suppression*, not a redirection: it cannot
+/// point a payment anywhere. But it drives the OA2 → OA1 fallback and, together
+/// with a silent `_openalias-metadata` failure, the lookalike-name defence, so
+/// only a real one may count.
+fn denial_is_proven(name: &Name, authorities: &[Record]) -> bool {
+    denial_signers_enclose(name, authorities).is_ok()
+        && authorities.iter().any(|record| {
+            record.proof == Proof::Secure
+                && matches!(record.record_type(), RecordType::NSEC | RecordType::NSEC3)
+        })
+}
+
+/// Fails unless every NSEC/NSEC3 record in `section` could only have come from
+/// a zone that contains `name`.
 ///
-/// Two differences from its sibling on the positive path, both deliberate:
+/// Applies to a denial, and to the authority section of a positive answer, where
+/// these records are what lets a wildcard's data stand at `name`. Two
+/// differences from its sibling on the TXT records, [`secure_txt_answers`], both
+/// deliberate:
 ///
 ///   - **The owner name is not checked**, because it is not supposed to match. An
 ///     NSEC is owned by the name that sorts immediately before the queried one,
 ///     and an NSEC3 by a hashed label under the zone apex; neither equals
 ///     `name`. The RRSIG's signer name is the only trustworthy statement of
-///     which zone this denial came from — hickory's own `soa_name` is derived
-///     from the first SOA owner in the section with no proof check at all, so a
-///     fabricated unsigned SOA passes it and omitting the SOA leaves nothing to
-///     check.
-///   - **Every covering RRSIG must be in bailiwick, not just one.** Same reason
-///     as the positive path: hickory takes the first signature that verifies, so
-///     an attacker's RRSIG sitting beside an honest one could be the one that
-///     counted. The cost is that injecting a foreign signature turns a real
-///     denial into "unknown" — a fail-closed denial of service, which is the
-///     right way round.
-fn denial_is_proven(name: &Name, authorities: &[Record]) -> bool {
-    let mut covering_rrsigs = 0usize;
-    for record in authorities {
+///     which zone a denial came from: hickory's own zone check reads the SOA,
+///     which a forged answer can omit or replay from the real zone.
+///   - **Every RRSIG over a denial must be in bailiwick, not just one.** Same
+///     reason as on the TXT records: which signature counts is hickory's choice
+///     (from 0.26.2 it skips a signer that does not contain the record, but that
+///     is a statement about the NSEC's owner, not about `name`). The cost is that
+///     injecting a foreign signature turns a real denial into "unknown" — a
+///     fail-closed denial of service, which is the right way round.
+///
+/// And each Secure NSEC/NSEC3 must arrive with the RRSIG hickory verified it
+/// with, which it marks Secure. Without that, a later hickory that stopped
+/// returning the signatures it used would quietly turn the signer check into a
+/// no-op, and the forgery it stops would work again. (Checked against 0.26.3:
+/// `verify_rrsets` pushes every RRSIG back into the records it returns and marks
+/// the one it used, and `NoRecordsFound` and `Lookup` both carry the
+/// post-validation authority section, through the response cache too.)
+///
+/// Finally, no Secure NSEC/NSEC3 may come from the parent side of a zone cut at
+/// or above `name` ([`denies_below_a_cut`]). Such a record passes the signer
+/// checks above, because the parent contains `name`, but the parent has no
+/// authority below the cut.
+fn denial_signers_enclose(name: &Name, section: &[Record]) -> Result<(), String> {
+    for record in section {
         let Some(rrsig) = record.try_borrow::<RRSIG>() else { continue };
         let input = rrsig.data().input();
         if !matches!(input.type_covered, RecordType::NSEC | RecordType::NSEC3) {
             continue;
         }
-        covering_rrsigs += 1;
         if !input.signer_name.zone_of(name) {
-            return false;
+            return Err(format!(
+                "a denial of existence in the answer for {} is signed by {}, which is not \
+                 a zone containing it",
+                name.to_ascii(),
+                // Attacker-chosen, and this reaches a send screen: the A-label
+                // form is ASCII, so it cannot smuggle bidi or control characters.
+                clip(&input.signer_name.to_ascii()),
+            ));
         }
     }
 
-    // No signature over the denial at all. Unreachable while a Secure proof
-    // implies a verified RRSIG, and here for the same reason as the positive
-    // path's equivalent: were a later hickory to stop returning the RRSIGs it
-    // verified, the signer check above would quietly become a no-op and the
-    // forgery it exists to stop would work again. (Checked against 0.26.1:
-    // `verify_rrsets` pushes every RRSIG back into the records it returns, and
-    // `NoRecordsFound` carries the post-validation authority section.)
-    if covering_rrsigs == 0 {
-        return false;
-    }
-
-    authorities.iter().any(|record| {
+    let proved = |denial: &Record| {
+        section.iter().any(|record| {
+            record.proof == Proof::Secure
+                && record.name == denial.name
+                && record.try_borrow::<RRSIG>().is_some_and(|rrsig| {
+                    rrsig.data().input().type_covered == denial.record_type()
+                })
+        })
+    };
+    let unproved = section.iter().any(|record| {
         record.proof == Proof::Secure
             && matches!(record.record_type(), RecordType::NSEC | RecordType::NSEC3)
-    })
+            && !proved(record)
+    });
+    if unproved {
+        return Err(format!(
+            "a denial of existence in the answer for {} arrived without the signature \
+             that proved it",
+            name.to_ascii()
+        ));
+    }
+
+    if section.iter().any(|record| record.proof == Proof::Secure && denies_below_a_cut(name, record)) {
+        return Err(format!(
+            "a denial of existence in the answer for {} was made above a zone cut that \
+             contains it, by a zone that does not answer for it",
+            name.to_ascii()
+        ));
+    }
+    Ok(())
+}
+
+/// Whether `record` is an NSEC or NSEC3 that RFC 6840 §4.1 forbids as a denial
+/// of anything at `name`: one made by the parent at a zone cut at or above
+/// `name` (NS without SOA), or one at a DNAME strictly above it.
+///
+/// hickory 0.26.3 enforces this rule too. The wallet's other checks would not
+/// catch a violation: a TLD's NSEC at the delegation of `example.org.` is
+/// validly signed by a zone that contains every name under it, and its next
+/// name spans them all. Checking here means a hickory that lost the rule fails
+/// closed.
+///
+/// Honest answers are unaffected. A parent has no authority below a cut, so an
+/// honest denial of a TXT record comes from the child zone. The parent does
+/// answer DS queries at the cut, but the wallet never sends one. A DNAME owner
+/// can hold other records, so a DNAME at `name` itself is allowed.
+fn denies_below_a_cut(name: &Name, record: &Record) -> bool {
+    let forbidden = |owner: &Name, types: &RecordTypeSet| {
+        owner.zone_of(name)
+            && ((types.contains(RecordType::NS) && !types.contains(RecordType::SOA))
+                || (types.contains(RecordType::DNAME) && owner != name))
+    };
+    match &record.data {
+        RData::DNSSEC(DNSSECRData::NSEC(nsec)) => forbidden(&record.name, nsec.type_set()),
+        RData::DNSSEC(DNSSECRData::NSEC3(nsec3)) => {
+            if !nsec3.is_ancestor_delegation() {
+                return false;
+            }
+            // An NSEC3 owner is a hash, so the name it stands for is found by
+            // hashing `name` and its ancestors inside the zone, until one matches.
+            let zone = record.name.base_name();
+            let mut candidate = name.clone();
+            while zone.zone_of(&candidate) {
+                if hashed_owner(nsec3, &candidate, &zone).as_ref() == Some(&record.name) {
+                    return forbidden(&candidate, nsec3.type_set());
+                }
+                if candidate.is_root() {
+                    break;
+                }
+                candidate = candidate.base_name();
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+/// The owner name an NSEC3 with `nsec3`'s parameters would have for `name` in
+/// `zone`.
+fn hashed_owner(nsec3: &NSEC3, name: &Name, zone: &Name) -> Option<Name> {
+    let hash = nsec3.hash_algorithm().hash(nsec3.salt(), name, nsec3.iterations()).ok()?;
+    // NSEC3 writes its next hashed owner name the way an owner label is written,
+    // so this borrows that encoding instead of repeating it.
+    let encoded = NSEC3::new(nsec3.hash_algorithm(), false, 0, Vec::new(), hash.as_ref().to_vec(), []);
+    zone.prepend_label(encoded.next_hashed_owner_name_base32()?).ok()
 }
 
 /// The TXT records in `answers` that are an answer to the question asked about
 /// `name`, or why there are none.
 ///
 /// `Proof::Secure` says "this RRset has a signature chain to the root trust
-/// anchor". It does **not** say "this RRset is what you asked for", and on
-/// hickory 0.26.1's stub-resolver path neither of the two checks that would
-/// close that gap is performed:
+/// anchor", and hickory (0.26.2 and later) also requires every signature on
+/// that chain to come from the zone that contains what it signs (RFC 4035
+/// §5.3.1). So a record signed by an unrelated zone, directly or through a key
+/// that zone vouched for, never proves Secure; `chain_tests` checks that end to
+/// end.
 ///
-///   - The answer section comes back as the server sent it. `handle_noerror`
-///     rewrites it only when a CNAME had to be followed, so in the ordinary case
-///     an RRset at *any* owner name rides along, and `verify_rrsets` groups by
-///     `(name, type)` and validates each group on its own.
-///   - RFC 4035 §5.3.1 requires an RRSIG's signer name to be the zone that
-///     contains the RRset. `RrsigValidity::check` does not implement it — the
-///     rule is there as a `TODO` — so an RRset at our *exact* name, signed by
-///     some other zone whose DNSKEY chains to the root, also proves Secure.
-///
-/// Either gap on its own is enough for anyone who owns one DNSSEC-signed domain
-/// and can inject into a DoH answer to replace the address this returns, which
-/// is precisely the attacker the module header describes: the upstreams are
-/// public resolvers trusted to carry bytes and nothing else.
+/// What it does **not** say is "this RRset is what you asked for". The answer
+/// section comes back as the server sent it: `handle_noerror` rewrites it only
+/// when a CNAME had to be followed, so in the ordinary case an RRset at *any*
+/// owner name rides along, and `verify_rrsets` groups by `(name, type)` and
+/// validates each group on its own. Anyone who owns one DNSSEC-signed domain
+/// and can inject into a DoH answer could add one of their own, which is
+/// precisely the attacker the module header describes: the upstreams are public
+/// resolvers trusted to carry bytes and nothing else.
 ///
 /// So a record is used only when all three hold — it is a TXT record owned by
 /// exactly `name`, its RRset proved Secure, and every RRSIG offered over that
-/// RRset was made from inside a zone that contains `name`.
+/// RRset was made from inside a zone that contains `name`. hickory 0.26.3 makes
+/// the last check too, by skipping such an RRSIG; it is made again here so the
+/// wallet does not depend on which signature hickory picks, and so that a
+/// hickory that dropped the rule for the last signature would fail here instead
+/// of resolving. The same rule on the chain above it (the DS links) is hickory's
+/// alone; the chain tests pin it.
+///
+/// And, as [`denial_signers_enclose`] requires of a denial, the RRset must
+/// arrive with the RRSIG hickory verified it with, which it marks Secure:
+/// counting any RRSIG would let an unmarked one stand in for a missing one.
 fn secure_txt_answers(name: &Name, answers: &[Record]) -> Result<Vec<String>, String> {
     // `zone_of` is ancestor-or-equal, which is as close to §5.3.1 as a stub can
     // get: the zone cut is in the SOA, and this answer need not carry one. It
@@ -522,7 +740,8 @@ fn secure_txt_answers(name: &Name, answers: &[Record]) -> Result<Vec<String>, St
     //
     // *Every* RRSIG, not "at least one in bailiwick": hickory takes the first
     // signature that verifies, so one honest-looking RRSIG next to the
-    // attacker's would let theirs be the one that counted.
+    // attacker's would let theirs be the one that counted, were hickory to
+    // stop skipping the attacker's first.
     let mut covering_rrsigs = 0usize;
     for record in answers {
         let Some(rrsig) = record.try_borrow::<RRSIG>() else { continue };
@@ -587,10 +806,25 @@ fn secure_txt_answers(name: &Name, answers: &[Record]) -> Result<Vec<String>, St
     if covering_rrsigs == 0 {
         // Unreachable while a Secure proof implies a verified RRSIG, and here on
         // purpose: were a later hickory to strip RRSIGs from the answers it
-        // returns, the signer check above would quietly become a no-op and the
-        // forgery it exists to stop would work again. Fail instead.
+        // returns, the signer check above would quietly become a no-op. Fail
+        // instead.
         return Err(format!(
             "TXT records at {} arrived with no RRSIG covering them",
+            name.to_ascii()
+        ));
+    }
+    // As denial_signers_enclose already does for denials: require the RRSIG that
+    // hickory marked Secure, the one it verified with, not just any RRSIG.
+    let proved = answers.iter().any(|record| {
+        record.proof == Proof::Secure
+            && &record.name == name
+            && record
+                .try_borrow::<RRSIG>()
+                .is_some_and(|rrsig| rrsig.data().input().type_covered == RecordType::TXT)
+    });
+    if !proved {
+        return Err(format!(
+            "TXT records at {} arrived without the signature that proved them",
             name.to_ascii()
         ));
     }
@@ -662,8 +896,8 @@ mod tests {
     use std::ptr;
     use std::time::{Duration, UNIX_EPOCH};
 
-    use hickory_proto::dnssec::rdata::{DNSSECRData, SigInput, NSEC, RRSIG};
-    use hickory_proto::dnssec::{Algorithm, Proof};
+    use hickory_proto::dnssec::rdata::{DNSSECRData, SigInput, NSEC, NSEC3, RRSIG};
+    use hickory_proto::dnssec::{Algorithm, Nsec3HashAlgorithm, Proof};
     use hickory_proto::rr::rdata::{TXT, SOA};
     use hickory_proto::rr::{Name, RData, Record, RecordType, SerialNumber};
 
@@ -685,9 +919,8 @@ mod tests {
     /// An RRSIG over the TXT RRset at `owner`, made by `signer`, marked the way
     /// hickory marks the signature it verified with.
     ///
-    /// The signature bytes are never looked at — what is under test is the check
-    /// that hickory does not make, that the signer was entitled to sign for this
-    /// owner name. A real attacker's signature verifies; that is the point.
+    /// The signature bytes are never looked at: hickory has already verified
+    /// what it marked Secure, and these tests are about what is done with that.
     fn rrsig(owner: &str, signer: &str) -> Record {
         let mut record = unproven_rrsig(owner, signer);
         record.proof = Proof::Secure;
@@ -755,30 +988,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_foreign_signer_at_the_queried_name() {
-        // The forgery hickory 0.26.1 accepts: the owner name is ours, the signer
-        // is not, and RFC 4035 §5.3.1's signer-name rule is the check it skips.
-        let answers = [
-            txt(ALIAS, "oa_version=2; network=xmr; address=888evil;", Proof::Secure),
-            rrsig(ALIAS, "attacker.test."),
-        ];
-        let err = secure_txt_answers(&name(ALIAS), &answers).expect_err("must not resolve");
-        assert!(err.contains("attacker.test"), "{err}");
-    }
-
-    #[test]
-    fn rejects_a_foreign_signer_hidden_behind_an_honest_one() {
-        // hickory takes the first RRSIG that verifies, so "some RRSIG here is in
-        // bailiwick" proves nothing about the one that counted.
-        let answers = [
-            txt(ALIAS, "oa_version=2; network=xmr; address=888evil;", Proof::Secure),
-            rrsig(ALIAS, "example.org."),
-            rrsig(ALIAS, "attacker.test."),
-        ];
-        assert!(secure_txt_answers(&name(ALIAS), &answers).is_err());
-    }
-
-    #[test]
     fn accepts_a_second_signature_from_within_the_zone() {
         // Two RRSIGs over one RRset is ordinary — a ZSK or algorithm rollover —
         // and only the one hickory verified with is marked Secure; the other keeps
@@ -810,8 +1019,20 @@ mod tests {
     #[test]
     fn rejects_a_secure_rrset_with_no_signature_in_the_answer() {
         // Guards the guard: if RRSIGs ever stop reaching us, the signer check
-        // above silently passes on every answer.
+        // silently passes on every answer. hickory always returns them, so this
+        // cannot be built end to end.
         let answers = [txt(ALIAS, "oa_version=2; network=xmr; address=888real;", Proof::Secure)];
+        assert!(secure_txt_answers(&name(ALIAS), &answers).is_err());
+    }
+
+    #[test]
+    fn refuses_a_record_whose_only_signature_hickory_did_not_mark() {
+        // hickory marks Secure only the RRSIG it verified with. An answer whose
+        // only RRSIG is unmarked means the one that counted is missing.
+        let answers = [
+            txt(ALIAS, "oa_version=2; network=xmr; address=888forged;", Proof::Secure),
+            unproven_rrsig(ALIAS, "example.org."),
+        ];
         assert!(secure_txt_answers(&name(ALIAS), &answers).is_err());
     }
 
@@ -917,59 +1138,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_denial_signed_by_a_foreign_zone() {
-        // The forgery this check exists for, and the exact shape the positive
-        // path already refuses. Everything here is genuinely Secure — the
-        // attacker owns `attacker.example.net` and signed it properly — and none
-        // of it says anything about `example.org`.
-        let answers = vec![
-            soa("attacker.example.net.", Proof::Secure),
-            nsec("donate.example.org.", Proof::Secure),
-            nsec_rrsig("donate.example.org.", "attacker.example.net."),
-        ];
-        assert!(!denial_is_proven(&name(ALIAS), &answers));
-    }
-
-    #[test]
-    fn rejects_a_foreign_signed_denial_hidden_behind_an_honest_one() {
-        // hickory takes the first signature that verifies, so "at least one in
-        // bailiwick" would let the attacker's be the one that counted. Both
-        // orderings, because "first" is not something this code should depend on.
-        let honest = nsec_rrsig("donate.example.org.", "example.org.");
-        let foreign = nsec_rrsig("donate.example.org.", "attacker.example.net.");
-        let alias = name(ALIAS);
-
-        for pair in [
-            vec![honest.clone(), foreign.clone()],
-            vec![foreign.clone(), honest.clone()],
-        ] {
-            let mut answers = vec![
-                soa("example.org.", Proof::Secure),
-                nsec("donate.example.org.", Proof::Secure),
-            ];
-            answers.extend(pair);
-            assert!(!denial_is_proven(&alias, &answers));
-        }
-    }
-
-    #[test]
-    fn an_unsigned_soa_does_not_establish_the_denying_zone() {
-        // hickory's own zone check derives the zone from the first SOA owner name
-        // with no proof check at all, so a fabricated SOA passes it. The signer
-        // name on the signature is what this function trusts instead, and here
-        // there is none.
-        let answers = vec![
-            soa("example.org.", Proof::Insecure),
-            nsec("donate.example.org.", Proof::Secure),
-        ];
-        assert!(!denial_is_proven(&name(ALIAS), &answers));
-    }
-
-    #[test]
     fn a_denial_with_no_signature_at_all_is_not_proven() {
         // Guards the guard: if a future hickory stopped returning the RRSIGs it
         // verified, the signer check would silently become a no-op. Then this
-        // fails instead.
+        // fails instead. hickory always returns them, so this cannot be built
+        // end to end.
         let answers = vec![
             soa("example.org.", Proof::Secure),
             nsec("donate.example.org.", Proof::Secure),
@@ -978,50 +1151,21 @@ mod tests {
     }
 
     #[test]
-    fn a_parent_zone_may_deny_a_name_in_its_child() {
-        // `zone_of` is ancestor-or-equal, the same latitude the positive path
-        // takes: a parent can replace a child's DS anyway, so refusing it would
-        // buy nothing and would break a name denied at a zone cut above it.
+    fn a_denial_without_the_signature_that_proved_it_is_not_proven() {
+        // The same guard, one denial record at a time: an in-bailiwick RRSIG that
+        // hickory did not verify with says nothing about who signed this NSEC.
         let answers = vec![
             soa("example.org.", Proof::Secure),
             nsec("donate.example.org.", Proof::Secure),
-            nsec_rrsig("donate.example.org.", "org."),
-        ];
-        assert!(denial_is_proven(&name(ALIAS), &answers));
-    }
-
-    #[test]
-    fn a_sibling_zone_may_not_deny_the_name() {
-        // The near miss `zone_of` has to get right: `other.example.org` shares a
-        // parent with the queried name and contains none of it.
-        let answers = vec![
-            soa("example.org.", Proof::Secure),
-            nsec("donate.example.org.", Proof::Secure),
-            nsec_rrsig("donate.example.org.", "other.example.org."),
+            rrsig_covering("donate.example.org.", "example.org.", RecordType::NSEC),
         ];
         assert!(!denial_is_proven(&name(ALIAS), &answers));
-    }
 
-    #[test]
-    fn an_nsec3_denial_is_judged_by_its_signer_not_its_owner() {
-        // An NSEC3 is owned by a hashed label under the apex, so its owner name
-        // never matches the queried name. Checking the owner would reject every
-        // NSEC3 denial; the signer is what carries the zone.
-        let hashed = "2vptu5timamqttgl4luu9kg21e0aor3s.example.org.";
-        let mut record = Record::from_rdata(
-            name(hashed),
-            300,
-            RData::DNSSEC(DNSSECRData::NSEC(NSEC::new(
-                name("zz.example.org."),
-                [RecordType::A, RecordType::RRSIG],
-            ))),
-        );
-        record.proof = Proof::Secure;
-
-        let answers = vec![record, rrsig_covering(hashed, "example.org.", RecordType::NSEC)];
-        // The RRSIG helper leaves the proof unset, which is what a second
-        // signature looks like; the record itself is the Secure one.
-        assert!(denial_is_proven(&name(ALIAS), &answers));
+        // A second, unproven signature beside the one that proved it, as in a
+        // key rollover, is fine.
+        let mut rolling = proven_denial();
+        rolling.push(rrsig_covering("donate.example.org.", "example.org.", RecordType::NSEC));
+        assert!(denial_is_proven(&name(ALIAS), &rolling));
     }
 
     #[test]
@@ -1034,6 +1178,76 @@ mod tests {
             rrsig("donate.example.org.", "example.org."),
         ];
         assert!(!denial_is_proven(&name(ALIAS), &answers));
+    }
+
+    /// An NSEC at `owner` listing `types`, proved Secure, with the signature by
+    /// `signer` that proved it.
+    fn signed_nsec(owner: &str, signer: &str, types: &[RecordType]) -> Vec<Record> {
+        let data = NSEC::new(name("zz.example.org."), types.iter().copied());
+        let mut record = Record::from_rdata(name(owner), 300, RData::DNSSEC(DNSSECRData::NSEC(data)));
+        record.proof = Proof::Secure;
+        vec![record, nsec_rrsig(owner, signer)]
+    }
+
+    /// An NSEC3 in `zone` standing for `owner` and listing `types`, proved
+    /// Secure, with the signature by `zone` that proved it.
+    fn signed_nsec3(owner: &str, zone: &str, types: &[RecordType]) -> Vec<Record> {
+        let hash = Nsec3HashAlgorithm::SHA1.hash(&[], &name(owner), 0).unwrap();
+        let data = NSEC3::new(Nsec3HashAlgorithm::SHA1, false, 0, Vec::new(), hash.as_ref().to_vec(), types.iter().copied());
+        // The next hashed owner is this record's own hash, so its encoding is
+        // the owner label.
+        let hashed = format!("{}.{zone}", data.next_hashed_owner_name_base32().unwrap());
+        let mut record = Record::from_rdata(name(&hashed), 300, RData::DNSSEC(DNSSECRData::NSEC3(data)));
+        record.proof = Proof::Secure;
+        let mut rrsig = rrsig_covering(&hashed, zone, RecordType::NSEC3);
+        rrsig.proof = Proof::Secure;
+        vec![record, rrsig]
+    }
+
+    const DELEGATION: [RecordType; 4] = [RecordType::NS, RecordType::DS, RecordType::RRSIG, RecordType::NSEC];
+
+    #[test]
+    fn a_parents_nsec_at_a_cut_above_the_name_is_not_proven_absence() {
+        // org.'s NSEC at its delegation of example.org.: signed by a zone that
+        // contains ALIAS, so only the RFC 6840 §4.1 rule refuses it. hickory
+        // 0.26.3 refuses it first; this is the wallet's own copy.
+        assert!(!denial_is_proven(&name(ALIAS), &signed_nsec("example.org.", "org.", &DELEGATION)));
+        // At the cut itself the parent answers only for DS.
+        let alias = name("donate.example.org.");
+        assert!(!denial_is_proven(&alias, &signed_nsec("donate.example.org.", "example.org.", &DELEGATION)));
+        // Nothing exists below a DNAME.
+        let dname = [RecordType::DNAME, RecordType::RRSIG, RecordType::NSEC];
+        assert!(!denial_is_proven(&name(ALIAS), &signed_nsec("donate.example.org.", "example.org.", &dname)));
+    }
+
+    #[test]
+    fn an_apex_a_dname_at_the_name_or_an_unrelated_cut_is_proven_absence() {
+        // NS with SOA is the zone's own apex, not its parent's side of the cut.
+        let apex = [RecordType::NS, RecordType::SOA, RecordType::RRSIG, RecordType::NSEC, RecordType::DNSKEY];
+        assert!(denial_is_proven(&name(ALIAS), &signed_nsec("example.org.", "example.org.", &apex)));
+        // A DNAME owner can hold other data, so it can say it has no TXT.
+        let dname = [RecordType::DNAME, RecordType::RRSIG, RecordType::NSEC];
+        let alias = name("donate.example.org.");
+        assert!(denial_is_proven(&alias, &signed_nsec("donate.example.org.", "example.org.", &dname)));
+        // A cut beside the name, not above it.
+        assert!(denial_is_proven(&name(ALIAS), &signed_nsec("a.example.org.", "example.org.", &DELEGATION)));
+    }
+
+    #[test]
+    fn a_parents_nsec3_at_a_cut_above_the_name_is_not_proven_absence() {
+        // The NSEC3 form, where the owner is a hash: org.'s record for its
+        // delegation of example.org., which a closest-encloser proof for ALIAS
+        // would use.
+        let delegation = [RecordType::NS, RecordType::DS, RecordType::RRSIG];
+        assert!(!denial_is_proven(&name(ALIAS), &signed_nsec3("example.org.", "org.", &delegation)));
+        let alias = name("donate.example.org.");
+        assert!(!denial_is_proven(&alias, &signed_nsec3("donate.example.org.", "example.org.", &delegation)));
+
+        // Without NS it is an ordinary name; and a cut beside the name is
+        // nothing to do with it.
+        let plain = [RecordType::DS, RecordType::RRSIG];
+        assert!(denial_is_proven(&name(ALIAS), &signed_nsec3("example.org.", "org.", &plain)));
+        assert!(denial_is_proven(&name(ALIAS), &signed_nsec3("a.example.org.", "example.org.", &delegation)));
     }
 
     #[test]

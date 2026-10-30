@@ -145,6 +145,56 @@ void main() {
   }
 
   group('without TLS', () {
+    // A user whose server is on their tailnet: its Tailscale IP (100.64/10) is a
+    // network they control, reached over WireGuard, so it is the LAN case.
+    for (final type in ['lws', 'node']) {
+      test('a Tailscale user\'s $type connects in the clear, with no bundle', () async {
+        const address = '100.101.102.103:18090';
+        await open(type, address);
+
+        await wallet.connectToDaemonImpl(address: address, proxyPort: '');
+
+        expect(backend.caFilePaths, isEmpty);
+        expect(backend.initCalls.single, (daemonAddress: 'http://$address', useSsl: false));
+      });
+    }
+
+    // A server behind a reverse proxy at a path. The LWS client sends every
+    // request under it; wallet2 keeps only host:port and would quietly talk to
+    // the root, so a node with a path is refused instead.
+    test('an LWS address keeps its path all the way to the library', () async {
+      const address = '192.168.1.10:18090/wallet';
+      await open('lws', address);
+
+      await wallet.connectToDaemonImpl(address: address, proxyPort: '');
+
+      expect(backend.initCalls.single, (daemonAddress: 'http://$address', useSsl: false));
+      expect(wallet.connectionAllowsPath('lws'), isTrue);
+    });
+
+    test('a node address with a path is refused before init', () async {
+      const address = '192.168.1.10:18081/wallet';
+      await open('node', address);
+
+      await expectLater(
+        wallet.connectToDaemonImpl(address: address, proxyPort: ''),
+        throwsA(predicate((e) => '$e'.contains("can't include a path"))),
+      );
+      expect(backend.initCalls, isEmpty);
+      expect(wallet.connectionAllowsPath('node'), isFalse);
+    });
+
+    test('the connection test refuses a node path too', () async {
+      await expectLater(
+        wallet.testConnection(
+          address: 'node.example.com:18081/wallet',
+          useTor: false,
+          connectionType: 'node',
+        ),
+        throwsA(predicate((e) => '$e'.contains("can't include a path"))),
+      );
+    });
+
     test('a LAN node needs no bundle', () async {
       await open('node', '192.168.1.10:18081');
 

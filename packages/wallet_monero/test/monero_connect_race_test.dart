@@ -155,11 +155,10 @@ void main() {
       await oldConnect;
       await apply;
 
-      expect(
-        backend.inits.map((i) => i.daemonAddress),
-        ['https://old.example.com:18090', 'https://new.example.com:18090'],
-        reason: 'the stale connect inited last and repointed the wallet at the old server',
-      );
+      expect(backend.inits.map((i) => i.daemonAddress), [
+        'https://old.example.com:18090',
+        'https://new.example.com:18090',
+      ], reason: 'the stale connect inited last and repointed the wallet at the old server');
     });
 
     test('a restore never runs two native connects at once', () async {

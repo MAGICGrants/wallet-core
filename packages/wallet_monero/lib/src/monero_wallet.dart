@@ -11,6 +11,7 @@ import 'consts.dart';
 import 'ffi_monero_backend.dart';
 import 'height_by_date.dart';
 import 'monero_backend.dart';
+import 'native_wallet_registry.dart';
 import 'seed/bip39_legacy.dart';
 
 /// Ceiling on a connection-probe reply.
@@ -38,15 +39,26 @@ class MoneroPendingTransaction implements PendingTransaction {
   final BigInt feeBaseUnits;
 }
 
+/// What a light-wallet server is waiting for its operator to approve before it
+/// will serve this wallet ([MoneroWallet.lwsPendingApproval]).
+enum LwsPendingApproval {
+  /// The account itself: a server that approves new accounts by hand has not
+  /// approved this one yet, so it reports nothing for it.
+  account,
+
+  /// A rescan from the wallet's restore height. The account works, but history
+  /// before the server's own start height stays missing until approved.
+  restoreHeight,
+}
+
 /// Monero, over either a light-wallet server (LWSF) or a full node (wallet2).
 ///
 /// Several routines here look defensive or redundant. Each one exists because
 /// something went wrong in production, and the comment at the site says what.
 /// Removing one reintroduces the bug it was written for.
 class MoneroWallet extends CryptoWallet {
-  MoneroWallet({MoneroBackend? backend, @visibleForTesting int? networkTypeOverride})
-    : _backend = backend ?? const FfiMoneroBackend(),
-      _networkTypeOverride = networkTypeOverride;
+  MoneroWallet({MoneroBackend? backend, @visibleForTesting this._networkTypeOverride})
+    : _backend = backend ?? const FfiMoneroBackend();
 
   final MoneroBackend _backend;
 
@@ -73,6 +85,30 @@ class MoneroWallet extends CryptoWallet {
   /// successful login, it made every connect look failed, and the reconnect
   /// that followed re-ran `init`, which logs out again.
   bool _lwsSessionUp = false;
+
+  LwsPendingApproval? _lwsPendingApproval;
+
+  /// What the light-wallet server is waiting to approve, or null when nothing
+  /// is pending (or this wallet is not on a light-wallet server).
+  ///
+  /// Read from the library's error string after every login and refresh. LWSF
+  /// clears that string on the next request that succeeds, so this goes back
+  /// to null by itself once the operator approves.
+  LwsPendingApproval? get lwsPendingApproval => _lwsPendingApproval;
+
+  /// LWSF's own wording (lwsf `src/error.cpp`, `error::approval` and
+  /// `error::import_pending`); the library reports these only as text.
+  static LwsPendingApproval? _pendingApprovalFrom(String error) {
+    if (error.contains('Account needs approval')) return LwsPendingApproval.account;
+    if (error.contains('awaiting approval')) return LwsPendingApproval.restoreHeight;
+    return null;
+  }
+
+  void _setLwsPendingApproval(LwsPendingApproval? value) {
+    if (_lwsPendingApproval == value) return;
+    _lwsPendingApproval = value;
+    notifyListeners();
+  }
 
   int? _daemonTargetHeight;
 
@@ -109,6 +145,8 @@ class MoneroWallet extends CryptoWallet {
   int get smallerDigits => MoneroConsts.smallerDigits;
   @override
   int get requiredConfirmations => MoneroConsts.requiredConfirmations;
+  @override
+  Duration get averageBlockTime => const Duration(minutes: 2);
 
   /// Monero restores from all three encodings. The app's `SeedPolicy` is the
   /// other half of the check.
@@ -139,6 +177,22 @@ class MoneroWallet extends CryptoWallet {
   @override
   String connectionAddressExampleForType(String connectionType) =>
       connectionType == 'node' ? 'node.example.com:18081' : 'lws.example.com:18090';
+
+  /// The LWS client prefixes a path onto every request (`/wallet/login`, ...).
+  /// wallet2 does not: it keeps only the host and port and sends `/json_rpc`
+  /// and the rest from the root, so a node behind a path would be missed
+  /// silently, while the connection test (built here, with the path) passed.
+  @override
+  bool connectionAllowsPath(String connectionType) => connectionType != 'node';
+
+  static bool _hasPath(String address) {
+    final uri = Uri.parse('http://$address');
+    return (uri.path.isNotEmpty && uri.path != '/') || uri.hasQuery;
+  }
+
+  static const _nodePathMessage =
+      "A Monero node is reached at the server's root, so its address can't "
+      'include a path. Remove the path.';
 
   /// A full node scans on-device, so the heavy stat reads must wait for it.
   /// LWS has the server do the scanning and needs no such deferral.
@@ -295,6 +349,13 @@ class MoneroWallet extends CryptoWallet {
     // its own password. Resolved before anything is opened, because it decides
     // both the path and the password; see [_backgroundOpenTarget].
     final target = await _backgroundOpenTarget();
+    // And only that: an unattended run never opens the main wallet, which
+    // would put the spend key in a process with no user present. Without the
+    // companion a node run checks nothing ([openViewOnly] skips it), and an LWS
+    // run asks the server with the view key instead.
+    if (unattended && target == null) {
+      throw StateError('An unattended run opens only the view-only background copy');
+    }
     final path = target?.path ?? await resolveWalletPath();
     final openPassword = target?.password ?? password;
 
@@ -327,11 +388,16 @@ class MoneroWallet extends CryptoWallet {
     }
 
     _wallet = wallet;
+    await _listOpen(manager, wallet);
     _history = await _backend.history(wallet);
     _loadedKind = _desiredKind;
 
     await loadPersistedSubaddressState();
     await loadPrimaryAddress();
+    // Deriving the persisted subaddress is local, so do it now rather than at
+    // the end of `load()`: that waits on the connection, and with no server
+    // reachable it never gets there, leaving the receive screen nothing to show.
+    await _refreshSubaddressCache();
     setIsLoaded(true);
 
     // With the main wallet open and its password in hand, bring the background
@@ -346,7 +412,220 @@ class MoneroWallet extends CryptoWallet {
   /// lookup, and writing its approximate numbers to the display snapshot.
   bool _isBackgroundWallet = false;
 
+  /// The app's own wallets go on the process's open-wallet list, so that one
+  /// left open when Android destroys this isolate can be closed by whoever
+  /// takes over ([NativeWalletRegistry]). An unattended run closes its own.
+  Future<void> _listOpen(NativeHandle manager, NativeHandle wallet) async {
+    if (unattended) return;
+    await NativeWalletRegistry.add(manager, wallet);
+  }
+
   bool get isBackgroundWallet => _isBackgroundWallet;
+
+  // ----- View-only check behind a password guard -----
+  //
+  // With the wallet password behind security keys (`wallet_fhse`), an
+  // unattended run has nothing to open the wallet file with. It can still do
+  // what a background run is for, noticing incoming payments:
+  //
+  //  - **Node mode** opens the view-only background cache, which has its own
+  //    password in the keystore; the same file as without a guard.
+  //  - **LWS mode** opens nothing. The light-wallet server already holds the
+  //    view key and did the scanning, so the run asks it, with the address and
+  //    view key [prepareViewOnly] kept in the keystore for exactly this, and
+  //    reports what arrived. No spend key, no wallet file, nothing written; the
+  //    next foreground open syncs the real wallet.
+
+  /// Keystore entry for the LWS check: `{"address", "viewKey"}`. The view key
+  /// is what this wallet already hands its LWS server; storing it lets a run
+  /// read incoming payments without the password, and nothing else.
+  String get _viewOnlyCredentialKey => prefKey('viewOnlyLwsCredential');
+
+  ({String address, String viewKey})? _viewOnlyLws;
+  bool _viewOnlyConnected = false;
+
+  /// True while an unattended run is checking the LWS with the view key only.
+  bool get isViewOnlyCheck => _viewOnlyLws != null;
+
+  @override
+  Future<void> prepareViewOnly() async {
+    final wallet = _wallet;
+    if (wallet == null || _isBackgroundWallet) return;
+    final address = await _backend.address(wallet);
+    final viewKey = await _backend.secretViewKey(wallet);
+    if (address.isEmpty || viewKey.isEmpty) return;
+    await WalletSecrets.store.write(
+      _viewOnlyCredentialKey,
+      jsonEncode({'address': address, 'viewKey': viewKey}),
+    );
+    walletLog(LogLevel.info, 'Kept the view-only credential for unattended checks.');
+  }
+
+  @override
+  Future<void> forgetViewOnly() => WalletSecrets.store.delete(_viewOnlyCredentialKey);
+
+  @override
+  Future<bool> openViewOnly() async {
+    if (!unattended) return false;
+    await ensureConnectionLoaded();
+
+    if (_isNodeMode) {
+      // The background cache opens with its own password, never this one.
+      if (await _backgroundOpenTarget() == null) return false;
+      await openExisting(password: '');
+      return true;
+    }
+
+    final stored = await WalletSecrets.store.read(_viewOnlyCredentialKey);
+    if (stored == null || stored.isEmpty) return false;
+    final decoded = jsonDecode(stored) as Map<String, dynamic>;
+    final address = decoded['address'] as String?;
+    final viewKey = decoded['viewKey'] as String?;
+    if (address == null || address.isEmpty || viewKey == null || viewKey.isEmpty) return false;
+
+    _viewOnlyLws = (address: address, viewKey: viewKey);
+    _primaryAddress = address;
+    setIsLoaded(true);
+    walletLog(LogLevel.info, 'Unattended run: checking the LWS server with the view key only.');
+    return true;
+  }
+
+  /// Asks the LWS server for this wallet's transactions with the view key, and
+  /// turns them into history the incoming-payment notifier can read.
+  ///
+  /// The same rules as every other request that carries the view key: https
+  /// for a routable host, Tor or the configured proxy when the connection says
+  /// so, and refused outright over an unconfidential channel.
+  Future<void> _checkLwsViewOnly({required String address, String? proxyPort}) async {
+    final credential = _viewOnlyLws!;
+    final useSsl = _addressRequiresSsl(address);
+    final url = Uri.parse('${useSsl ? 'https' : 'http'}://$address/get_address_txs');
+    final viaProxy = proxyPort != null && proxyPort.isNotEmpty;
+    requireConfidentialChannel(url, carrying: 'the private view key', viaTor: viaProxy);
+
+    final body = jsonEncode({'address': credential.address, 'view_key': credential.viewKey});
+    walletLog(
+      LogLevel.info,
+      'View-only check: get_address_txs (address ${Redact.id(credential.address)}, '
+      'view key ${Redact.secret})',
+    );
+
+    final ({int status, String body}) response;
+    if (viaProxy) {
+      final parsed = await makeSocksHttpRequest(
+        'POST',
+        url.toString(),
+        (host: InternetAddress.loopbackIPv4, port: int.parse(proxyPort)),
+        body: body,
+        timeout: const Duration(seconds: 30),
+        securityContext: useSsl ? await CaBundle.securityContext() : null,
+      );
+      response = (status: parsed.statusCode, body: parsed.body);
+    } else {
+      response = await postJsonForBody(url, body).timeout(const Duration(seconds: 20));
+    }
+
+    if (response.status != HttpStatus.ok) {
+      _viewOnlyConnected = false;
+      walletLog(LogLevel.warn, 'View-only check: status ${response.status}');
+      return;
+    }
+
+    final parsed = parseLwsAddressTxs(response.body);
+    _cachedHistory = parsed.history;
+    setSyncedHeight(parsed.scannedHeight);
+    setIsSynced(true);
+    _viewOnlyConnected = true;
+    notifyListeners();
+  }
+
+  /// `get_address_txs` as transaction history.
+  ///
+  /// Without the spend key a key image cannot be checked, so a transaction
+  /// listing `spent_outputs` may be this wallet's own send (its change comes
+  /// back as `total_received`) or someone else's ring that used one of our
+  /// outputs as a decoy. Both are reported as outgoing, which never notifies;
+  /// the cost is a missed alert for the rare incoming payment whose ring also
+  /// picked one of our outputs. A transaction with nothing spent and something
+  /// received is incoming.
+  @visibleForTesting
+  static ({List<TxDetails> history, int? scannedHeight}) parseLwsAddressTxs(String body) {
+    final json = jsonDecode(body) as Map<String, dynamic>;
+    int? asInt(Object? v) => v is int ? v : (v is String ? int.tryParse(v) : null);
+    BigInt asBig(Object? v) => v is int ? BigInt.from(v) : BigInt.tryParse('$v') ?? BigInt.zero;
+
+    final chainHeight = asInt(json['blockchain_height']) ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final history = <TxDetails>[];
+    for (final raw in (json['transactions'] as List<dynamic>? ?? const [])) {
+      final tx = raw as Map<String, dynamic>;
+      final hash = tx['hash'] as String?;
+      if (hash == null || hash.isEmpty) continue;
+
+      final received = asBig(tx['total_received']);
+      final sent = asBig(tx['total_sent']);
+      final spends = (tx['spent_outputs'] as List<dynamic>? ?? const []).isNotEmpty;
+      final mempool = tx['mempool'] == true;
+      final height = mempool ? -1 : (asInt(tx['height']) ?? -1);
+      final timestamp = switch (tx['timestamp']) {
+        final String iso => (DateTime.tryParse(iso)?.millisecondsSinceEpoch ?? now * 1000) ~/ 1000,
+        final int seconds => seconds,
+        _ => now,
+      };
+      final incoming = !spends && received > BigInt.zero;
+
+      history.add(
+        TxDetails(
+          index: null,
+          direction: incoming ? txDirectionIncoming : txDirectionOutgoing,
+          hash: hash,
+          amountBaseUnits: incoming ? received : (sent - received).abs(),
+          feeBaseUnits: BigInt.zero,
+          recipients: const [],
+          accountIndex: null,
+          subaddrIndexList: const [],
+          timestamp: timestamp,
+          height: height,
+          confirmations: height > 0 && chainHeight >= height ? chainHeight - height + 1 : 0,
+          key: '',
+        ),
+      );
+    }
+    history.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return (
+      history: history,
+      scannedHeight: asInt(json['scanned_block_height'] ?? json['scanned_height']),
+    );
+  }
+
+  /// Unproxied POST that returns the body, injected so the view-only check is
+  /// testable.
+  @visibleForTesting
+  Future<({int status, String body})> Function(Uri url, String body) postJsonForBody =
+      _postJsonForBody;
+
+  static Future<({int status, String body})> _postJsonForBody(Uri url, String body) async {
+    final client = HttpClient(
+      context: url.scheme == 'https' ? await CaBundle.securityContext() : null,
+    );
+    try {
+      final request = await client.postUrl(url);
+      request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      // Explicit length: monero-lws rejects a chunked body (see [_postJson]).
+      final bytes = utf8.encode(body);
+      request.contentLength = bytes.length;
+      request.add(bytes);
+      final response = await request.close();
+      final text = await readBoundedBody(
+        response,
+        maxBytes: kDefaultMaxResponseBytes,
+        timeout: const Duration(seconds: 20),
+      );
+      return (status: response.statusCode, body: text);
+    } finally {
+      client.close(force: true);
+    }
+  }
 
   // ----- Native view-key background sync (node mode only) -----
   //
@@ -378,18 +657,15 @@ class MoneroWallet extends CryptoWallet {
   ///
   /// Null unless *all* of: this is an unattended run, the mode is node (LWSF
   /// implements none of this), a cache password has been stored, and the file
-  /// exists. Any of those missing means the run falls back to the main wallet;
-  /// which still works, and is what happens on the very first run after the
-  /// setting is switched on.
+  /// exists. In an unattended run any of those missing means XMR is skipped,
+  /// never opened as the main wallet: the copy appears when the app next opens
+  /// the wallet with a sync toggle on ([applyBackgroundSyncSetting]).
   Future<({String path, String password})?> _backgroundOpenTarget() async {
     if (!unattended || !_isNodeMode) return null;
 
     final password = await WalletSecrets.store.read(backgroundCachePasswordKey);
     if (password == null || password.isEmpty) {
-      walletLog(
-        LogLevel.info,
-        'Unattended run: no background cache password yet; using the main wallet.',
-      );
+      walletLog(LogLevel.info, 'Unattended run: no background cache password yet; skipping.');
       return null;
     }
 
@@ -399,7 +675,7 @@ class MoneroWallet extends CryptoWallet {
     // A missing *cache* is recoverable and wallet2 recreates it; a missing keys
     // file means the open fails, and the honest fallback is the main wallet.
     if (!await File('$path.keys').exists()) {
-      walletLog(LogLevel.warn, 'Unattended run: no background keys file; using the main wallet.');
+      walletLog(LogLevel.warn, 'Unattended run: no background keys file; skipping.');
       return null;
     }
 
@@ -419,8 +695,9 @@ class MoneroWallet extends CryptoWallet {
   /// and rewrites the main keys file; tearing down deletes them and stops every
   /// subsequent `store()` paying for a second cache write.
   ///
-  /// Gated on the app's `backgroundSyncEnabled` preference, so an off-by-default
-  /// feature costs nothing. Everything here is best-effort; a wallet that cannot
+  /// Gated on [unattendedRunsEnabled]: a Periodic node scan and Continuous
+  /// Sync both open this copy, and nothing else does. With Sync Frequency off it
+  /// costs nothing. Everything here is best-effort; a wallet that cannot
   /// configure background sync still syncs in the foreground rather than failing
   /// to open.
   @override
@@ -429,22 +706,30 @@ class MoneroWallet extends CryptoWallet {
     // implements none of the mechanism, so in LWS mode the call would report
     // success while doing nothing, and the answer it reports would make the
     // teardown branch below fire on every open.
-    if (!_isNodeMode) return;
+    if (!_isNodeMode) return _deleteNodeBackgroundCopy();
 
     final wallet = _wallet;
     if (wallet == null) return;
 
     // A background wallet cannot configure anything: `setup_background_sync`
     // refuses to run from an existing background cache, and an unattended run
-    // holds no wallet password to do it with anyway.
-    if (_isBackgroundWallet) return;
+    // holds no wallet password to do it with anyway. Nor can a main wallet in
+    // background mode.
+    if (_isBackgroundWallet || _inBackgroundMode) return;
 
     try {
-      final enabled =
-          await SharedPreferencesService.get<bool>(SettingsKeys.backgroundSyncEnabled) ?? false;
+      final enabled = await unattendedRunsEnabled();
       final configured = await _backend.getBackgroundSyncType(wallet);
 
-      if (enabled == (configured == MoneroBackgroundSyncType.customPassword)) return;
+      if (enabled == (configured == MoneroBackgroundSyncType.customPassword)) {
+        // Set up, but not with anything we hold. Older builds dropped the
+        // copy's password when sync was turned off, while their monero_c,
+        // ignoring "off", rewrote the copy under an empty password; it then
+        // stayed "set up" and was never set up again, so unattended runs
+        // skipped Monero for good. Setting it up again replaces the copy.
+        if (!enabled || await _backgroundCopyUsable()) return;
+        walletLog(LogLevel.warn, 'Background copy cannot be opened; setting it up again.');
+      }
 
       // Hold the timers off across the whole transition. `setup_background_sync`
       // deletes and rewrites the background trio *and* rewrites the main keys
@@ -462,6 +747,31 @@ class MoneroWallet extends CryptoWallet {
       });
     } catch (e) {
       walletLog(LogLevel.warn, 'background sync setup skipped: ${e.runtimeType}');
+    }
+  }
+
+  /// Whether an unattended run can open the background copy: its password is
+  /// stored and its keys file is there.
+  Future<bool> _backgroundCopyUsable() async {
+    final password = await WalletSecrets.store.read(backgroundCachePasswordKey);
+    if (password == null || password.isEmpty) return false;
+    return File('${backgroundPathFor(await resolveWalletPath())}.keys').exists();
+  }
+
+  /// LWS mode: removes the node wallet's background copy, which nothing reads
+  /// in this mode. One an older build turned off may still be there under an
+  /// empty password, its view key and history readable to anyone with the
+  /// files. Node mode sets a new one up when a sync toggle needs it
+  /// ([_backgroundCopyUsable]).
+  Future<void> _deleteNodeBackgroundCopy() async {
+    final base = backgroundPathFor(await walletPathForType('node'));
+    for (final path in [base, '$base.keys', '$base.address.txt']) {
+      final file = File(path);
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (e) {
+        walletLog(LogLevel.warn, 'Could not delete a stale background file: ${e.runtimeType}');
+      }
     }
   }
 
@@ -590,6 +900,7 @@ class MoneroWallet extends CryptoWallet {
     await _throwIfRestoreFailed(wallet);
 
     _wallet = wallet;
+    await _listOpen(await _walletManager(), wallet);
     _history = await _backend.history(wallet);
     _loadedKind = _desiredKind;
 
@@ -840,6 +1151,14 @@ class MoneroWallet extends CryptoWallet {
     );
   }
 
+  @override
+  Future<void> closeFiles() async {
+    await _closeOpenWallet();
+    _viewOnlyLws = null;
+    _viewOnlyConnected = false;
+    _cachedHistory = const [];
+  }
+
   Future<void> _closeOpenWallet() async {
     final wallet = _wallet;
     final manager = _manager;
@@ -848,26 +1167,116 @@ class MoneroWallet extends CryptoWallet {
     // while it is inside its native call is a use-after-free.
     final fetch = _daemonHeightFetch;
     if (fetch != null) await fetch;
+    // Off the list first: an isolate destroyed before the close leaks it,
+    // never leaves it to be closed twice.
+    NativeWalletRegistry.remove(wallet);
     await _backend.closeWallet(manager, wallet, store: false);
     _wallet = null;
     _history = null;
     _loadedKind = null;
     _daemonInitialised = false;
     _lwsSessionUp = false;
+    _lwsPendingApproval = null;
     _reportedSynchronized = false;
     _isBackgroundWallet = false;
+    _inBackgroundMode = false;
     // Keyed on the handle, and a freed handle's address can be reused by the
     // next allocation. Cake keys its equivalent cache on the FFI address alone
     // and never clears it, which is one allocator reuse away from serving a
     // closed wallet's transaction keys.
     _txKeyCache.clear();
+    _keptPayments = null;
   }
 
   @override
   Future<bool> store() async {
     final wallet = _wallet;
     if (wallet == null) return false;
-    return _backend.store(wallet);
+    final timer = Stopwatch()..start();
+    final ok = await _backend.store(wallet);
+    // With background sync set up, every store writes the background cache
+    // too, and the time logged here includes it.
+    walletLog(LogLevel.info, 'Stored in ${timer.elapsedMilliseconds}ms.');
+    return ok;
+  }
+
+  // ----- In-process background mode -----
+  //
+  // wallet2's way to keep syncing without the spend key, in this process, for
+  // when the spend wallet locks while the app keeps running.
+  // `startBackgroundSync` stores the wallet, wipes the spend key and the cache
+  // key from memory, and scanning carries on with the view key into the
+  // background cache. `stopBackgroundSync` checks the password, reloads the
+  // wallet and replays only what was saved meanwhile; no rescan.
+  // Node mode only, and only with the background cache set up
+  // ([applyBackgroundSyncSetting]).
+
+  bool _inBackgroundMode = false;
+
+  /// True while the main wallet is in wallet2's background mode: no spend key
+  /// in memory, scanning with the view key.
+  bool get inBackgroundMode => _inBackgroundMode;
+
+  /// Puts the open main wallet into background mode. False when it cannot: LWS
+  /// mode, an unattended run's background wallet (always in that mode), or no
+  /// background cache set up. Timed in the log.
+  Future<bool> startBackgroundMode() async {
+    final wallet = _wallet;
+    if (wallet == null || !_isNodeMode || _isBackgroundWallet) return false;
+    if (_inBackgroundMode) return true;
+    final timer = Stopwatch()..start();
+    final ok = await runWithSyncSuspended(() => _backend.startBackgroundSync(wallet));
+    if (!ok) {
+      walletLog(LogLevel.warn, 'startBackgroundSync failed: ${await _walletError()}');
+      return false;
+    }
+    _inBackgroundMode = true;
+    _backgroundModeFrom = syncedHeight;
+    walletLog(LogLevel.info, 'Background mode on in ${timer.elapsedMilliseconds}ms.');
+    return true;
+  }
+
+  int? _backgroundModeFrom;
+
+  /// The spend wallet locked: on a node with the view-only copy set up, wallet2
+  /// keeps scanning in background mode with no spend key in memory. In LWS
+  /// mode, or without the copy, false: the wallet closes, and the LWS server
+  /// keeps scanning on its own.
+  @override
+  Future<bool> enterViewOnlyMode() => startBackgroundMode();
+
+  /// Back with the password: wallet2 reloads and replays what it saw.
+  @override
+  Future<bool> leaveViewOnlyMode(String password) => stopBackgroundMode(password);
+
+  /// Takes the wallet out of background mode with its [password]: wallet2
+  /// reloads it and replays what the view key found. False, and still in
+  /// background mode, when that fails (a wrong password, say). Timed in the
+  /// log: the native call, then the history read that follows.
+  Future<bool> stopBackgroundMode(String password) async {
+    final wallet = _wallet;
+    if (wallet == null) return false;
+    if (!_inBackgroundMode) return true;
+    final timer = Stopwatch()..start();
+    final ok = await runWithSyncSuspended(
+      () => _backend.stopBackgroundSync(wallet, walletPassword: password),
+    );
+    if (!ok) {
+      walletLog(LogLevel.warn, 'stopBackgroundSync failed: ${await _walletError()}');
+      return false;
+    }
+    final replayed = timer.elapsedMilliseconds;
+    _inBackgroundMode = false;
+    await refreshTxHistory();
+    final from = _backgroundModeFrom;
+    final blocks = from == null ? '?' : '${(syncedHeight ?? from) - from}';
+    walletLog(
+      LogLevel.info,
+      'Background mode off: reload and replay ${replayed}ms, history read '
+      '${timer.elapsedMilliseconds - replayed}ms, $blocks blocks scanned meanwhile.',
+    );
+    _backgroundModeFrom = null;
+    return true;
   }
 
   /// Stops the native scan thread so [pauseSyncAndStore] can checkpoint.
@@ -912,6 +1321,7 @@ class MoneroWallet extends CryptoWallet {
     // password, so a stranger's cache password would end up encrypting a cache
     // holding this wallet's view key.
     await WalletSecrets.store.delete(backgroundCachePasswordKey);
+    await WalletSecrets.store.delete(_viewOnlyCredentialKey);
     // The connection settings (address + type + tor/ssl/port) are intentionally
     // kept: deleting the wallet should not wipe them, so the connection-setup
     // screen recalls the previous mode and server. Wiping only `connectionType`
@@ -932,6 +1342,7 @@ class MoneroWallet extends CryptoWallet {
     if (wallet != null && manager != null) {
       // After the daemon-height fetch, for the reason in [_closeOpenWallet].
       final fetch = _daemonHeightFetch;
+      NativeWalletRegistry.remove(wallet);
       unawaited(
         fetch == null
             ? _backend.closeWallet(manager, wallet, store: false)
@@ -946,10 +1357,13 @@ class MoneroWallet extends CryptoWallet {
       _loadedKind = null;
       _daemonInitialised = false;
       _lwsSessionUp = false;
+      _lwsPendingApproval = null;
       // Same reasoning as above, applied to the two fields added since: both are
       // properties of the handle that was just freed.
       _isBackgroundWallet = false;
+      _inBackgroundMode = false;
       _txKeyCache.clear();
+      _keptPayments = null;
     }
     super.dispose();
   }
@@ -967,6 +1381,8 @@ class MoneroWallet extends CryptoWallet {
 
   @override
   Future<void> connectToDaemonImpl({required String address, String? proxyPort}) async {
+    if (_viewOnlyLws != null) return _checkLwsViewOnly(address: address, proxyPort: proxyPort);
+
     final wallet = _wallet;
     if (wallet == null) throw Exception('No open Monero wallet.');
 
@@ -984,6 +1400,7 @@ class MoneroWallet extends CryptoWallet {
     // Read once: the type can change while this awaits below, and an init whose
     // lightWallet flag disagrees with the open wallet's factory aborts.
     final nodeMode = _isNodeMode;
+    if (nodeMode && _hasPath(address)) throw Exception(_nodePathMessage);
 
     // There is no user SSL toggle: a routable clearnet host is forced to https; a
     // local or onion host, already confidential without TLS, stays http.
@@ -1041,6 +1458,7 @@ class MoneroWallet extends CryptoWallet {
     // refused login) only through its error string, so a failed connect is
     // always logged, with that reason when there is one.
     final error = await _backend.walletErrorString(wallet);
+    _setLwsPendingApproval(nodeMode ? null : _pendingApprovalFrom(error));
     if (!connected) {
       walletLog(
         LogLevel.warn,
@@ -1062,6 +1480,7 @@ class MoneroWallet extends CryptoWallet {
     if (isLocalHostRoutedThroughTor(Uri.parse('http://$address').host, viaTor: useTor)) {
       throw Exception(localHostOverTorMessage);
     }
+    if (isNode && _hasPath(address)) throw Exception(_nodePathMessage);
     final path = isNode ? '/get_height' : '/get_address_info';
     // Same derivation as the live connect: https for a routable host, plaintext
     // only for an onion or local one.
@@ -1124,7 +1543,7 @@ class MoneroWallet extends CryptoWallet {
             : await client.postUrl(Uri.parse(url));
         final response = await request.close().timeout(const Duration(seconds: 10));
         statusCode = response.statusCode;
-        // Bounded and given a deadline of its own: the audit found this read had
+        // Bounded and given a deadline of its own; this read used to have
         // neither. It is a connection *probe* against an address the user has
         // just typed and has no reason to trust yet; the one read most likely
         // to be pointed at something hostile, and the one that had no limit.
@@ -1181,6 +1600,7 @@ class MoneroWallet extends CryptoWallet {
 
   @override
   Future<bool> getIsConnected() async {
+    if (_viewOnlyLws != null) return _viewOnlyConnected;
     final wallet = _wallet;
     if (wallet == null || !_daemonInitialised) return false;
     if (await _backend.connected(wallet) != 0) return true;
@@ -1209,6 +1629,7 @@ class MoneroWallet extends CryptoWallet {
 
     // LWS: the server does the scanning; this fetches what it found.
     _lwsSessionUp = await _backend.refresh(wallet);
+    _setLwsPendingApproval(_pendingApprovalFrom(await _backend.walletErrorString(wallet)));
   }
 
   @override
@@ -1385,6 +1806,19 @@ class MoneroWallet extends CryptoWallet {
 
   List<TxDetails> _cachedHistory = const [];
 
+  /// The wallet file's attribute holding payments kept from an imported backup
+  /// file ([keepPaymentDetails]): JSON, txid -> key and destinations.
+  @visibleForTesting
+  static const keptPaymentsAttribute = 'magic.keptPayments';
+
+  /// [keptPaymentsAttribute] as read from the open wallet: null until read,
+  /// and reset with the handle like [_txKeyCache].
+  Map<String, BackedUpPayment>? _keptPayments;
+
+  /// Set when [keptPaymentsAttribute] could not be parsed: nothing is kept
+  /// then, rather than overwriting what is there.
+  bool _keptPaymentsUnreadable = false;
+
   /// Transaction secret keys already fetched, by hash.
   ///
   /// Cleared with the wallet ([_closeOpenWallet]) and on commit, and never
@@ -1435,7 +1869,7 @@ class MoneroWallet extends CryptoWallet {
       wallet,
       history,
       knownTxKeys: _txKeyCache,
-      withTxKeys: !_isBackgroundWallet,
+      withTxKeys: !_isBackgroundWallet && !_inBackgroundMode,
     );
 
     final out = <TxDetails>[];
@@ -1491,7 +1925,7 @@ class MoneroWallet extends CryptoWallet {
   /// user is most likely to ask about. (Cake caches it anyway; this is a
   /// deliberate divergence.) [commitTx] clears the cache for the same reason.
   void _rememberTxKey(NativeTxInfo info) {
-    if (_isBackgroundWallet) return;
+    if (_isBackgroundWallet || _inBackgroundMode) return;
     if (info.txKey.isEmpty && info.direction == txDirectionOutgoing && info.confirmations == 0) {
       return;
     }
@@ -1535,7 +1969,89 @@ class MoneroWallet extends CryptoWallet {
   @override
   Future<void> loadTxHistory({bool persistCount = true}) async {
     await refreshTxHistory();
+    await _loadKeptPayments();
     await super.loadTxHistory(persistCount: persistCount);
+  }
+
+  // ----- Payment details kept from an imported backup file -----
+  //
+  // wallet2 keeps a transaction's key and destinations only for one it built
+  // itself. For a payment sent from another device, or before a restore, they
+  // come from a backup file; the wallet file's cache attributes keep them (as
+  // wallet2 keeps its own keys, user data that a rescan does not clear), in
+  // node and LWS mode alike.
+
+  @override
+  BackedUpPayment? keptPaymentDetails(String txid) => _keptPayments?[txid];
+
+  @override
+  Future<bool> keepPaymentDetails(Map<String, BackedUpPayment> payments) async {
+    final wallet = _wallet;
+    // The spend wallet only: a background wallet's file has its user data
+    // cleared by design.
+    if (wallet == null || _isBackgroundWallet || _inBackgroundMode) return false;
+    await _loadKeptPayments();
+    final kept = _keptPayments;
+    if (kept == null || _keptPaymentsUnreadable) return false;
+
+    final merged = Map.of(kept);
+    var changed = false;
+    payments.forEach((txid, p) {
+      final had = merged[txid];
+      final recipients = had != null && had.recipients.isNotEmpty ? had.recipients : p.recipients;
+      final key = had != null && had.txKey.isNotEmpty ? had.txKey : p.txKey;
+      if (recipients.isEmpty && key.isEmpty) return;
+      if (had != null && identical(recipients, had.recipients) && key == had.txKey) return;
+      merged[txid] = BackedUpPayment(recipients: recipients, txKey: key);
+      changed = true;
+    });
+    if (!changed) return true;
+
+    final encoded = jsonEncode({
+      'v': 1,
+      'payments': {
+        for (final e in merged.entries)
+          e.key: {
+            if (e.value.txKey.isNotEmpty) 'key': e.value.txKey,
+            'to': [for (final r in e.value.recipients) r.toJson()],
+          },
+      },
+    });
+    if (!await _backend.setCacheAttribute(wallet, keptPaymentsAttribute, encoded)) return false;
+    _keptPayments = merged;
+    return store();
+  }
+
+  /// Reads [keptPaymentsAttribute] once per open wallet.
+  Future<void> _loadKeptPayments() async {
+    final wallet = _wallet;
+    if (_keptPayments != null || wallet == null || _isBackgroundWallet || _inBackgroundMode) {
+      return;
+    }
+    final raw = await _backend.cacheAttribute(wallet, keptPaymentsAttribute);
+    if (!identical(wallet, _wallet)) return;
+    _keptPaymentsUnreadable = false;
+    if (raw.isEmpty) {
+      _keptPayments = {};
+      return;
+    }
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      _keptPayments = {
+        for (final e in (decoded['payments'] as Map<String, dynamic>).entries)
+          e.key: BackedUpPayment(
+            recipients: [
+              for (final r in (e.value as Map<String, dynamic>)['to'] as List<dynamic>)
+                TxRecipient.fromJson(r as Map<String, dynamic>),
+            ],
+            txKey: (e.value as Map<String, dynamic>)['key'] as String? ?? '',
+          ),
+      };
+    } catch (e) {
+      walletLog(LogLevel.warn, 'Kept payment details are unreadable: $e');
+      _keptPayments = {};
+      _keptPaymentsUnreadable = true;
+    }
   }
 
   @override
@@ -1570,9 +2086,13 @@ class MoneroWallet extends CryptoWallet {
     return _backend.secretViewKey(wallet);
   }
 
+  /// Empty while the spend key is out of memory (background mode): wallet2
+  /// would answer a key of zeros there, which must never be shown or written
+  /// down. Waits first for a return from it that is under way.
   Future<String> readSecretSpendKey() async {
+    await waitForSpendKeys();
     final wallet = _wallet;
-    if (wallet == null) return '';
+    if (wallet == null || _inBackgroundMode) return '';
     return _backend.secretSpendKey(wallet);
   }
 
@@ -1590,15 +2110,18 @@ class MoneroWallet extends CryptoWallet {
 
   /// The 25-word legacy (electrum) seed. Present for any wallet; a bip39/
   /// polyseed origin is not recoverable from it (see readPolyseed / SeedStore).
+  /// Empty while the spend key is out of memory, as [readSecretSpendKey].
   Future<String> readLegacySeed() async {
+    await waitForSpendKeys();
     final wallet = _wallet;
-    if (wallet == null) return '';
+    if (wallet == null || _inBackgroundMode) return '';
     return _backend.seed(wallet);
   }
 
   Future<String> readPolyseed() async {
+    await waitForSpendKeys();
     final wallet = _wallet;
-    if (wallet == null) return '';
+    if (wallet == null || _inBackgroundMode) return '';
     return _backend.getPolyseed(wallet);
   }
 
@@ -1696,6 +2219,7 @@ class MoneroWallet extends CryptoWallet {
     bool isSweepAll, {
     int priority = 0,
   }) async {
+    await waitForSpendKeys();
     final wallet = _wallet;
     if (wallet == null) throw Exception('No open Monero wallet.');
 
@@ -1736,6 +2260,10 @@ class MoneroWallet extends CryptoWallet {
   Future<void> commitTx(PendingTransaction tx, String destinationAddress) async {
     final pending = tx as MoneroPendingTransaction;
 
+    // Read before the broadcast: the handle's ids are what the backup record
+    // is keyed on.
+    final txids = await _txIdsForBackup(pending);
+
     final committed = await _backend.commitPendingTx(pending.handle);
     final status = await _backend.pendingTxStatus(pending.handle);
     final error = await _backend.pendingTxErrorString(pending.handle);
@@ -1761,6 +2289,8 @@ class MoneroWallet extends CryptoWallet {
     // The new transaction key must survive, and any stale negative cache entry
     // for this hash would now be wrong, so drop the cache.
     _txKeyCache.clear();
+
+    await _recordSentPayment(pending, txids, destinationAddress);
 
     // Best-effort: the tx is already out, so a sync/store failure here must not
     // turn a successful send into a thrown failure.
@@ -1812,6 +2342,46 @@ class MoneroWallet extends CryptoWallet {
         e.contains('failed to connect') ||
         e.contains('no route to host') ||
         e.contains('network is unreachable');
+  }
+
+  Future<List<String>> _txIdsForBackup(MoneroPendingTransaction pending) async {
+    if (MetadataBackup.instance == null) return const [];
+    try {
+      return await _backend.pendingTxIds(pending.handle);
+    } catch (e) {
+      walletLog(LogLevel.warn, 'Could not read the pending transaction id: $e');
+      return const [];
+    }
+  }
+
+  /// Hands a payment just broadcast to the metadata backup, with its
+  /// destination and transaction key.
+  ///
+  /// Ideally this record is written before the broadcast; monero_c has no way
+  /// to read a pending transaction's keys yet, so it is written straight after,
+  /// before the refresh and store below. A payment wallet2 split into several
+  /// transactions is left to the history scan, which knows each one's amounts.
+  Future<void> _recordSentPayment(
+    MoneroPendingTransaction pending,
+    List<String> txids,
+    String destinationAddress,
+  ) async {
+    final backup = MetadataBackup.instance;
+    final wallet = _wallet;
+    if (backup == null || wallet == null || txids.length != 1) return;
+    try {
+      final txid = txids.single;
+      backup.outgoingPaymentSent(
+        this,
+        txid: txid,
+        accountIndex: 0,
+        fee: pending.feeBaseUnits,
+        recipients: [TxRecipient(destinationAddress, pending.amountBaseUnits)],
+        txKey: await _backend.txKey(wallet, txid),
+      );
+    } catch (e) {
+      walletLog(LogLevel.warn, 'Could not hand the payment to the backup: $e');
+    }
   }
 
   // ----- Subaddresses -----
@@ -2089,6 +2659,8 @@ class MoneroWallet extends CryptoWallet {
 
   @override
   Future<void> load() async {
+    // A view-only check has no wallet for the subaddress probes to read.
+    if (_viewOnlyLws != null) return super.load();
     await loadPersistedSubaddressState();
     await loadPrimaryAddress();
     await super.load();

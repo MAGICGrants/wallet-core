@@ -139,15 +139,16 @@ class WalletLog {
 
   static LogSink sink = const DebugPrintLogSink();
 
-  /// Whether `info` records are emitted at all. The app wires this to its
-  /// verbose-logging preference; the default keeps info off, matching the
-  /// apps' behaviour when the preference is unset.
-  static Future<bool> Function() isVerbose = () async => false;
+  /// Whether logging is on: `info` records are emitted, and the file sink
+  /// writes ([FileLogSink]). The app wires this to its logging setting
+  /// ([SettingsKeys.loggingEnabled], "Diagnostic Logs"); the default is off,
+  /// matching the apps' behaviour when the setting is unset.
+  static Future<bool> Function() isLoggingOn = () async => false;
 
   /// Test helper; restores the defaults.
   static void resetForTesting() {
     sink = const DebugPrintLogSink();
-    isVerbose = () async => false;
+    isLoggingOn = () async => false;
   }
 }
 
@@ -167,7 +168,7 @@ String _withCoinPrefix(String message, String? coin) {
 /// The `coin` prefix is what makes a multicoin log readable and is harmless
 /// for a single-coin app.
 Future<void> log(LogLevel level, String message, {Map<String, dynamic>? meta, String? coin}) async {
-  if (level == LogLevel.info && !await WalletLog.isVerbose()) return;
+  if (level == LogLevel.info && !await WalletLog.isLoggingOn()) return;
 
   final ts = _timestamp();
   final label = level.name.toUpperCase();

@@ -5,8 +5,8 @@ version: 0.1.0
 resolution: workspace
 
 environment:
-  sdk: 3.11.5
-  flutter: 3.41.7
+  sdk: 3.13.5
+  flutter: 3.47.7
 
 dependencies:
   flutter:
@@ -32,6 +32,8 @@ dependencies:
       ref: 0cd6d54e2860bea68fc50c801cb9db2a760192fb # master @ 2023-06-07, includes the entropy fix
   bip32: 2.0.0
   polyseed: 0.0.7
+  # SLIP-21 (HMAC-SHA512) and Carrot's keyed BLAKE2b, for SeedSecret.
+  pointycastle: 3.9.1
 
   http: 1.6.0
 

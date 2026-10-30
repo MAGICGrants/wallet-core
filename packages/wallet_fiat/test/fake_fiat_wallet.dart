@@ -3,8 +3,7 @@ import 'package:wallet_domain/wallet_domain.dart';
 /// A wallet that exists only to be asked its symbol, its fiat base and whether
 /// it is configured; the three things [FiatRateModel] reads off one.
 class FakeFiatWallet extends CryptoWallet {
-  FakeFiatWallet(this.symbol, {this.address = 'server.example.com:1234', String? fiatBase})
-    : _fiatBase = fiatBase;
+  FakeFiatWallet(this.symbol, {this.address = 'server.example.com:1234', this._fiatBase});
 
   final String symbol;
 

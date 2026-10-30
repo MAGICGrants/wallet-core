@@ -15,7 +15,7 @@ import 'package:wallet_infra/wallet_infra.dart';
 ///
 /// The buffer this covers was `_buffer += utf8.decode(chunk)` with a
 /// `substring` per line: two full copies of everything pending, per chunk and
-/// per line. Three of the audit's reviewers found it independently.
+/// per line, which is quadratic in the size of a frame.
 class _FakeElectrumServer {
   _FakeElectrumServer._(this._server);
 
@@ -58,7 +58,7 @@ void main() {
   setUp(() async {
     SharedPreferencesService.store = MemoryPreferenceStore();
     WalletLog.sink = MemoryLogSink();
-    WalletLog.isVerbose = () async => true;
+    WalletLog.isLoggingOn = () async => true;
     server = await _FakeElectrumServer.start();
     client = ElectrumClient(coinSymbol: 'BTC');
   });

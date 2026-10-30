@@ -52,6 +52,11 @@ class UnlockView extends StatelessWidget {
   /// hides the bottom status bar.
   final String? version;
 
+  /// A second way past the device prompt (mobile layout), for when the device
+  /// cannot confirm its owner: "Use recovery phrase". Null hides it.
+  final String? recoveryLabel;
+  final VoidCallback? onUseRecoveryPhrase;
+
   const UnlockView({
     super.key,
     required this.logo,
@@ -67,6 +72,8 @@ class UnlockView extends StatelessWidget {
     this.biometricLabel,
     this.biometricIcon = Icons.lock_outline,
     this.version,
+    this.recoveryLabel,
+    this.onUseRecoveryPhrase,
   });
 
   @override
@@ -164,6 +171,10 @@ class UnlockView extends StatelessWidget {
                   icon: biometricIcon,
                   onPressed: onUnlockBiometric,
                 ),
+                if (recoveryLabel != null && onUseRecoveryPhrase != null) ...[
+                  const SizedBox(height: BrandSpacing.sm),
+                  BrandButton.ghost(label: recoveryLabel!, onPressed: onUseRecoveryPhrase),
+                ],
                 const SizedBox(height: BrandSpacing.sm),
               ],
             ),

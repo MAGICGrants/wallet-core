@@ -42,7 +42,54 @@ void main() {
       expect(InfraPreferenceKeys.torMode, 'torMode');
       expect(InfraPreferenceKeys.torSocksPort, 'torSocksPort');
       expect(InfraPreferenceKeys.torUseOrbot, 'torUseOrbot');
-      expect(InfraPreferenceKeys.verboseLoggingEnabled, 'verboseLoggingEnabled');
+      expect(InfraPreferenceKeys.loggingEnabled, 'verboseLoggingEnabled');
+    });
+  });
+
+  group('the built-in Tor runs only while it is the chosen mode', () {
+    late List<String> calls;
+
+    setUp(() {
+      calls = [];
+      settings.startBuiltIn = () async => calls.add('start');
+      settings.stopBuiltIn = () async => calls.add('stop');
+    });
+
+    test('choosing Built-in starts it now, not at the next launch', () async {
+      await settings.save(torMode: TorMode.disabled);
+      calls.clear();
+      await settings.save(torMode: TorMode.builtIn);
+      await Future<void>.delayed(Duration.zero);
+      expect(calls, ['start']);
+    });
+
+    test('switching away stops it, and coming back starts it again', () async {
+      for (final mode in [TorMode.external, TorMode.disabled]) {
+        await settings.save(torMode: TorMode.builtIn);
+        await Future<void>.delayed(Duration.zero);
+        calls.clear();
+        await settings.save(torMode: mode, socksPort: '9150');
+        await settings.save(torMode: TorMode.builtIn);
+        await Future<void>.delayed(Duration.zero);
+        expect(calls, ['stop', 'start'], reason: mode.name);
+      }
+    });
+
+    test('a save between two other modes leaves it alone', () async {
+      await settings.save(torMode: TorMode.external, socksPort: '9150');
+      calls.clear();
+      await settings.save(torMode: TorMode.disabled);
+      expect(calls, isEmpty);
+    });
+
+    test('a start or stop that fails does not fail the save', () async {
+      settings.startBuiltIn = () async => throw StateError('no bootstrap');
+      settings.stopBuiltIn = () async => throw StateError('no release');
+      await settings.save(torMode: TorMode.disabled);
+      await expectLater(settings.save(torMode: TorMode.builtIn), completes);
+      await Future<void>.delayed(Duration.zero);
+      await expectLater(settings.save(torMode: TorMode.disabled), completes);
+      expect(settings.torMode, TorMode.disabled);
     });
   });
 

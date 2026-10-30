@@ -28,13 +28,11 @@ enum AmountUnit { coin, fiat }
 ///    empty entry once a rate is available.
 class AmountEntryController extends ChangeNotifier {
   AmountEntryController({
-    required FiatQuoteSource quotes,
-    required String coinSymbol,
-    required int coinDecimals,
+    required this._quotes,
+    required this._coinSymbol,
+    required this._coinDecimals,
     bool restoreUnit = true,
-  }) : _quotes = quotes,
-       _coinSymbol = coinSymbol,
-       _coinDecimals = coinDecimals {
+  }) {
     _quote = _quotes.quoteFor(_coinSymbol);
     field.addListener(_onFieldChanged);
     _quotes.addListener(_onQuotesChanged);

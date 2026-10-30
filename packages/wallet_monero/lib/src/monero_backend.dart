@@ -268,6 +268,23 @@ abstract class MoneroBackend {
   /// spend key into a process with no user present.
   Future<bool> isBackgroundWallet(NativeHandle wallet);
 
+  /// Puts the open main wallet into wallet2's background mode, in this
+  /// process: it stores the wallet, wipes the spend key and the cache key from
+  /// memory, and keeps scanning with the view key, saving what it finds to the
+  /// background cache. True when it succeeded.
+  ///
+  /// Needs [setupBackgroundSync] with [MoneroBackgroundSyncType.customPassword]
+  /// first. Never on a background wallet ([isBackgroundWallet]), which is
+  /// always in this mode, and never in LWS mode, where LWSF implements none of
+  /// it.
+  Future<bool> startBackgroundSync(NativeHandle wallet);
+
+  /// Leaves background mode: checks [walletPassword], reloads the wallet from
+  /// disk and replays only the transactions saved while in background mode
+  /// (no rescan). True when it succeeded; on false the wallet is still in
+  /// background mode, holding no spend key.
+  Future<bool> stopBackgroundSync(NativeHandle wallet, {required String walletPassword});
+
   /// A one-shot `Wallet_refresh`; true when it succeeded. For LWS that means
   /// the server answered, which the wallet uses as its connection state.
   Future<bool> refresh(NativeHandle wallet);
@@ -276,6 +293,11 @@ abstract class MoneroBackend {
   Future<void> setAutoRefreshInterval(NativeHandle wallet, int millis);
 
   Future<bool> store(NativeHandle wallet);
+
+  /// A string the app keeps inside the wallet file (`Wallet_getCacheAttribute`),
+  /// or empty when there is none. Saved with the file by [store].
+  Future<String> cacheAttribute(NativeHandle wallet, String key);
+  Future<bool> setCacheAttribute(NativeHandle wallet, String key, String value);
 
   Future<BigInt> balance(NativeHandle wallet, {int accountIndex = 0});
   Future<BigInt> unlockedBalance(NativeHandle wallet, {int accountIndex = 0});
@@ -357,5 +379,15 @@ abstract class MoneroBackend {
   Future<BigInt> pendingTxFee(NativeHandle tx);
   Future<int> pendingTxStatus(NativeHandle tx);
   Future<String> pendingTxErrorString(NativeHandle tx);
+
+  /// The pending transaction's ids, available before it is committed. More
+  /// than one when wallet2 split the payment.
+  Future<List<String>> pendingTxIds(NativeHandle tx);
+
   Future<bool> commitPendingTx(NativeHandle tx);
+
+  /// The secret key of a transaction this wallet built (`r` then any additional
+  /// keys, hex), or empty. Ask only about a committed outgoing transaction:
+  /// `WalletImpl::getTxKey` writes a miss onto the wallet's global error status.
+  Future<String> txKey(NativeHandle wallet, String txid);
 }

@@ -52,9 +52,32 @@ void main() {
       await h.model.addContact('Alice', {'XMR': '4alice'});
       expect(h.writes.single, hasLength(1));
     });
+
+    test('deleting the address book empties it, saves that, and tells the backup', () async {
+      final backup = _CountingBackup();
+      MetadataBackup.instance = backup;
+      addTearDown(() => MetadataBackup.instance = null);
+      final h = modelWith(read: () async => stored);
+      await h.model.load();
+
+      await h.model.deleteAll();
+      expect(h.model.contacts, isEmpty);
+      expect(h.writes.single, isEmpty);
+      expect(backup.contactsChanges, 1, reason: 'a syncing backup records the deletions');
+    });
   });
 
   group('a store that could not be read', () {
+    test('deleting the address book writes over it: the user asked for all of it to go', () async {
+      final h = modelWith(read: () async => null);
+      await h.model.load();
+      expect(h.model.isUnreadable, isTrue);
+
+      await h.model.deleteAll();
+      expect(h.model.isUnreadable, isFalse);
+      expect(h.writes.single, isEmpty);
+    });
+
     test('does not present as an empty address book', () async {
       final h = modelWith(read: () async => null);
       await h.model.load();
@@ -114,6 +137,64 @@ void main() {
       expect(h.model.contacts, hasLength(2));
       await h.model.addContact('Carol', {'XMR': '4carol'});
       expect(h.writes.single, hasLength(3));
+    });
+  });
+
+  // ContactsSync.applyRemote reaches the open model. The backup counts the
+  // changes as this device's address book only if they were stored, so a
+  // failure must reach it; the user's own edits still stay in memory quietly.
+  group('changes from the backup', () {
+    const carol = Contact(id: '3', name: 'Carol', addresses: {'XMR': '4carol'});
+
+    test('are applied and written', () async {
+      final h = modelWith(read: () async => stored);
+      addTearDown(h.model.dispose);
+      await h.model.load();
+      await ContactsSync.applyRemote({'2': null, '3': carol});
+      expect(h.model.contacts.map((c) => c.name), ['Alice', 'Carol']);
+      expect(h.writes.last, hasLength(2));
+    });
+
+    test('a write that fails is reported, and they stay in memory', () async {
+      final model = ContactModel(
+        read: () async => stored,
+        write: (_) async => throw Exception('keystore unavailable'),
+      );
+      addTearDown(model.dispose);
+      await model.load();
+      await expectLater(ContactsSync.applyRemote({'3': carol}), throwsException);
+      expect(model.contacts.map((c) => c.name), ['Alice', 'Bob', 'Carol']);
+    });
+
+    test('an address book that could not be read refuses them', () async {
+      final h = modelWith(read: () async => null);
+      addTearDown(h.model.dispose);
+      await h.model.load();
+      await expectLater(ContactsSync.applyRemote({'3': carol}), throwsStateError);
+      expect(h.writes, isEmpty);
+    });
+
+    test("the user's own edit that fails to save does not throw", () async {
+      final model = ContactModel(
+        read: () async => stored,
+        write: (_) async => throw Exception('keystore unavailable'),
+      );
+      addTearDown(model.dispose);
+      await model.load();
+      await model.addContact('Dan', {'XMR': '4dan'});
+      expect(model.contacts.map((c) => c.name), contains('Dan'));
+    });
+  });
+
+  group('ownsAddress', () {
+    const alice = Contact(id: '1', name: 'Alice', addresses: {'XMR': '4alice', 'ETH': '0xalice'});
+
+    test('is true only for the contact\'s address on that chain', () {
+      expect(alice.ownsAddress('XMR', '4alice'), isTrue);
+      expect(alice.ownsAddress('xmr', '4alice'), isTrue, reason: 'symbols are case-insensitive');
+      expect(alice.ownsAddress('XMR', '4mallory'), isFalse);
+      expect(alice.ownsAddress('ETH', '4alice'), isFalse, reason: 'another chain\'s address');
+      expect(alice.ownsAddress('BTC', 'bc1qalice'), isFalse, reason: 'no address on that chain');
     });
   });
 
@@ -228,4 +309,15 @@ void main() {
 
     expect(h.model.contacts, hasLength(2), reason: 'the real address book still loads');
   });
+}
+
+/// Counts the address-book changes reported to the metadata backup.
+class _CountingBackup implements MetadataBackup {
+  int contactsChanges = 0;
+
+  @override
+  void contactsChanged() => contactsChanges++;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

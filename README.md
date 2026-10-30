@@ -17,9 +17,12 @@ packages/
   wallet_bitcoin/    Bitcoin and testnet: BIP84 over Electrum
   wallet_ethereum/   Ethereum, Sepolia and ERC-20: JSON-RPC plus Blockscout history
   wallet_openalias/  OpenAlias resolution over Tor, DNSSEC-validated (Rust FFI)
-  wallet_background/ background sync and incoming-transaction notifications
+  wallet_fhse/       FHSE: security keys (FIDO2 hmac-secret) guarding the wallet password (C FFI)
+  wallet_backup/     metadata backup: payment destinations, tx keys and contacts as sealed files (pure Dart)
+  wallet_backup_platform/  the backup's iCloud location (Swift), Auto Backup folder, backup file, screens
+  wallet_background/ background sync and incoming-transaction notifications, view-only
   wallet_fiat/       fiat exchange rates from Kraken
-  wallet_ui/         shared Flutter widgets
+  wallet_ui/         shared Flutter widgets, the route policy and the payment-link gate
 scripts/             reproducible-build tooling for monero_c and the Tor toolchain
 Dockerfile.builder   pinned build image
 test_fixtures/       manifest for the generated Monero test wallets
@@ -33,13 +36,21 @@ sanitization, per-coin address validation, and a Tor gate that fails closed.
 drag a Rust toolchain into every consumer. `AliasResolver` is the seam; the app
 installs `resolveOpenAlias` in `main()`.
 
+Anything that runs without the user is view-only: a Periodic run and Android's
+Continuous Sync (the "Sync Frequency" setting) open Monero's view-only
+background copy (or ask its light-wallet server with the view key), a Bitcoin
+account xpub or an Ethereum address, never the wallet password, the seed or a
+spend key. When the spend wallet locks, the app's own wallets drop their
+spending keys the same way. `packages/wallet_background/README.md` has what
+each Sync Frequency runs, per platform and per coin, and the details.
+
 Logging is a privacy surface. Seeds, keys and raw server payloads never reach a
 log; addresses and transaction ids only as salted fingerprints; amounts only as
 an order of magnitude. `Redact` in `wallet_infra` is the toolkit.
 
 ## Getting started
 
-Requires Flutter 3.41.7. The packages form a Dart pub workspace, so one command
+Requires Flutter 3.47.7. The packages form a Dart pub workspace, so one command
 at the root resolves all of them.
 
 ```bash
@@ -65,6 +76,8 @@ local clone:
 
 ```yaml
 dependency_overrides:
+  # Every wallet-core package the app's pubspec.yaml pins (all twelve for
+  # Spice; Skylight leaves out wallet_bitcoin and wallet_ethereum):
   wallet_infra:
     path: ../wallet-core/packages/wallet_infra
   wallet_domain:
@@ -73,6 +86,22 @@ dependency_overrides:
     path: ../wallet-core/packages/wallet_monero
   wallet_openalias:
     path: ../wallet-core/packages/wallet_openalias
+  wallet_bitcoin:
+    path: ../wallet-core/packages/wallet_bitcoin
+  wallet_ethereum:
+    path: ../wallet-core/packages/wallet_ethereum
+  wallet_fhse:
+    path: ../wallet-core/packages/wallet_fhse
+  wallet_backup:
+    path: ../wallet-core/packages/wallet_backup
+  wallet_backup_platform:
+    path: ../wallet-core/packages/wallet_backup_platform
+  wallet_background:
+    path: ../wallet-core/packages/wallet_background
+  wallet_fiat:
+    path: ../wallet-core/packages/wallet_fiat
+  wallet_ui:
+    path: ../wallet-core/packages/wallet_ui
   # Plus every override from the app's own pubspec.yaml, copied verbatim:
   # hashlib, bip39, blockchain_utils, web3dart, intl. See the table below.
 ```
@@ -103,11 +132,11 @@ you need depends on the packages you take:
 
 | Override | Needed when you depend on |
 | --- | --- |
-| `hashlib: 1.19.2` | `wallet_domain` or `wallet_monero` (both pull `polyseed`) |
+| `hashlib: 1.19.2` | `wallet_domain` or `wallet_monero` (both pull `polyseed`), so also `wallet_backup` |
 | `bip39` at the `cypherstack/stack-bip39` SHA | any coin package or `wallet_domain` |
 | `blockchain_utils` at the `cake-tech` SHA | `wallet_bitcoin`, `wallet_ethereum` or `wallet_monero` |
 | `web3dart` at the `cake-tech` SHA | `wallet_ethereum` |
-| `intl: any` | you also use `flutter_localizations` |
+| `intl: 0.20.3` | `wallet_bitcoin` (its `bitcoin_base` asks for `intl: ^0.19.0`, which it never imports) |
 
 Copy the values from the root `pubspec.yaml`.
 
@@ -117,7 +146,9 @@ Everything is pinned to a commit to make builds verifiable.
 
 - `monero_c`: `magicgrants/monero_c@757bf8e`, a fork carrying
   `Wallet_estimateTransactionFee`.
-- `tor_ffi_plugin`: `cypherstack/tor@c2706ee`.
+- `tor_ffi_plugin`: `MAGICGrants/tor@72e455f`, a fork of `cypherstack/tor`
+  `native-0.2.0` whose build hook sets a fixed `SOURCE_DATE_EPOCH` and remaps
+  the cargo home, so the Tor library is reproducible.
 - `bip39`: `cypherstack/stack-bip39@0cd6d54`, which fixes an entropy bug
   upstream still has.
 
@@ -130,7 +161,11 @@ Two of the scripts look odd:
 - `pin-tor-rust-toolchain.sh` patches cargokit after it is fetched. cargokit
   hardcodes `rustup run stable`, a channel that moves over time, and its config
   accepts only a channel name rather than an exact version, so patching the
-  fetched package is the only way to fix the compiler version.
+  fetched package is the only way to fix the compiler version. Since
+  `native-0.2.0` Tor no longer uses cargokit: its native-assets build hook
+  builds with the toolchain pinned in the package's own `rust-toolchain.toml`
+  (Rust 1.99.1) and `cargo --locked`, so the script now matters only for
+  `wallet_openalias`, whose cargokit copy it patches the same way.
 - `fix-linux-moneroc-execstack.sh` clears the executable-stack flag on the Linux
   monero_c library. Without it, hardened kernels refuse to load the library.
 
@@ -214,7 +249,8 @@ implementation, so this does not just check monero_c against itself.
 ## CI
 
 `ci.yml` runs on every push: analysis, formatting and the unit tests for every
-package, plus `cargo test` for the OpenAlias resolver and a native-crypto job.
+package (wallet_fhse's against its native library, built in the job), plus
+`cargo test` for the OpenAlias resolver and a native-crypto job.
 Everything there uses `FakeMoneroBackend` rather than a real Monero library.
 
 `native.yml` builds monero_c and runs `wallet_monero`'s tests against it,

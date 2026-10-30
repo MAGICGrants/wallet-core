@@ -288,6 +288,26 @@ void main() {
       expect(wallet.cacheDirtyForTesting, isTrue);
     });
 
+    test('a key or recipients carried in later do re-encode', () async {
+      // Same count, hash and height: what changes when an imported backup file
+      // gives a synced payment its key and destinations. The cache is what
+      // keeps them once the import's copy is gone.
+      final wallet = await readyWallet();
+      wallet.setBalancesForTesting(total: BigInt.from(5), unlocked: BigInt.from(5));
+      wallet.history = [_tx('a')];
+      await wallet.loadTxHistory(persistCount: false);
+      await wallet.persistWalletSnapshot();
+      await wallet.persistCache();
+
+      wallet.history = [
+        _tx('a').copyWith(key: 'k', recipients: [TxRecipient('addr', BigInt.one)]),
+      ];
+      await wallet.loadTxHistory(persistCount: false);
+      await wallet.persistWalletSnapshot();
+
+      expect(wallet.cacheDirtyForTesting, isTrue);
+    });
+
     test('a mempool transaction confirming does re-encode', () async {
       // The case a length comparison misses: same count, same hash, and the
       // height going from -1 to a real value is exactly what the snapshot is

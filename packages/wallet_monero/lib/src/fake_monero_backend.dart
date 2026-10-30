@@ -118,6 +118,11 @@ class FakeMoneroBackend extends MoneroBackend {
   /// What the one-shot [refresh] answers.
   bool refreshResult = true;
 
+  /// What a [refresh] leaves in the error string, as LWSF does: its refresh
+  /// sets the string from the outcome, so `''` is a refresh that succeeded and
+  /// cleared it. Null leaves the string alone.
+  String? refreshErrorString;
+
   int _nextId = 1;
   int _newId() => _nextId++;
 
@@ -163,6 +168,7 @@ class FakeMoneroBackend extends MoneroBackend {
     setCaFilePathResult = true;
     connectToDaemonResult = true;
     connectToDaemonError = null;
+    refreshErrorString = null;
     refreshResult = true;
     createTransactionRequests.clear();
     txKeyRequests.clear();
@@ -179,6 +185,9 @@ class FakeMoneroBackend extends MoneroBackend {
     backgroundWalletPaths.clear();
     _backgroundWallets.clear();
     _pathForWallet.clear();
+    backgroundSyncing.clear();
+    walletPasswords.clear();
+    closedWallets.clear();
   }
 
   // ----- Manager -----
@@ -213,6 +222,7 @@ class FakeMoneroBackend extends MoneroBackend {
     opens.add((path: path, password: password));
     final handle = NativeHandle(_newId());
     _pathForWallet[handle.id] = path;
+    walletPasswords[handle.id] = password;
     if (!existingWalletPaths.contains(path)) {
       errorStrings[handle.id] = 'failed to open wallet: no such file';
     }
@@ -293,9 +303,13 @@ class FakeMoneroBackend extends MoneroBackend {
     return handle;
   }
 
+  /// Every wallet handle [closeWallet] was asked to close, in order.
+  final List<int> closedWallets = [];
+
   @override
   Future<bool> closeWallet(NativeHandle manager, NativeHandle wallet, {required bool store}) async {
     _record('closeWallet');
+    closedWallets.add(wallet.id);
     if (closeStarted != null && !closeStarted!.isCompleted) closeStarted!.complete();
     final gate = pauseNextClose;
     if (gate != null) {
@@ -473,9 +487,52 @@ class FakeMoneroBackend extends MoneroBackend {
   Future<bool> isBackgroundWallet(NativeHandle wallet) async =>
       _backgroundWallets.contains(wallet.id);
 
+  /// Main wallets in background mode ([startBackgroundSync]): no spend key
+  /// until [stopBackgroundSync].
+  final Set<int> backgroundSyncing = {};
+
+  /// The password each wallet handle was opened with, which
+  /// [stopBackgroundSync] checks as wallet2 checks it against the keys file.
+  final Map<int, String> walletPasswords = {};
+
+  @override
+  Future<bool> startBackgroundSync(NativeHandle wallet) async {
+    _record('startBackgroundSync');
+    final path = _pathForWallet[wallet.id];
+    // wallet2 throws for a wallet never set up, and for a background wallet,
+    // which is always in this mode.
+    if (_backgroundWallets.contains(wallet.id) ||
+        path == null ||
+        backgroundSyncTypes[path] != MoneroBackgroundSyncType.customPassword) {
+      errorStrings[wallet.id] = 'must setup background sync first before using background sync';
+      return false;
+    }
+    backgroundSyncing.add(wallet.id);
+    return true;
+  }
+
+  @override
+  Future<bool> stopBackgroundSync(NativeHandle wallet, {required String walletPassword}) async {
+    _record('stopBackgroundSync');
+    if (walletPasswords[wallet.id] != walletPassword) {
+      errorStrings[wallet.id] = 'invalid password';
+      return false;
+    }
+    backgroundSyncing.remove(wallet.id);
+    return true;
+  }
+
   @override
   Future<bool> refresh(NativeHandle wallet) async {
     _record('refresh');
+    final error = refreshErrorString;
+    if (error != null) {
+      if (error.isEmpty) {
+        errorStrings.remove(wallet.id);
+      } else {
+        errorStrings[wallet.id] = error;
+      }
+    }
     return refreshResult;
   }
 
@@ -496,6 +553,21 @@ class FakeMoneroBackend extends MoneroBackend {
   Future<bool> store(NativeHandle wallet) async {
     _record('store');
     if (storeThrows) throw Exception('fake store failure');
+    return true;
+  }
+
+  /// The wallet file's cache attributes, kept across close and reopen like the
+  /// file itself.
+  final Map<String, String> cacheAttributes = {};
+
+  @override
+  Future<String> cacheAttribute(NativeHandle wallet, String key) async =>
+      cacheAttributes[key] ?? '';
+
+  @override
+  Future<bool> setCacheAttribute(NativeHandle wallet, String key, String value) async {
+    _record('setCacheAttribute');
+    cacheAttributes[key] = value;
     return true;
   }
 
@@ -554,7 +626,9 @@ class FakeMoneroBackend extends MoneroBackend {
   @override
   Future<String> secretSpendKey(NativeHandle wallet) async {
     _record('secretSpendKey');
-    return _backgroundWallets.contains(wallet.id) ? nullSpendKey : secretSpendKeyValue;
+    return _backgroundWallets.contains(wallet.id) || backgroundSyncing.contains(wallet.id)
+        ? nullSpendKey
+        : secretSpendKeyValue;
   }
 
   @override
@@ -711,10 +785,25 @@ class FakeMoneroBackend extends MoneroBackend {
   @override
   Future<String> pendingTxErrorString(NativeHandle tx) async => pendingError;
 
+  /// What `pendingTxIds` answers.
+  List<String> pendingIds = const [];
+
+  /// What `txKey` answers, by txid.
+  final Map<String, String> committedTxKeys = {};
+
+  @override
+  Future<List<String>> pendingTxIds(NativeHandle tx) async => pendingIds;
+
   @override
   Future<bool> commitPendingTx(NativeHandle tx) async {
     _record('commitPendingTx');
     return commitResult;
+  }
+
+  @override
+  Future<String> txKey(NativeHandle wallet, String txid) async {
+    _record('txKey');
+    return committedTxKeys[txid] ?? '';
   }
 }
 

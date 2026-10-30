@@ -1,0 +1,244 @@
+
+*** Dumping AST Record Layout
+         0 | struct _GUID
+         0 |   unsigned long Data1
+         4 |   unsigned short Data2
+         6 |   unsigned short Data3
+         8 |   unsigned char[8] Data4
+           | [sizeof=16, align=4]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_RP_ENTITY_INFORMATION
+         0 |   DWORD dwVersion
+         8 |   PCWSTR pwszId
+        16 |   PCWSTR pwszName
+        24 |   PCWSTR pwszIcon
+           | [sizeof=32, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_USER_ENTITY_INFORMATION
+         0 |   DWORD dwVersion
+         4 |   DWORD cbId
+         8 |   PBYTE pbId
+        16 |   PCWSTR pwszName
+        24 |   PCWSTR pwszIcon
+        32 |   PCWSTR pwszDisplayName
+           | [sizeof=40, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_CLIENT_DATA
+         0 |   DWORD dwVersion
+         4 |   DWORD cbClientDataJSON
+         8 |   PBYTE pbClientDataJSON
+        16 |   LPCWSTR pwszHashAlgId
+           | [sizeof=24, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_COSE_CREDENTIAL_PARAMETER
+         0 |   DWORD dwVersion
+         8 |   LPCWSTR pwszCredentialType
+        16 |   LONG lAlg
+           | [sizeof=24, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_COSE_CREDENTIAL_PARAMETERS
+         0 |   DWORD cCredentialParameters
+         8 |   PWEBAUTHN_COSE_CREDENTIAL_PARAMETER pCredentialParameters
+           | [sizeof=16, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_CREDENTIAL
+         0 |   DWORD dwVersion
+         4 |   DWORD cbId
+         8 |   PBYTE pbId
+        16 |   LPCWSTR pwszCredentialType
+           | [sizeof=24, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_CREDENTIALS
+         0 |   DWORD cCredentials
+         8 |   PWEBAUTHN_CREDENTIAL pCredentials
+           | [sizeof=16, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_CREDENTIAL_EX
+         0 |   DWORD dwVersion
+         4 |   DWORD cbId
+         8 |   PBYTE pbId
+        16 |   LPCWSTR pwszCredentialType
+        24 |   DWORD dwTransports
+           | [sizeof=32, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_CREDENTIAL_LIST
+         0 |   DWORD cCredentials
+         8 |   PWEBAUTHN_CREDENTIAL_EX * ppCredentials
+           | [sizeof=16, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_HMAC_SECRET_SALT
+         0 |   DWORD cbFirst
+         8 |   PBYTE pbFirst
+        16 |   DWORD cbSecond
+        24 |   PBYTE pbSecond
+           | [sizeof=32, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_HMAC_SECRET_SALT_VALUES
+         0 |   PWEBAUTHN_HMAC_SECRET_SALT pGlobalHmacSalt
+         8 |   DWORD cCredWithHmacSecretSaltList
+        16 |   PWEBAUTHN_CRED_WITH_HMAC_SECRET_SALT pCredWithHmacSecretSaltList
+           | [sizeof=24, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_CRED_PROTECT_EXTENSION_IN
+         0 |   DWORD dwCredProtect
+         4 |   BOOL bRequireCredProtect
+           | [sizeof=8, align=4]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_EXTENSION
+         0 |   LPCWSTR pwszExtensionIdentifier
+         8 |   DWORD cbExtension
+        16 |   PVOID pvExtension
+           | [sizeof=24, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_EXTENSIONS
+         0 |   DWORD cExtensions
+         8 |   PWEBAUTHN_EXTENSION pExtensions
+           | [sizeof=16, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS
+         0 |   DWORD dwVersion
+         4 |   DWORD dwTimeoutMilliseconds
+         8 |   struct _WEBAUTHN_CREDENTIALS CredentialList
+         8 |     DWORD cCredentials
+        16 |     PWEBAUTHN_CREDENTIAL pCredentials
+        24 |   struct _WEBAUTHN_EXTENSIONS Extensions
+        24 |     DWORD cExtensions
+        32 |     PWEBAUTHN_EXTENSION pExtensions
+        40 |   DWORD dwAuthenticatorAttachment
+        44 |   BOOL bRequireResidentKey
+        48 |   DWORD dwUserVerificationRequirement
+        52 |   DWORD dwAttestationConveyancePreference
+        56 |   DWORD dwFlags
+        64 |   GUID * pCancellationId
+        72 |   PWEBAUTHN_CREDENTIAL_LIST pExcludeCredentialList
+        80 |   DWORD dwEnterpriseAttestation
+        84 |   DWORD dwLargeBlobSupport
+        88 |   BOOL bPreferResidentKey
+        92 |   BOOL bBrowserInPrivateMode
+        96 |   BOOL bEnablePrf
+       104 |   PCTAPCBOR_HYBRID_STORAGE_LINKED_DATA pLinkedDevice
+       112 |   DWORD cbJsonExt
+       120 |   PBYTE pbJsonExt
+       128 |   PWEBAUTHN_HMAC_SECRET_SALT pPRFGlobalEval
+       136 |   DWORD cCredentialHints
+       144 |   LPCWSTR * ppwszCredentialHints
+       152 |   BOOL bThirdPartyPayment
+       160 |   PCWSTR pwszRemoteWebOrigin
+       168 |   DWORD cbPublicKeyCredentialCreationOptionsJSON
+       176 |   PBYTE pbPublicKeyCredentialCreationOptionsJSON
+       184 |   DWORD cbAuthenticatorId
+       192 |   PBYTE pbAuthenticatorId
+           | [sizeof=200, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS
+         0 |   DWORD dwVersion
+         4 |   DWORD dwTimeoutMilliseconds
+         8 |   struct _WEBAUTHN_CREDENTIALS CredentialList
+         8 |     DWORD cCredentials
+        16 |     PWEBAUTHN_CREDENTIAL pCredentials
+        24 |   struct _WEBAUTHN_EXTENSIONS Extensions
+        24 |     DWORD cExtensions
+        32 |     PWEBAUTHN_EXTENSION pExtensions
+        40 |   DWORD dwAuthenticatorAttachment
+        44 |   DWORD dwUserVerificationRequirement
+        48 |   DWORD dwFlags
+        56 |   PCWSTR pwszU2fAppId
+        64 |   BOOL * pbU2fAppId
+        72 |   GUID * pCancellationId
+        80 |   PWEBAUTHN_CREDENTIAL_LIST pAllowCredentialList
+        88 |   DWORD dwCredLargeBlobOperation
+        92 |   DWORD cbCredLargeBlob
+        96 |   PBYTE pbCredLargeBlob
+       104 |   PWEBAUTHN_HMAC_SECRET_SALT_VALUES pHmacSecretSaltValues
+       112 |   BOOL bBrowserInPrivateMode
+       120 |   PCTAPCBOR_HYBRID_STORAGE_LINKED_DATA pLinkedDevice
+       128 |   BOOL bAutoFill
+       132 |   DWORD cbJsonExt
+       136 |   PBYTE pbJsonExt
+       144 |   DWORD cCredentialHints
+       152 |   LPCWSTR * ppwszCredentialHints
+       160 |   PCWSTR pwszRemoteWebOrigin
+       168 |   DWORD cbPublicKeyCredentialRequestOptionsJSON
+       176 |   PBYTE pbPublicKeyCredentialRequestOptionsJSON
+       184 |   DWORD cbAuthenticatorId
+       192 |   PBYTE pbAuthenticatorId
+           | [sizeof=200, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_CREDENTIAL_ATTESTATION
+         0 |   DWORD dwVersion
+         8 |   PCWSTR pwszFormatType
+        16 |   DWORD cbAuthenticatorData
+        24 |   PBYTE pbAuthenticatorData
+        32 |   DWORD cbAttestation
+        40 |   PBYTE pbAttestation
+        48 |   DWORD dwAttestationDecodeType
+        56 |   PVOID pvAttestationDecode
+        64 |   DWORD cbAttestationObject
+        72 |   PBYTE pbAttestationObject
+        80 |   DWORD cbCredentialId
+        88 |   PBYTE pbCredentialId
+        96 |   struct _WEBAUTHN_EXTENSIONS Extensions
+        96 |     DWORD cExtensions
+       104 |     PWEBAUTHN_EXTENSION pExtensions
+       112 |   DWORD dwUsedTransport
+       116 |   BOOL bEpAtt
+       120 |   BOOL bLargeBlobSupported
+       124 |   BOOL bResidentKey
+       128 |   BOOL bPrfEnabled
+       132 |   DWORD cbUnsignedExtensionOutputs
+       136 |   PBYTE pbUnsignedExtensionOutputs
+       144 |   PWEBAUTHN_HMAC_SECRET_SALT pHmacSecret
+       152 |   BOOL bThirdPartyPayment
+       156 |   DWORD dwTransports
+       160 |   DWORD cbClientDataJSON
+       168 |   PBYTE pbClientDataJSON
+       176 |   DWORD cbRegistrationResponseJSON
+       184 |   PBYTE pbRegistrationResponseJSON
+           | [sizeof=192, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct _WEBAUTHN_ASSERTION
+         0 |   DWORD dwVersion
+         4 |   DWORD cbAuthenticatorData
+         8 |   PBYTE pbAuthenticatorData
+        16 |   DWORD cbSignature
+        24 |   PBYTE pbSignature
+        32 |   struct _WEBAUTHN_CREDENTIAL Credential
+        32 |     DWORD dwVersion
+        36 |     DWORD cbId
+        40 |     PBYTE pbId
+        48 |     LPCWSTR pwszCredentialType
+        56 |   DWORD cbUserId
+        64 |   PBYTE pbUserId
+        72 |   struct _WEBAUTHN_EXTENSIONS Extensions
+        72 |     DWORD cExtensions
+        80 |     PWEBAUTHN_EXTENSION pExtensions
+        88 |   DWORD cbCredLargeBlob
+        96 |   PBYTE pbCredLargeBlob
+       104 |   DWORD dwCredLargeBlobStatus
+       112 |   PWEBAUTHN_HMAC_SECRET_SALT pHmacSecret
+       120 |   DWORD dwUsedTransport
+       124 |   DWORD cbUnsignedExtensionOutputs
+       128 |   PBYTE pbUnsignedExtensionOutputs
+       136 |   DWORD cbClientDataJSON
+       144 |   PBYTE pbClientDataJSON
+       152 |   DWORD cbAuthenticationResponseJSON
+       160 |   PBYTE pbAuthenticationResponseJSON
+           | [sizeof=168, align=8]

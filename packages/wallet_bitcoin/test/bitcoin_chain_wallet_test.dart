@@ -62,10 +62,12 @@ void main() {
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('bitcoin_wallet');
     SharedPreferencesService.store = MemoryPreferenceStore();
+    // deleteFiles also clears the view-only xpub from secure storage.
+    WalletSecrets.store = MemorySecretStore();
     WalletAppConfig.install(WalletAppConfig.spice, directories: FixedDirectories(tmp));
     logs = MemoryLogSink();
     WalletLog.sink = logs;
-    WalletLog.isVerbose = () async => true;
+    WalletLog.isLoggingOn = () async => true;
     fake = FakeElectrumClient();
     wallet = BitcoinWallet(client: fake);
   });
@@ -74,13 +76,14 @@ void main() {
     wallet.dispose();
     WalletAppConfig.resetForTesting();
     SharedPreferencesService.resetForTesting();
+    WalletSecrets.resetForTesting();
     WalletLog.resetForTesting();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
   /// Everything written to the log sink so far.
   ///
-  /// `walletLog` does not await `log()`, and `log()` awaits the verbose check
+  /// `walletLog` does not await `log()`, and `log()` awaits the logging-on check
   /// before writing; so a line emitted immediately before a `throw` has not
   /// reached the sink yet when the test resumes. Yielding to the event loop
   /// drains the pending microtasks.
@@ -262,6 +265,120 @@ void main() {
     });
   });
 
+  // The spend wallet locked: the same wallet keeps watching with the xpub, in
+  // place, and takes its keys back with the password.
+  group('view-only while the spend wallet is locked', () {
+    test('keeps its addresses, cannot send or store, and comes back', () async {
+      await restore();
+      final file = File('${tmp.path}/${WalletAppConfig.instance.walletFileNamer('BTC')}');
+      final before = file.readAsStringSync();
+
+      await wallet.enterViewOnly();
+      expect((wallet.isViewOnly, wallet.isLoaded), (true, true));
+      expect(wallet.getReceiveAddress(), _receive0);
+      expect(await wallet.store(), isFalse);
+      await expectLater(wallet.createTx(_theirs, BigInt.from(1000), false), throwsA(anything));
+      expect(file.readAsStringSync(), before);
+
+      expect(await wallet.leaveViewOnly(_password), isTrue);
+      expect(wallet.isViewOnly, isFalse);
+      expect(await wallet.store(), isTrue);
+    });
+
+    test('the wrong password leaves it view-only', () async {
+      await restore();
+      await wallet.enterViewOnly();
+      expect(await wallet.leaveViewOnly('wrong'), isFalse);
+      expect(wallet.isViewOnly, isTrue);
+      expect(await wallet.store(), isFalse);
+    });
+  });
+
+  group('view-only (an unattended run behind a password guard)', () {
+    late MemorySecretStore secrets;
+
+    setUp(() => secrets = WalletSecrets.store as MemorySecretStore);
+
+    /// A fresh unattended wallet on [client], opened from what [wallet] kept.
+    Future<BitcoinWallet> openViewOnly(FakeElectrumClient client) async {
+      final viewOnly = BitcoinWallet(client: client)..markUnattended();
+      addTearDown(viewOnly.dispose);
+      expect(await viewOnly.openViewOnly(), isTrue);
+      return viewOnly;
+    }
+
+    test('keeps the account xpub, not the mnemonic or xprv', () async {
+      await restore();
+      await wallet.prepareViewOnly();
+
+      final stored = secrets.values.values.single;
+      expect(stored, contains('xpub'));
+      expect(stored, isNot(contains('abandon')));
+      expect(stored, isNot(contains('xprv')));
+    });
+
+    test('derives the same addresses as the full wallet', () async {
+      await restore();
+      await wallet.prepareViewOnly();
+
+      final viewOnly = await openViewOnly(FakeElectrumClient());
+      expect(viewOnly.isLoaded, isTrue);
+      expect(viewOnly.getPrimaryAddress(), _receive0);
+      expect(viewOnly.getReceiveAddress(), _receive0);
+    });
+
+    test('sees the same balance as the full wallet', () async {
+      await restore();
+      await wallet.prepareViewOnly();
+
+      fake = FakeElectrumClient();
+      final viewOnly = await openViewOnly(fake);
+      scriptUsed({
+        _sh(_receive0): (valueSats: 150000, height: 799990, txHash: _txidIn, vout: 0),
+        _sh(_change0): (valueSats: 25000, height: 0, txHash: _txidOut, vout: 1),
+      });
+      viewOnly.setConnection(address: 'electrum.example.com:50002', proxyPort: '', useTor: false);
+      await viewOnly.connectToDaemon();
+      await viewOnly.refresh();
+      await viewOnly.loadTotalBalance();
+
+      expect(viewOnly.totalBalanceBaseUnits, BigInt.from(175000));
+      expect(viewOnly.getReceiveAddress(), _receive1);
+    });
+
+    test('cannot send, and writes nothing to the wallet file', () async {
+      await restore();
+      await wallet.prepareViewOnly();
+      final file = File('${tmp.path}/${WalletAppConfig.instance.walletFileNamer('BTC')}');
+      final before = file.readAsStringSync();
+
+      final viewOnly = await openViewOnly(FakeElectrumClient());
+      expect(await viewOnly.store(), isFalse);
+      expect(viewOnly.createTx(_theirs, BigInt.from(1000), false), throwsA(anything));
+      expect(file.readAsStringSync(), before);
+    });
+
+    test('opens nothing outside an unattended run, or with nothing kept', () async {
+      await restore();
+      await wallet.prepareViewOnly();
+      final attended = BitcoinWallet(client: FakeElectrumClient());
+      addTearDown(attended.dispose);
+      expect(await attended.openViewOnly(), isFalse);
+
+      await wallet.forgetViewOnly();
+      final unattended = BitcoinWallet(client: FakeElectrumClient())..markUnattended();
+      addTearDown(unattended.dispose);
+      expect(await unattended.openViewOnly(), isFalse);
+    });
+
+    test('deleting the wallet forgets the xpub', () async {
+      await restore();
+      await wallet.prepareViewOnly();
+      await wallet.deleteFiles();
+      expect(secrets.values, isEmpty);
+    });
+  });
+
   group('connect', () {
     test('parses host:port and subscribes to headers', () async {
       await restore();
@@ -356,6 +473,24 @@ void main() {
       test('a LAN host connects in the clear', () async {
         await restore();
         await wallet.connectToDaemonImpl(address: '192.168.1.50:50001');
+        expect(fake.connections.single.useSsl, isFalse);
+      });
+
+      test('an Electrum address with a path is refused: raw TCP has none', () async {
+        await restore();
+        expect(wallet.connectionAllowsPath(''), isFalse);
+        await expectLater(
+          wallet.connectToDaemonImpl(address: 'electrum.example.com:50002/wallet'),
+          throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('no path'))),
+        );
+        expect(fake.connections, isEmpty);
+      });
+
+      test('a Tailscale user\'s server connects in the clear', () async {
+        // A Tailscale IP (100.64/10) is a network the user controls, reached
+        // over WireGuard, so it is the LAN case.
+        await restore();
+        await wallet.connectToDaemonImpl(address: '100.101.102.103:50001');
         expect(fake.connections.single.useSsl, isFalse);
       });
     });

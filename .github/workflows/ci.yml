@@ -8,7 +8,7 @@ on:
 
 # Keep in step with the `environment:` block in the package pubspecs.
 env:
-  FLUTTER_VERSION: 3.41.7
+  FLUTTER_VERSION: 3.47.7
 
 jobs:
   analyze:
@@ -87,6 +87,44 @@ jobs:
         working-directory: packages/wallet_monero
         env:
           REQUIRE_FIXTURE_CORPUS: '1'
+        run: flutter test --no-pub
+
+      # The real native library: fhse_native's sources (FHSE, libsodium,
+      # libcbor) at the commit pub resolved, built for the host. The tests load
+      # it rather than a stand-in: wallet_fhse's, and wallet_backup's and
+      # wallet_backup_platform's, which seal their files with its libsodium
+      # (their test/flutter_test_config.dart). Keep this step before them.
+      - name: Build fhse_native for the host
+        working-directory: packages/wallet_fhse
+        run: dart run tool/build_host_library.dart
+
+      # REQUIRE_FHSE_LIBRARY=1: a missing build fails the tests instead of
+      # skipping them. The libfido2 tests still skip without libfido2 installed;
+      # they cover only the Linux backend's error mapping.
+      - name: wallet_fhse
+        working-directory: packages/wallet_fhse
+        env:
+          REQUIRE_FHSE_LIBRARY: '1'
+        run: flutter test --no-pub
+
+      - name: wallet_backup
+        working-directory: packages/wallet_backup
+        run: flutter test --no-pub
+
+      - name: wallet_backup_platform
+        working-directory: packages/wallet_backup_platform
+        run: flutter test --no-pub
+
+      - name: wallet_background
+        working-directory: packages/wallet_background
+        run: flutter test --no-pub
+
+      - name: wallet_fiat
+        working-directory: packages/wallet_fiat
+        run: flutter test --no-pub
+
+      - name: wallet_ui
+        working-directory: packages/wallet_ui
         run: flutter test --no-pub
 
   openalias-rust:

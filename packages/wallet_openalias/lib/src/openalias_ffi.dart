@@ -27,17 +27,22 @@ DynamicLibrary _load() {
 
 typedef _SecureTxtNative = Pointer<Utf8> Function(Pointer<Utf8>, Uint16);
 typedef _SecureTxtDart = Pointer<Utf8> Function(Pointer<Utf8>, int);
+typedef _SecureTxtDirectNative = Pointer<Utf8> Function(Pointer<Utf8>);
+typedef _SecureTxtDirectDart = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _FreeNative = Void Function(Pointer<Utf8>);
 typedef _FreeDart = void Function(Pointer<Utf8>);
 typedef _LastErrorNative = Pointer<Utf8> Function();
 typedef _LastErrorDart = Pointer<Utf8> Function();
 
 /// Resolves OpenAlias aliases to addresses with end-to-end DNSSEC validation,
-/// over Tor. Backed by a Rust (hickory) native library.
+/// over Tor, or directly when the user chose clearnet lookups. Backed by a Rust
+/// (hickory) native library.
 class OpenAliasFfi {
   /// Resolves [alias], an FQDN or an email-style `name@domain`, to a payment
   /// record, requiring a DNSSEC-secure answer and routing every query through
-  /// the Tor SOCKS proxy at [socksPort].
+  /// the Tor SOCKS proxy at [socksPort]. A null [socksPort] queries directly
+  /// (the user chose clearnet), so the DNS resolvers see this device's IP
+  /// address; the validation is the same.
   ///
   /// OpenAlias v2 is preferred and v1 is the fallback, as the spec's
   /// compatibility rule requires: when the recipient publishes any usable
@@ -61,7 +66,7 @@ class OpenAliasFfi {
     required String alias,
     required String network,
     required String asset,
-    required int socksPort,
+    required int? socksPort,
     String? nativeAsset,
     bool fetchMetadata = true,
   }) async {
@@ -117,7 +122,7 @@ class _TxtLookup {
   final String? problem;
 }
 
-Future<_TxtLookup> _lookup(String name, int socksPort) async {
+Future<_TxtLookup> _lookup(String name, int? socksPort) async {
   try {
     return _TxtLookup(await Isolate.run(() => _secureTxtSync(name, socksPort)));
   } on OpenAliasException catch (e) {
@@ -135,9 +140,11 @@ Future<_TxtLookup> _lookup(String name, int socksPort) async {
 /// proved there is nothing at [name]. Throws [OpenAliasException] for everything
 /// the native side could not establish; an answer that failed validation, a
 /// denial that failed validation, an unsigned zone, or a lookup that failed.
-List<String> _secureTxtSync(String name, int socksPort) {
+///
+/// A null [socksPort] calls the native library's separate direct entry point;
+/// no port value can make a Tor lookup go out directly.
+List<String> _secureTxtSync(String name, int? socksPort) {
   final lib = _load();
-  final secureTxt = lib.lookupFunction<_SecureTxtNative, _SecureTxtDart>('openalias_secure_txt');
   final freeStr = lib.lookupFunction<_FreeNative, _FreeDart>('openalias_string_free');
   final lastError = lib.lookupFunction<_LastErrorNative, _LastErrorDart>(
     'openalias_last_error_message',
@@ -145,7 +152,14 @@ List<String> _secureTxtSync(String name, int socksPort) {
 
   final namePtr = name.toNativeUtf8();
   try {
-    final result = secureTxt(namePtr, socksPort);
+    final result = socksPort == null
+        ? lib.lookupFunction<_SecureTxtDirectNative, _SecureTxtDirectDart>(
+            'openalias_secure_txt_direct',
+          )(namePtr)
+        : lib.lookupFunction<_SecureTxtNative, _SecureTxtDart>('openalias_secure_txt')(
+            namePtr,
+            socksPort,
+          );
     if (result == nullptr) {
       final errPtr = lastError();
       final message = errPtr == nullptr || errPtr.toDartString().isEmpty

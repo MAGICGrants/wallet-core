@@ -5,8 +5,8 @@ version: 0.1.0
 resolution: workspace
 
 environment:
-  sdk: 3.11.5
-  flutter: 3.41.7
+  sdk: 3.13.5
+  flutter: 3.47.7
 
 dependencies:
   flutter:
@@ -16,10 +16,10 @@ dependencies:
   wallet_infra:
     path: ../wallet_infra
 
-  # One monero_c for both apps: Monero v0.18.5.3. Its lwsf pin adds changes not
+  # One monero_c for both apps: Monero v0.18.5.4. Its lwsf pin adds changes not
   # yet in vtnerd's lwsf: the armv7 + mingw build fixes (in review as
-  # vtnerd/lwsf#17) and the TLS and sweep-amount fixes. Track vtnerd's lwsf
-  # again once those are upstream.
+  # vtnerd/lwsf#17), the TLS and sweep-amount fixes, and wiping wallet secrets
+  # from memory. Track vtnerd's lwsf again once those are upstream.
   #
   # Only the Apple ABIs read monero_c's .exp export list, and ld turns its
   # entries into initial undefines, so it must name only symbols
@@ -28,7 +28,7 @@ dependencies:
   monero:
     git:
       url: https://github.com/magicgrants/monero_c
-      ref: 0f01328816eb671ff9e4f79a3c0c15990006fb12
+      ref: c210839a278a16382e1e23bef7f23b915569e2a8
       path: impls/monero.dart
 
   polyseed: 0.0.7
@@ -46,7 +46,7 @@ dependencies:
       url: https://github.com/cypherstack/stack-bip39
       ref: 0cd6d54e2860bea68fc50c801cb9db2a760192fb # master @ 2023-06-07, includes the entropy fix
   bip32: 2.0.0
-  intl: 0.20.2
+  intl: 0.20.3
 
 dev_dependencies:
   flutter_test:

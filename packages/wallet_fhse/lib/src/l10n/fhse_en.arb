@@ -1,0 +1,363 @@
+{
+  "@@locale": "en",
+  "advancedSecurityLabel": "Advanced Security",
+  "advancedSecurityTitle": "Advanced Security",
+  "advancedSecurityOff": "Off",
+  "advancedSecurityKeyCount": "{count, plural, =1{1 key} other{{count} keys}}",
+  "advancedSecurityNeedsAttention": "Needs attention",
+  "securityKeysUnreadableTitle": "Set up your security keys again",
+  "securityKeysUnreadableBody": "This happens after moving to a new phone. Your wallet is safe and your recovery phrase still opens it. Set up your keys again, or turn security keys off.",
+  "securityKeysLoadFailed": "Couldn't load your security key settings.",
+  "@advancedSecurityKeyCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "securityKeysIntroTitle": "Protect this wallet with a security key",
+  "securityKeysIntroBody": "Advanced Security is another layer of protection for your wallet beyond locking the app. When enabled, your wallet can only be opened with your security key and its PIN.",
+  "securityKeysRequirements": "Works with most FIDO2 capable hardware security keys over NFC. Over USB, only YubiKeys work for now (on iPhone, with firmware 5.8 or later).",
+  "securityKeysSetUpButton": "Set up security keys",
+  "securityKeysUnavailable": "Security keys only work with a wallet created or restored in this version of {appName}.",
+  "securityKeysYourKeys": "Your keys",
+  "securityKeysAdded": "Added {date}",
+  "@securityKeysAdded": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "securityKeysOneKeyWarning": "You have only one key. Add a second one as a backup. Without a key, you'll need your recovery phrase.",
+  "securityKeysAddButton": "Add a security key",
+  "securityKeysManageSection": "Manage",
+  "securityKeysRemoveTitle": "Remove a key",
+  "securityKeysRemoveSubtitle": "Set up again without that key",
+  "securityKeysRemoveLink": "Set up",
+  "securityKeysRemoveExplain": "To remove a key, set up again with only the keys you want to keep. Any key you leave out stops working. Have all the keys you're keeping with you.",
+  "securityKeysRemoveConfirm": "Set up again",
+  "securityKeysTurnOff": "Turn off security keys",
+  "securityKeysTurnOffBody": "Your wallet will open without a security key again.",
+  "securityKeysTurnOffConfirm": "Turn off",
+  "securityKeysTurnedOff": "Security keys are off",
+  "securityKeysTurnedOn": "Security keys are on",
+  "securityKeysLockSection": "Lock",
+  "securityKeysFullLockLabel": "Lock Wallet File After",
+  "securityKeysFullLockDescription": "After this long in the background, {appName} locks the wallet file. You'll need a security key to open it again.",
+  "securityKeysMinutes": "{count, plural, =1{1 minute} other{{count} minutes}}",
+  "@securityKeysMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "securityKeysHours": "{count, plural, =1{1 hour} other{{count} hours}}",
+  "@securityKeysHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "securityKeysBackgroundNote": "While locked, the wallet keeps syncing and can show new payments, but it can't spend.",
+  "securityKeysSetupTitle": "Set up security keys",
+  "securityKeysSetupAgainTitle": "Set up keys again",
+  "securityKeysSetupAgainNote": "Add only the keys you want to keep. Any key you leave out stops working.",
+  "securityKeysSetupNote": "Add each security key you want to use, then tap Finish.",
+  "@securityKeysSetupNote": {
+    "description": "Set up security keys screen, first setup: the one line above the keys added so far."
+  },
+  "securityKeysAddFirst": "Add your first key",
+  "securityKeysAddAnother": "Add another key",
+  "securityKeysFinish": "Finish",
+  "securityKeysOneKeyTitle": "Use only one key?",
+  "securityKeysOneKeyBody": "We recommend at least two. If you lose your only key, you'll need your recovery phrase.",
+  "securityKeysFinishAnyway": "Use one key",
+  "securityKeysNameLabel": "Key name",
+  "securityKeysNameDefault": "Security key {number}",
+  "@securityKeysNameDefault": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "securityKeysPinLabel": "Key PIN",
+  "securityKeysContinue": "Continue",
+  "securityKeysNewPinTitle": "Create a PIN for this key",
+  "securityKeysNewPinLabel": "New PIN",
+  "securityKeysConfirmPinLabel": "Confirm PIN",
+  "securityKeysSetPinButton": "Set PIN",
+  "securityKeysPinMismatch": "The PINs don't match.",
+  "securityKeysErrorPinInvalid": "Incorrect PIN. {count} attempts left before the key locks.",
+  "@securityKeysErrorPinInvalid": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "securityKeysErrorPinInvalidUnknown": "Incorrect PIN.",
+  "securityKeysErrorPinBlocked": "This key is locked after too many wrong PINs. It can only be reset, and a reset key no longer opens any wallet.",
+  "securityKeysErrorPinAuthBlocked": "Too many wrong PINs. Disconnect the key and connect it again.",
+  "securityKeysErrorPinPolicy": "The key didn't accept that PIN. Some keys need 6 or more characters.",
+  "securityKeysErrorNotEnrolled": "This key isn't set up for this wallet.",
+  "securityKeysErrorNotThisWallet": "Your security key settings don't match this wallet. Open it with your recovery phrase, then set up your keys again.",
+  "securityKeysErrorAlreadyAdded": "This key is already set up for this wallet.",
+  "securityKeysErrorUnsupported": "This key cannot be used here: {reason}",
+  "@securityKeysErrorUnsupported": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "securityKeysErrorTimeout": "No key was found. Try again.",
+  "securityKeysErrorTransport": "Lost the connection to your key. Try again.",
+  "securityKeysErrorGeneric": "Something went wrong: {reason}",
+  "@securityKeysErrorGeneric": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "securityKeyUnlockTitle": "Unlock with your security key",
+  "securityKeyUnlockButton": "Unlock",
+  "securityKeyLostKeys": "Lost your keys?",
+  "securityKeyLostKeysBody": "Open the wallet with your recovery phrase, then set up new keys in Settings.",
+  "securityKeyUseRecoveryPhrase": "Use recovery phrase",
+  "securityKeyRecoveryPhraseHint": "Enter your recovery phrase",
+  "securityKeyRecoveryWrongPhrase": "That recovery phrase doesn't match this wallet.",
+  "securityKeyRecoveryNotPossible": "This wallet was restored from a 25-word recovery phrase, which can't unlock it here. Delete the wallet, then restore it from that phrase.",
+  "securityKeyRecoveredToast": "Unlocked with your recovery phrase. Set up your keys again in Settings.",
+  "securityKeyConnectTitle": "Connect your security key",
+  "securityKeyConnectBodyAndroid": "Plug in your security key and touch it when it blinks, or hold it flat against the back of your phone.",
+  "securityKeyConnectBodyIos": "Hold your security key near the top of your iPhone, or plug it in and touch it when it blinks.",
+  "securityKeyConnectButton": "Connect key",
+  "securityKeyTryAgain": "Try again",
+  "securityKeyWaiting": "Waiting for your key…",
+  "securityKeyTalkingToKey": "Connecting to your key…",
+  "securityKeyKeyBlinking": "Your key is blinking",
+  "securityKeyTouchToSelect": "Touch your key",
+  "securityKeyTouchBody": "Touch your security key while it blinks.",
+  "securityKeyPinTitle": "Enter your key's PIN",
+  "securityKeyPinBody": "This is your security key's PIN, not your phone's passcode.",
+  "securityKeyPinAttemptsLeft": "{count, plural, =1{1 attempt left before the key locks.} other{{count} attempts left before the key locks.}}",
+  "@securityKeyPinAttemptsLeft": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "securityKeyUseAnotherKey": "Use a different key",
+  "securityKeyUseFingerprint": "Use fingerprint instead",
+  "securityKeyUsePin": "Use PIN instead",
+  "securityKeysNewPinBodyCount": "This key doesn't have a PIN yet. Choose one with at least {count} characters, so someone who finds your key can't use it.",
+  "@securityKeysNewPinBodyCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "securityKeysPinTooShortCount": "Use at least {count} characters.",
+  "@securityKeysPinTooShortCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "securityKeyCheckingPin": "Checking your PIN…",
+  "securityKeyWorking": "One moment…",
+  "securityKeyKeepHolding": "Keep holding your key to the phone.",
+  "securityKeyHoldAgain": "Hold your key to your phone again",
+  "securityKeyConnectAgain": "Connect your key again",
+  "securityKeyTouchToConfirm": "Touch your key to confirm",
+  "securityKeyTouchOnceMore": "Touch your key once more",
+  "securityKeyTouchToUnlock": "Touch your key to unlock",
+  "securityKeyFingerprintToConfirm": "Touch the fingerprint sensor",
+  "securityKeyFingerprintOnceMore": "Touch the sensor once more",
+  "securityKeyFingerprintToUnlock": "Touch the sensor to unlock",
+  "securityKeyFingerprintBody": "Use a finger you added to this security key.",
+  "securityKeyTouchCount": "Touch {current} of {total}",
+  "@securityKeyTouchCount": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "securityKeyAddedTitle": "Key added",
+  "securityKeyNameBody": "Give it a name so you can tell your keys apart.",
+  "securityKeySaveName": "Save",
+  "securityKeysErrorKeyUnsupported": "This security key isn't supported. Try a different one.",
+  "securityKeysErrorPinChangeRequired": "This security key needs a new PIN first. Change it with the key maker's app, then try again.",
+  "securityKeysErrorUvInvalid": "{count, plural, =1{Fingerprint not recognized. 1 try left.} other{Fingerprint not recognized. {count} tries left.}}",
+  "@securityKeysErrorUvInvalid": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "securityKeysErrorUvInvalidUnknown": "Fingerprint not recognized.",
+  "securityKeysErrorUvBlocked": "Fingerprint is locked on this key. Enter its PIN instead.",
+  "securityKeysErrorUvNotConfigured": "This key has no fingerprint set up. Enter its PIN instead.",
+  "securityKeyPinTitleNamed": "Enter the PIN for {name}",
+  "@securityKeyPinTitleNamed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "securityKeysSerial": "Serial {serial}",
+  "@securityKeysSerial": {
+    "placeholders": {
+      "serial": {
+        "type": "String"
+      }
+    }
+  },
+  "securityKeysErrorDifferentKey": "This isn't the key you touched. Start again with the key you want to use.",
+  "securityKeysErrorMultipleKeys": "More than one security key is plugged in. Unplug the others, then try again.",
+  "unlockBoundToAnotherPc": "This wallet can't be opened on this PC. If you created it on this PC, restart the PC and try again. Otherwise, restore the wallet from its recovery phrase.",
+  "@unlockBoundToAnotherPc": {
+    "description": "Linux/Windows unlock: the wallet files are bound to a PC's TPM that this PC cannot use (another computer, or a cleared TPM)."
+  },
+  "securityKeysCancel": "Cancel",
+  "@securityKeysCancel": {
+    "description": "Cancel button in the security key sheets."
+  },
+  "securityKeysPinEmpty": "Enter your PIN.",
+  "@securityKeysPinEmpty": {
+    "description": "Shown when the PIN field is submitted empty."
+  },
+  "securityKeysSharedPhraseWarning": "Your wallet is only as strong as the weakest protection. Make sure your recovery phrase is saved safely, and if you use the same wallet on multiple devices, make sure to set up Advanced Security there too.",
+  "@securityKeysSharedPhraseWarning": {
+    "description": "Advanced Security: the wallet is only as safe as its least protected copy, so protect the recovery phrase and every device that has the wallet."
+  },
+  "@securityKeysUnavailable": {
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Skylight"
+      }
+    }
+  },
+  "@securityKeysFullLockDescription": {
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Skylight"
+      }
+    }
+  },
+  "securityKeysRequirementsMac": "Works with most FIDO2 capable hardware security keys.",
+  "securityKeyConnectBodyMac": "Plug your security key into this Mac and touch it when it blinks.",
+  "securityKeyPinBodyMac": "This is your security key's PIN, not your Mac's password.",
+  "desktopAutoLockLabel": "Lock Wallet File After",
+  "desktopAutoLockDescription": "After this long without use, {appName} locks the wallet file.",
+  "@desktopAutoLockDescription": {
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Skylight"
+      }
+    }
+  },
+  "securityKeysRequirementsLinux": "Works with most FIDO2 capable hardware security keys. Needs libfido2, which most Linux systems already have.",
+  "securityKeysRequirementsWindows": "Works with most FIDO2 capable hardware security keys. Needs Windows 11 (22H2 or later).",
+  "securityKeysTurnOffBodyDesktop": "Your password alone will open the wallet again.",
+  "securityKeyConnectBodyDesktop": "Plug your security key into this computer and touch it when it blinks.",
+  "securityKeyConnectBodyWindows": "Windows asks for your security key, its PIN, and a touch.",
+  "securityKeyPinBodyDesktop": "This is your security key's PIN, not your wallet password.",
+  "securityKeyWindowsPromptTitle": "Continue in Windows Security",
+  "securityKeyWindowsPromptBody": "Enter your security key's PIN, then touch the key.",
+  "securityKeyWindowsPromptEnrollBody": "Windows will ask twice. Each time, enter your security key's PIN, then touch the key.",
+  "securityKeyWindowsStorageNote": "Windows may say that this will save something to your key, but this generic wording is not accurate. This does not take up any storage slots on your security key.",
+  "securityKeyWindowsWaiting": "Waiting for Windows Security…",
+  "securityKeyUseButton": "Use security key",
+  "advancedSecurityAuthReason": "Confirm it's you to open Advanced Security",
+  "advancedSecurityAuthFailed": "Couldn't confirm it's you.",
+  "advancedSecurityPasswordTitle": "Enter your password",
+  "advancedSecurityPasswordBody": "Enter the password you use to unlock {appName}.",
+  "@advancedSecurityPasswordBody": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "advancedSecurityPasswordLabel": "Password",
+  "advancedSecurityPasswordWrong": "Incorrect password.",
+  "advancedSecurityContinue": "Continue",
+  "appLockLabel": "Lock App After",
+  "appLockImmediately": "Immediately",
+  "appLockDescriptionPhone": "How long {appName} can be in the background before it asks for your face, fingerprint or passcode again.",
+  "@appLockDescriptionPhone": {
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Skylight"
+      }
+    }
+  },
+  "appLockDescriptionMac": "How long {appName} can go unused before it asks for Touch ID or your Mac's password again. Immediately locks it as soon as its window is hidden. The wallet keeps syncing.",
+  "@appLockDescriptionMac": {
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Skylight"
+      }
+    }
+  },
+  "appLockDescriptionPassword": "How long {appName} can go unused before it asks for your password again. Immediately locks it as soon as its window is hidden. The wallet keeps syncing.",
+  "@appLockDescriptionPassword": {
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Skylight"
+      }
+    }
+  },
+  "appLockNoDeviceLock": "This device has no screen lock, so anyone holding it can open {appName}. Set a passcode or screen lock in the device's settings.",
+  "@appLockNoDeviceLock": {
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Skylight"
+      }
+    }
+  },
+  "lockLaterAuthReason": "Confirm it's you to lock {appName} less often",
+  "@lockLaterAuthReason": {
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Skylight"
+      }
+    }
+  },
+  "lockLaterPasswordBody": "A longer time leaves {appName} open for longer. Enter the password you unlock it with.",
+  "@lockLaterPasswordBody": {
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Skylight"
+      }
+    }
+  },
+  "appLockUseRecoveryPhraseBody": "You can access your wallet with your recovery phrase. This is only recommended as a recovery mechanism. It is not supposed to be the normal way to access your wallet.",
+  "@appLockUseRecoveryPhraseBody": {
+    "description": "App Lock's recovery phrase sheet, under its title: the phrase opens the wallet, but only as a fallback."
+  }
+}

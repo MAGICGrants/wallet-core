@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_infra/wallet_infra.dart';
 
 /// Tests pass an explicit low count so the suite isn't dominated by PBKDF2.
-/// Iteration *policy* is asserted separately against [WalletFileCrypto.defaultIterations].
+/// Iteration *policy* is asserted separately against [WalletFileCrypto.typedPasswordIterations].
 const _fastRounds = 1000;
 
 const _password = 'correct horse battery staple';
@@ -96,11 +96,11 @@ void main() {
   });
 
   group('iteration header', () {
-    test('decrypt uses the count in the header, not the platform default', () async {
-      // Written at a count that is deliberately not defaultIterations. If
-      // decrypt ignored the header and used the platform value, the derived
-      // key would differ and the tag check would fail.
-      expect(_fastRounds, isNot(WalletFileCrypto.defaultIterations));
+    test('decrypt uses the count in the header, not the current setting', () async {
+      // Written at a count that is deliberately not walletPasswordIterations.
+      // If decrypt ignored the header and used the setting, the derived key
+      // would differ and the tag check would fail.
+      expect(_fastRounds, isNot(WalletFileCrypto.walletPasswordIterations));
       final blob = await _blob();
       expect(utf8.decode(await WalletFileCrypto.decrypt(blob, _password)), _plaintext);
     });
@@ -127,16 +127,33 @@ void main() {
       expect(() => WalletFileCrypto.decrypt(tampered, _password), throwsA(isA<FormatException>()));
     });
 
-    test('the platform default stays within the accepted range', () {
-      expect(
-        WalletFileCrypto.defaultIterations,
-        inInclusiveRange(
-          WalletFileCrypto.minAcceptedIterations,
-          WalletFileCrypto.maxAcceptedIterations,
-        ),
-      );
-      // Desktop is the user-chosen-password case and must meet the OWASP count.
-      expect(WalletFileCrypto.defaultIterations, greaterThanOrEqualTo(100000));
+    test('both counts stay within the accepted range', () {
+      for (final count in [
+        WalletFileCrypto.generatedPasswordIterations,
+        WalletFileCrypto.typedPasswordIterations,
+      ]) {
+        expect(
+          count,
+          inInclusiveRange(
+            WalletFileCrypto.minAcceptedIterations,
+            WalletFileCrypto.maxAcceptedIterations,
+          ),
+        );
+      }
+      // A typed password must meet OWASP's count for PBKDF2-HMAC-SHA256.
+      expect(WalletFileCrypto.typedPasswordIterations, greaterThanOrEqualTo(600000));
+    });
+
+    test('until told otherwise, files are written at the typed count', () async {
+      expect(WalletFileCrypto.walletPasswordIterations, WalletFileCrypto.typedPasswordIterations);
+    });
+
+    test('the count in force is the one written into the header', () async {
+      final saved = WalletFileCrypto.walletPasswordIterations;
+      addTearDown(() => WalletFileCrypto.walletPasswordIterations = saved);
+      WalletFileCrypto.walletPasswordIterations = _fastRounds + 1;
+      final blob = await WalletFileCrypto.encrypt(utf8.encode(_plaintext), _password);
+      expect(blob.buffer.asByteData().getUint32(5), _fastRounds + 1);
     });
   });
 
