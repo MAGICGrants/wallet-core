@@ -121,8 +121,56 @@ abstract class BackupLocalizations {
   /// No description provided for @backupLegacySeed.
   ///
   /// In en, this message translates to:
-  /// **'Backup isn\'t available for 25-word recovery phrases. To use it, create a new wallet with a 16-word recovery phrase and send your funds to it.'**
+  /// **'Encrypted backups aren\'t available for 25-word recovery phrases.'**
   String get backupLegacySeed;
+
+  /// No description provided for @backupLegacyStepsIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Please follow these steps to migrate to a modern wallet, which we recommend doing with two devices:'**
+  String get backupLegacyStepsIntro;
+
+  /// No description provided for @backupLegacyStep1.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a new wallet with a modern recovery phrase on another device.'**
+  String get backupLegacyStep1;
+
+  /// No description provided for @backupLegacyStep2.
+  ///
+  /// In en, this message translates to:
+  /// **'Send the funds from this legacy wallet to your modern wallet.'**
+  String get backupLegacyStep2;
+
+  /// No description provided for @backupLegacyStep3.
+  ///
+  /// In en, this message translates to:
+  /// **'Export your wallet data from this legacy wallet in an unencrypted CSV. Save this in a secure location along with your legacy recovery phrase.'**
+  String get backupLegacyStep3;
+
+  /// No description provided for @backupLegacyStep4.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore the modern wallet on this device.'**
+  String get backupLegacyStep4;
+
+  /// No description provided for @backupExportCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'Export unencrypted CSV'**
+  String get backupExportCsv;
+
+  /// No description provided for @backupCsvExported.
+  ///
+  /// In en, this message translates to:
+  /// **'History exported'**
+  String get backupCsvExported;
+
+  /// No description provided for @backupCsvExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not export the history'**
+  String get backupCsvExportFailed;
 
   /// No description provided for @backupUnsupportedPassphrase.
   ///

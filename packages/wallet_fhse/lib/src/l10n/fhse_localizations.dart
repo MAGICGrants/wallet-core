@@ -165,17 +165,23 @@ abstract class FhseLocalizations {
   /// **'Set up security keys'**
   String get securityKeysSetUpButton;
 
-  /// No description provided for @securityKeysUnavailable.
+  /// No description provided for @securityKeysUpgradeFailed.
   ///
   /// In en, this message translates to:
-  /// **'Security keys only work with a wallet created or restored in this version of {appName}.'**
-  String securityKeysUnavailable(String appName);
+  /// **'There is an issue with this wallet that prevents the use of Advanced Security settings. Please ensure your recovery phrase is saved, then delete this wallet and restore from the recovery phrase to fix this issue. We are sorry that the automatic migration failed. Please report this issue with your logs to the app developers.'**
+  String get securityKeysUpgradeFailed;
 
   /// No description provided for @securityKeysYourKeys.
   ///
   /// In en, this message translates to:
   /// **'Your keys'**
   String get securityKeysYourKeys;
+
+  /// No description provided for @securityKeysLegacySeedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'This wallet uses a 25-word recovery phrase. If you get locked out of your wallet, restoring from the phrase recovers your funds only, not your labels or payment details. We recommend that you migrate to a modern recovery phrase.'**
+  String get securityKeysLegacySeedNote;
 
   /// No description provided for @securityKeysAdded.
   ///

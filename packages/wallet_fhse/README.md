@@ -72,9 +72,22 @@ interrupted write of it left beside it (`wallet.key.<pid>-<n>.tmp`), and a key
 unlock finishes the job if a setup was cut short; any setup, on every platform,
 also deletes older FHSE files left the same way (`wallet.fhse.<pid>-<n>.tmp`),
 which a removed key could still open. Copies outside the app's folder (a backup
-of it) are out of reach. Only wallets created on this build work this way. An older desktop wallet
-keeps its typed password as its wallet password, and keys are not offered for
-it, as for an older phone wallet.
+of it) are out of reach.
+
+**Wallets made before security keys are upgraded** at their first unlock after
+the update (`WalletManager`, "Security-key upgrade"), automatically: the
+wallet password becomes `k_p` for the wallet's seed, as a wallet created now
+gets, every file under it is re-encrypted, and `fhse_seed` is written. The
+seed is the app's stored copy (`master_seed`), or for a wallet older than that
+copy, the polyseed or 25-word seed read back from the Monero wallet, which is
+then stored. A 25-word seed gets a random `s_f`, as a 25-word restore does, and
+Advanced Security says what that means. On Linux and Windows the typed
+password stops being the wallet password and unlocks `wallet.key` instead.
+Every file is copied before anything is re-encrypted (`GuardUpgradeFiles`),
+and the commit is the kept copy taking the new password, after `fhse_seed`;
+an upgrade cut short is put back from the copies at the next unlock unless it
+got that far. A wallet whose seed cannot be read back keeps its password, and
+keys are not offered for it.
 
 **On Windows both files are bound to the PC** (wallet_infra's `PcBinding`). A
 secret only this PC's TPM can produce goes into the password `wallet.key` and

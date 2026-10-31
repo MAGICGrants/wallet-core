@@ -236,6 +236,29 @@ class FhseVault {
     return Uint8List.fromList(base64.decode(plain));
   }
 
+  /// Whether `fhse_seed` is here and opens with [password]: false for a wallet
+  /// made before security keys, which `WalletManager` then upgrades.
+  static Future<bool> keptUnder(String password) async {
+    try {
+      final sf = await _readSeed(password);
+      sf.fillRange(0, sf.length, 0);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Deletes `fhse_seed`, and any seed [passwordForNewWallet] still holds: an
+  /// upgrade that wrote it was put back, so it is under a password the wallet
+  /// no longer has.
+  static Future<void> forgetSeed() async {
+    _pendingSeed?.fillRange(0, _pendingSeed!.length, 0);
+    _pendingSeed = null;
+    final file = await _file(_seedName);
+    if (await file.exists()) await file.delete();
+    await deleteAtomicWriteLeftovers(file);
+  }
+
   // ----- Typed passwords (Linux, Windows) -----
 
   /// Whether [typed] opens the FHSE file's outer layer: the check a typed
@@ -700,6 +723,12 @@ class FhseWalletGuard extends WalletPasswordGuard {
 
   @override
   Future<bool> isEngaged() => FhseVault.isEngaged();
+
+  @override
+  Future<bool> keptUnder(String password) => FhseVault.keptUnder(password);
+
+  @override
+  Future<void> forgetKept() => FhseVault.forgetSeed();
 
   @override
   Future<void> walletDeleted() => FhseVault.deleteAll();

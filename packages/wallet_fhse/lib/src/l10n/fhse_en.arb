@@ -19,8 +19,9 @@
   "securityKeysIntroBody": "Advanced Security is another layer of protection for your wallet beyond locking the app. When enabled, your wallet can only be opened with your security key and its PIN.",
   "securityKeysRequirements": "Works with most FIDO2 capable hardware security keys over NFC. Over USB, only YubiKeys work for now (on iPhone, with firmware 5.8 or later).",
   "securityKeysSetUpButton": "Set up security keys",
-  "securityKeysUnavailable": "Security keys only work with a wallet created or restored in this version of {appName}.",
+  "securityKeysUpgradeFailed": "There is an issue with this wallet that prevents the use of Advanced Security settings. Please ensure your recovery phrase is saved, then delete this wallet and restore from the recovery phrase to fix this issue. We are sorry that the automatic migration failed. Please report this issue with your logs to the app developers.",
   "securityKeysYourKeys": "Your keys",
+  "securityKeysLegacySeedNote": "This wallet uses a 25-word recovery phrase. If you get locked out of your wallet, restoring from the phrase recovers your funds only, not your labels or payment details. We recommend that you migrate to a modern recovery phrase.",
   "securityKeysAdded": "Added {date}",
   "@securityKeysAdded": {
     "placeholders": {
@@ -244,14 +245,6 @@
   "securityKeysSharedPhraseWarning": "Your wallet is only as strong as the weakest protection. Make sure your recovery phrase is saved safely, and if you use the same wallet on multiple devices, make sure to set up Advanced Security there too.",
   "@securityKeysSharedPhraseWarning": {
     "description": "Advanced Security: the wallet is only as safe as its least protected copy, so protect the recovery phrase and every device that has the wallet."
-  },
-  "@securityKeysUnavailable": {
-    "placeholders": {
-      "appName": {
-        "type": "String",
-        "example": "Skylight"
-      }
-    }
   },
   "@securityKeysFullLockDescription": {
     "placeholders": {

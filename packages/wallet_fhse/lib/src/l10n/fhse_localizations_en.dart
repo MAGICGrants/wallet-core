@@ -57,12 +57,15 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysSetUpButton => 'Set up security keys';
 
   @override
-  String securityKeysUnavailable(String appName) {
-    return 'Security keys only work with a wallet created or restored in this version of $appName.';
-  }
+  String get securityKeysUpgradeFailed =>
+      'There is an issue with this wallet that prevents the use of Advanced Security settings. Please ensure your recovery phrase is saved, then delete this wallet and restore from the recovery phrase to fix this issue. We are sorry that the automatic migration failed. Please report this issue with your logs to the app developers.';
 
   @override
   String get securityKeysYourKeys => 'Your keys';
+
+  @override
+  String get securityKeysLegacySeedNote =>
+      'This wallet uses a 25-word recovery phrase. If you get locked out of your wallet, restoring from the phrase recovers your funds only, not your labels or payment details. We recommend that you migrate to a modern recovery phrase.';
 
   @override
   String securityKeysAdded(String date) {

@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:wallet_backup/wallet_backup.dart';
+import 'package:wallet_infra/wallet_infra.dart' show LogLevel, exportFileName, log, saveExportFile;
 import 'package:wallet_ui/wallet_ui.dart';
 
 import '../icloud_location.dart';
@@ -212,6 +214,35 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
     });
   });
 
+  /// The wallets' history as the CSV the history screen exports: what a seed
+  /// with no backup keeps beside its old phrase.
+  Future<void> _exportCsv() => _run((i18n) async {
+    final wallets = _service?.walletsWithoutBackup;
+    if (wallets == null) return;
+    final origin = shareAnchorRect(context);
+    // Named as the history screen names its export: `skylight-history-…`.
+    final stem = MetadataBackupSetup.config.exportFileStem.replaceFirst(RegExp(r'-backup$'), '');
+    try {
+      final saved = await saveExportFile(
+        name: exportFileName('$stem-history', 'csv', DateTime.now()),
+        bytes: utf8.encode(
+          txHistoryCsv([
+            for (final w in wallets)
+              for (final tx in w.txHistory) (tx: tx, asset: w),
+          ]),
+        ),
+        typeLabel: 'CSV',
+        extension: 'csv',
+        mimeType: 'text/csv',
+        sharePositionOrigin: origin,
+      );
+      if (saved && mounted) showBrandToast(context, i18n.backupCsvExported);
+    } catch (e) {
+      log(LogLevel.error, '[Backup] CSV export failed: $e');
+      if (mounted) showBrandToast(context, i18n.backupCsvExportFailed);
+    }
+  });
+
   Future<void> _import() => _run((i18n) async {
     final bytes = await (widget.pickFile ?? MetadataBackupSetup.pickFile)();
     if (bytes == null) return;
@@ -302,21 +333,52 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
     child: Text(text, style: BrandText.caption.copyWith(color: BrandColors.inkMuted)),
   );
 
-  Widget _card(String text, {Color? color}) => BrandCard(
-    color: color,
-    borderColor: color,
+  Widget _card(String text) => BrandCard(
     padding: const EdgeInsets.all(BrandSpacing.lg),
     child: Text(text, style: BrandText.body),
   );
+
+  /// A 25-word seed has no backup: the steps to a wallet that has one, and
+  /// this wallet's history to keep with the old phrase.
+  /// Laid out as Advanced Security is: the warning, then the content in a
+  /// white card, then the action.
+  List<Widget> _legacySeed(BackupLocalizations i18n) => [
+    WarningCard.text(i18n.backupLegacySeed),
+    const SizedBox(height: BrandSpacing.lg),
+    BrandCard(
+      padding: const EdgeInsets.all(BrandSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(i18n.backupLegacyStepsIntro, style: BrandText.body),
+          for (final (i, step) in [
+            i18n.backupLegacyStep1,
+            i18n.backupLegacyStep2,
+            i18n.backupLegacyStep3,
+            i18n.backupLegacyStep4,
+          ].indexed) ...[
+            const SizedBox(height: BrandSpacing.md),
+            _NumberedStep(number: i + 1, text: step),
+          ],
+        ],
+      ),
+    ),
+    const SizedBox(height: BrandSpacing.xl),
+    BrandButton(
+      label: i18n.backupExportCsv,
+      icon: Icons.download_outlined,
+      onPressed: _busy ? null : _exportCsv,
+    ),
+  ];
 
   List<Widget> _content(BackupLocalizations i18n) {
     final service = _service;
     if (service == null) return [_card(i18n.backupLocked)];
     switch (service.availability) {
       case BackupAvailability.legacySeed:
-        return [_card(i18n.backupLegacySeed, color: BrandColors.warningBg)];
+        return _legacySeed(i18n);
       case BackupAvailability.unsupportedPassphrase:
-        return [_card(i18n.backupUnsupportedPassphrase, color: BrandColors.warningBg)];
+        return [WarningCard.text(i18n.backupUnsupportedPassphrase)];
       case BackupAvailability.closed:
         return [_card(i18n.backupLocked)];
       case BackupAvailability.opening:
@@ -346,10 +408,7 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
       Text(i18n.backupEnable, style: BrandText.title),
       const SizedBox(height: BrandSpacing.lg),
       // It does not replace the recovery phrase.
-      BrandCard(
-        color: BrandColors.warningBg,
-        borderColor: BrandColors.warningBg,
-        padding: const EdgeInsets.all(BrandSpacing.lg),
+      WarningCard(
         child: Text.rich(
           TextSpan(
             children: [
@@ -557,6 +616,44 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// One step of a numbered list: its number in a circle, then the text.
+class _NumberedStep extends StatelessWidget {
+  final int number;
+  final String text;
+
+  const _NumberedStep({required this.number, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: BrandColors.surfaceAccent, shape: BoxShape.circle),
+          child: Text(
+            '$number',
+            style: BrandText.mono.copyWith(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: BrandColors.primaryDeep,
+            ),
+          ),
+        ),
+        const SizedBox(width: BrandSpacing.md),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(text, style: BrandText.body),
+          ),
+        ),
+      ],
     );
   }
 }

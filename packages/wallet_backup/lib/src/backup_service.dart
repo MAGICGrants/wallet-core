@@ -343,6 +343,12 @@ class MetadataBackupService extends ChangeNotifier
   BackupAvailability get availability => _availability;
   bool get isOpen => _availability == BackupAvailability.open;
 
+  /// The wallets of a seed the backup cannot key (25 words, an offset
+  /// passphrase), until the next [close]: what Settings > Backup offers to
+  /// export as a history CSV instead. Empty otherwise.
+  List<CryptoWallet> get walletsWithoutBackup => _walletsWithoutBackup;
+  List<CryptoWallet> _walletsWithoutBackup = const [];
+
   /// Whether the user has turned the backup on, as last read ([isEnabled]).
   bool get enabled => _on ?? false;
 
@@ -563,6 +569,7 @@ class MetadataBackupService extends ChangeNotifier
   }) async {
     if (!SeedSecret.isAvailableFor(seed)) {
       await close();
+      _walletsWithoutBackup = List.unmodifiable(wallets);
       _availability = seed is MoneroLegacySeed
           ? BackupAvailability.legacySeed
           : BackupAvailability.unsupportedPassphrase;
@@ -1564,6 +1571,7 @@ class MetadataBackupService extends ChangeNotifier
     _state = null;
     _merged = BackupState();
     _wallets = const [];
+    _walletsWithoutBackup = const [];
     _hashedNames.clear();
     _rejected.clear();
     _retrying.clear();

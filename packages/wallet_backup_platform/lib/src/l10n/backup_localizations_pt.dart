@@ -26,7 +26,39 @@ class BackupLocalizationsPt extends BackupLocalizations {
 
   @override
   String get backupLegacySeed =>
-      'O backup não está disponível para frases de recuperação de 25 palavras. Para usá-lo, crie uma carteira nova com uma frase de recuperação de 16 palavras e envie seus fundos para ela.';
+      'Backups criptografados não estão disponíveis para frases de recuperação de 25 palavras.';
+
+  @override
+  String get backupLegacyStepsIntro =>
+      'Siga estes passos para migrar para uma carteira moderna. Recomendamos fazer isso com dois dispositivos:';
+
+  @override
+  String get backupLegacyStep1 =>
+      'Crie uma nova carteira com uma frase de recuperação moderna em outro dispositivo.';
+
+  @override
+  String get backupLegacyStep2 =>
+      'Envie os fundos desta carteira antiga para a sua carteira moderna.';
+
+  @override
+  String get backupLegacyStep3 =>
+      'Exporte os dados desta carteira antiga em um CSV não criptografado. Guarde-o em um local seguro junto com a sua frase de recuperação antiga.';
+
+  @override
+  String get backupLegacyStep4 =>
+      'Restaure a carteira moderna neste dispositivo.';
+
+  @override
+  String get backupExportCsv =>
+      'Exportar CSV não criptografado';
+
+  @override
+  String get backupCsvExported =>
+      'Histórico exportado';
+
+  @override
+  String get backupCsvExportFailed =>
+      'Não foi possível exportar o histórico';
 
   @override
   String get backupUnsupportedPassphrase =>

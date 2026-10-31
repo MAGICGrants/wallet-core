@@ -806,6 +806,10 @@ void main() {
     await a.open(MoneroLegacySeed(List.filled(25, 'abbey').join(' ')));
     expect(a.service.availability, BackupAvailability.legacySeed);
     expect(a.service.isOpen, isFalse);
+    // Settings > Backup offers their history as a CSV instead, until a lock.
+    expect(a.service.walletsWithoutBackup, [a.wallet]);
+    await a.service.close();
+    expect(a.service.walletsWithoutBackup, isEmpty);
   });
 
   test('a file that does not open is reported once and never deleted', () async {

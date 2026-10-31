@@ -1070,6 +1070,96 @@ class MoneroWallet extends CryptoWallet {
     ];
   }
 
+  // ----- Wallet password changes -----
+
+  static String _typeOf(MoneroManagerKind kind) => kind == MoneroManagerKind.node ? 'node' : 'lws';
+
+  /// Both modes' files: each mode keeps its own under the wallet password, and
+  /// a switch back opens the other. Not the background trio, which has a
+  /// password of its own.
+  @override
+  Future<List<String>> walletPasswordFilePaths() async {
+    final paths = await super.walletPasswordFilePaths();
+    for (final kind in MoneroManagerKind.values) {
+      final path = await walletPathForType(_typeOf(kind));
+      paths.addAll([path, '$path.keys']);
+    }
+    return paths;
+  }
+
+  /// The open wallet re-encrypts itself (`Wallet_setPassword`); the other
+  /// mode's file, if this wallet ever used one, is opened just to do the same.
+  /// The open one failing throws; the other is logged and left, since a file
+  /// that does not open with the old password would not have opened anyway.
+  @override
+  Future<void> changeWalletPassword({required String from, required String to}) async {
+    await super.changeWalletPassword(from: from, to: to);
+    final wallet = _wallet;
+    final open = wallet != null && !_isBackgroundWallet ? _loadedKind : null;
+    if (wallet != null && open != null) {
+      // Held off from the timers' own stores, as the background-sync setup is:
+      // both write the same files.
+      await runWithSyncSuspended(() async {
+        if (!await _backend.setPassword(wallet, to)) {
+          throw Exception('setPassword failed: ${await _backend.walletErrorString(wallet)}');
+        }
+        // LWSF writes the file under the new password only when it stores.
+        if (!await _backend.store(wallet)) throw Exception('store after setPassword failed');
+      });
+    }
+    for (final kind in MoneroManagerKind.values) {
+      if (kind == open) continue;
+      try {
+        await _changeFilePassword(kind, from: from, to: to);
+      } catch (e) {
+        walletLog(LogLevel.warn, 'Left the ${_typeOf(kind)} wallet file as it was: $e');
+      }
+    }
+  }
+
+  /// Re-encrypts a wallet file this session has not opened, through its own
+  /// mode's manager, closing it again without another store.
+  Future<void> _changeFilePassword(
+    MoneroManagerKind kind, {
+    required String from,
+    required String to,
+  }) async {
+    final manager = await _backend.getWalletManager(kind);
+    final path = await walletPathForType(_typeOf(kind));
+    if (!await _backend.walletExists(manager, path)) return;
+    final wallet = await _backend.openWallet(
+      manager,
+      path: path,
+      password: from,
+      networkType: networkType,
+    );
+    try {
+      final error = await _backend.walletErrorString(wallet);
+      if (error.isNotEmpty) throw Exception('openWallet error: $error');
+      if (!await _backend.setPassword(wallet, to)) {
+        throw Exception('setPassword failed: ${await _backend.walletErrorString(wallet)}');
+      }
+      if (!await _backend.store(wallet)) throw Exception('store after setPassword failed');
+    } finally {
+      await _backend.closeWallet(manager, wallet, store: false);
+    }
+  }
+
+  /// The polyseed when the wallet was made from one, otherwise the 25-word
+  /// seed every wallet can give, from its own restore height.
+  @override
+  Future<({SeedSource seed, RestorePoint from})?> seedFromWallet() async {
+    final polyseed = await readPolyseed();
+    final fromPolyseed = polyseed.isEmpty ? null : SeedSource.detect(polyseed);
+    if (fromPolyseed != null) return (seed: fromPolyseed, from: const RestorePoint.seedBirthday());
+    final legacy = await readLegacySeed();
+    final fromLegacy = legacy.isEmpty ? null : SeedSource.detect(legacy);
+    final wallet = _wallet;
+    if (fromLegacy == null || wallet == null) return null;
+    final height = await _backend.getRefreshFromBlockHeight(wallet);
+    return (seed: fromLegacy, from: RestorePoint.height(height));
+  }
+
   @override
   Future<bool> needsRebuildForCurrentConnection() async => _awaitingRebuild;
 

@@ -58,12 +58,15 @@ class FhseLocalizationsPt extends FhseLocalizations {
   String get securityKeysSetUpButton => 'Configurar chaves de segurança';
 
   @override
-  String securityKeysUnavailable(String appName) {
-    return 'As chaves de segurança só funcionam com uma carteira criada ou restaurada nesta versão da $appName.';
-  }
+  String get securityKeysUpgradeFailed =>
+      'Há um problema com esta carteira que impede o uso das configurações de Advanced Security. Confirme que sua frase de recuperação está salva, depois exclua esta carteira e restaure-a pela frase de recuperação para resolver o problema. Lamentamos que a migração automática tenha falhado. Informe o problema aos desenvolvedores do app, com seus logs.';
 
   @override
   String get securityKeysYourKeys => 'Suas chaves';
+
+  @override
+  String get securityKeysLegacySeedNote =>
+      'Esta carteira usa uma frase de recuperação de 25 palavras. Se você perder o acesso à carteira, restaurar pela frase recupera apenas seus fundos, não seus rótulos nem os detalhes dos pagamentos. Recomendamos migrar para uma frase de recuperação moderna.';
 
   @override
   String securityKeysAdded(String date) {
