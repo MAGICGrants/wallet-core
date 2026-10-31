@@ -91,6 +91,31 @@ void main() {
       await expectLater(settings.save(torMode: TorMode.disabled), completes);
       expect(settings.torMode, TorMode.disabled);
     });
+
+    test('at launch an external proxy gets no built-in Tor', () async {
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torMode, 'external');
+      await settings.startBuiltInIfChosen();
+      expect(calls, isEmpty);
+    });
+
+    test('at launch Built-in starts, and a failed bootstrap does not throw', () async {
+      await settings.startBuiltInIfChosen();
+      expect(calls, ['start']);
+
+      settings.startBuiltIn = () async => throw StateError('bootstrap timed out');
+      await expectLater(settings.startBuiltInIfChosen(), completes);
+    });
+
+    test('ensureConnected starts no Tor for an external proxy or none', () async {
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torMode, 'external');
+      expect(await settings.ensureConnected(), isTrue, reason: 'the proxy is the user\'s');
+
+      settings.resetForTesting();
+      settings.startBuiltIn = () async => calls.add('start');
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torMode, 'disabled');
+      expect(await settings.ensureConnected(), isFalse, reason: 'there is no Tor to report');
+      expect(calls, isEmpty);
+    });
   });
 
   group('load and save', () {

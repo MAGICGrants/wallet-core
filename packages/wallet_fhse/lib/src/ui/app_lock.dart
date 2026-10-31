@@ -244,9 +244,22 @@ class _AppLockTileState extends State<AppLockTile> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SheetHandle(),
-              Text(i18n.appLockLabel, style: BrandText.sheetTitle),
-              const SizedBox(height: BrandSpacing.xs),
-              Text(_description(i18n), style: BrandText.bodyMuted),
+              Row(
+                children: [
+                  SheetIcon(
+                    icon: Icons.lock_clock_outlined,
+                    bg: BrandColors.surfaceAccent,
+                    color: BrandColors.primaryDeep,
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(child: Text(i18n.appLockLabel, style: BrandText.sheetTitle)),
+                ],
+              ),
+              const SizedBox(height: 7),
+              Text(
+                _description(i18n),
+                style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+              ),
               const SizedBox(height: BrandSpacing.lg),
               SettingsGroup(
                 tiles: [

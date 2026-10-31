@@ -17,6 +17,7 @@ class TorService {
   Tor? _tor;
   String? _torDataDirPath;
   Future<void>? _startInFlight;
+  Future<void>? _reviveInFlight;
 
   /// Current status. Same as that fired on the event bus.
   TorConnectionStatus get status => _status;
@@ -87,6 +88,43 @@ class TorService {
       await _tor?.stop();
     } finally {
       _status = TorConnectionStatus.disconnected;
+    }
+  }
+
+  /// Restarts Tor when its SOCKS listener no longer accepts connections.
+  ///
+  /// The plugin tracks its own lifecycle, not the listener's. iOS reclaims a
+  /// suspended app's listening sockets, and from then on every connection to
+  /// the proxy is refused while Tor still reports itself connected. Nothing
+  /// else restarts it, so without this Tor stays dead until a relaunch.
+  /// Concurrent callers share one check and restart.
+  Future<void> reviveIfListenerGone() {
+    if (_status != TorConnectionStatus.connected) return Future.value();
+    return _reviveInFlight ??= _revive().whenComplete(() => _reviveInFlight = null);
+  }
+
+  Future<void> _revive() async {
+    if (await _accepts(_tor!.port)) return;
+    log(LogLevel.warn, 'Tor SOCKS listener refused a connection; restarting Tor.');
+    try {
+      await disable();
+    } catch (e) {
+      log(LogLevel.warn, 'Tor stop before restart failed: $e');
+    }
+    await start();
+  }
+
+  static Future<bool> _accepts(int port) async {
+    try {
+      final socket = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        port,
+        timeout: const Duration(seconds: 2),
+      );
+      socket.destroy();
+      return true;
+    } on SocketException {
+      return false;
     }
   }
 

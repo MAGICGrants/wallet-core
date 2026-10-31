@@ -124,6 +124,9 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
   Timer? _retryTimer;
   int _retryAttempt = 0;
 
+  /// Whether the last fetch failed for any coin, for [retryIfFailed].
+  bool _lastFetchFailed = false;
+
   /// Whether a fiat rate is obtainable for [coinSymbol] (its mainnet base is a
   /// supported Kraken coin). Testnet coins inherit their base's support.
   bool isSupported(String coinSymbol) {
@@ -365,6 +368,7 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     );
 
     _hasFailed = anyFailed && !anySucceeded;
+    _lastFetchFailed = anyFailed;
     _isLoading = false;
     _scheduleRetry(failed: anyFailed);
     notifyListeners();
@@ -384,6 +388,15 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     // Two fetches can overlap (a restart and a wallet change); one retry.
     _retryTimer?.cancel();
     _retryTimer = Timer(retryBackoff[_retryAttempt++], _loadRate);
+  }
+
+  /// Fetches now when the last fetch failed, rather than on [retryBackoff] or
+  /// the 10-minute poll. For the app coming back to the foreground: the network
+  /// may have changed meanwhile (a VPN switched on where Tor is blocked), and
+  /// once the backoff has run out the next poll can be ten minutes away.
+  void retryIfFailed() {
+    if (!_lastFetchFailed || _isLoading || _isDisabled || _rateFetchTimer == null) return;
+    unawaited(_loadRate());
   }
 
   Future<void> startService({WalletManager? walletManager}) async {

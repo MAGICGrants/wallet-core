@@ -373,6 +373,27 @@ void main() {
       expect(model.hasFailed, isTrue);
     });
 
+    test('retryIfFailed fetches at once after a failure, and not while disabled', () async {
+      FiatRateModel.retryBackoff = const [Duration(minutes: 5)];
+      await FiatRateModel.saveFiatApiMode(FiatApiMode.torOnly);
+      final manager = await configuredManager([FakeFiatWallet('BTC')]);
+      addTearDown(manager.dispose);
+
+      final model = pollingModel();
+      await model.startService(walletManager: manager);
+      await pumpEventQueue();
+      expect(attempts, 1);
+
+      model.retryIfFailed();
+      await pumpEventQueue();
+      expect(attempts, 2, reason: 'no waiting out the five-minute backoff');
+
+      await stopPolling(model);
+      model.retryIfFailed();
+      await pumpEventQueue();
+      expect(attempts, 2, reason: 'a disabled API is not fetched');
+    });
+
     test('a configured coin is fetched whatever state its wallet is in', () async {
       // The rate and the wallet's own connection are separate: a coin with a
       // server configured is priced even while its wallet is closed or cannot

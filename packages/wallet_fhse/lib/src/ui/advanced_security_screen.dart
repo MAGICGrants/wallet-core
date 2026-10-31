@@ -52,9 +52,19 @@ Future<int?> pickFullLockMinutes(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SheetHandle(),
-            Text(title, style: BrandText.sheetTitle),
-            const SizedBox(height: BrandSpacing.xs),
-            Text(description, style: BrandText.bodyMuted),
+            Row(
+              children: [
+                SheetIcon(
+                  icon: Icons.lock_clock_outlined,
+                  bg: BrandColors.surfaceAccent,
+                  color: BrandColors.primaryDeep,
+                ),
+                const SizedBox(width: 11),
+                Expanded(child: Text(title, style: BrandText.sheetTitle)),
+              ],
+            ),
+            const SizedBox(height: 7),
+            Text(description, style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5)),
             const SizedBox(height: BrandSpacing.lg),
             SettingsGroup(
               tiles: [

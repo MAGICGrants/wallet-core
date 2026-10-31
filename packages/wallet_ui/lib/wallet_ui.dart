@@ -8,6 +8,9 @@
 library;
 
 export 'design.dart';
+
+// The services both apps run beside their screens, for the root State.
+export 'src/app/wallet_app_services.dart';
 export 'src/export_logs_dialog.dart';
 
 // The mobile home both apps share: layout, cards and the data behind them.
@@ -21,6 +24,11 @@ export 'src/home/incoming_card.dart';
 export 'src/home/security_checklist.dart';
 export 'src/home/security_checklist_card.dart';
 export 'src/home/wallet_home_view.dart';
+
+// Legal pages both apps show, in each app's own chrome (SubPageChrome).
+export 'src/legal/open_source_licenses.dart';
+export 'src/legal/privacy_policy_screen.dart';
+export 'src/legal/terms_of_service_screen.dart';
 
 // Onboarding views — presentational (injected labels + callbacks).
 export 'src/onboarding/app_lock_cover.dart';

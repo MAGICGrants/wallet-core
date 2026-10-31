@@ -109,6 +109,28 @@ class TorSettingsService {
     }
   }
 
+  /// At launch: starts the built-in Tor when it is the chosen mode. External and
+  /// disabled must not spin up an embedded Tor, whose status would then
+  /// misreport the external proxy. Never throws: a failed bootstrap is logged
+  /// inside [TorService.start], and the next [getProxy] retries it.
+  Future<void> startBuiltInIfChosen() async {
+    try {
+      await ensureLoaded();
+      if (_torMode == TorMode.builtIn) await startBuiltIn();
+    } catch (_) {}
+  }
+
+  /// Brings the chosen Tor up and reports whether it is usable: the seam a
+  /// background isolate (`wallet_background`) starts the *same* Tor through.
+  /// External is the user's proxy, and [getProxy] fails closed if it is not
+  /// usable; disabled has no Tor to report.
+  Future<bool> ensureConnected({Duration timeout = const Duration(minutes: 2)}) async {
+    await ensureLoaded();
+    if (_torMode != TorMode.builtIn) return _torMode == TorMode.external;
+    await startBuiltIn();
+    return TorService.sharedInstance.waitUntilConnected(timeout: timeout);
+  }
+
   /// The SOCKS proxy to route through, or null when Tor is unavailable.
   ///
   /// Null rather than a hang: callers treat it as "Tor unavailable" and refuse
@@ -120,8 +142,16 @@ class TorSettingsService {
     await ensureLoaded();
     switch (_torMode) {
       case TorMode.builtIn:
-        if (!await TorService.sharedInstance.waitUntilConnected()) return null;
-        return TorService.sharedInstance.getProxyInfo();
+        final tor = TorService.sharedInstance;
+        // A proxy that refuses connections would fail every caller instantly
+        // and forever (iOS after a suspension); restart it before handing it out.
+        try {
+          await tor.reviveIfListenerGone();
+        } catch (e) {
+          log(LogLevel.warn, 'Tor restart failed: $e');
+        }
+        if (!await tor.waitUntilConnected()) return null;
+        return tor.getProxyInfo();
       case TorMode.external:
         // `int.parse` threw here on an unusable saved port. That was inert
         // while nothing loaded the persisted settings; now that something does,
