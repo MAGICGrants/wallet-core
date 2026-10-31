@@ -8,6 +8,7 @@ import '../design/brand_card.dart';
 import '../design/brand_screen_header.dart';
 import '../design/section_header.dart';
 import '../design/sheet.dart' show isDesktopModal;
+import '../design/warning_callout.dart';
 
 /// One labelled value in a [KeyRevealView] — an address, key, seed phrase or
 /// height. [revealable] blurs the value behind a tap-to-reveal overlay (used
@@ -97,29 +98,7 @@ class _KeyRevealViewState extends State<KeyRevealView> {
         Padding(
           // Desktop modal: the card owns the bottom inset, so drop this one.
           padding: EdgeInsets.fromLTRB(hpad, 6, hpad, isDesktopModal ? 0 : 20),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 26,
-                height: 26,
-                margin: const EdgeInsets.only(top: 1),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: BrandColors.inverseSurface,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.visibility_off_outlined, size: 14, color: BrandColors.onPrimary),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Text(
-                  widget.warning!,
-                  style: TextStyle(fontSize: 11.5, height: 1.5, color: BrandColors.inkMuted),
-                ),
-              ),
-            ],
-          ),
+          child: WarningCard.text(widget.warning!),
         ),
     ];
 

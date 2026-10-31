@@ -4,6 +4,7 @@ import '../design/brand.dart';
 import '../design/brand_button.dart';
 import '../design/brand_card.dart';
 import '../design/sheet.dart';
+import '../design/warning_callout.dart';
 import 'coin_mark.dart';
 
 /// Translated strings for [ConfirmSendView]. Injected so the view stays
@@ -362,33 +363,19 @@ class ConfirmSendView extends StatelessWidget {
     // be bolded regardless of locale. The app inserts a sentinel token (not a
     // space, since the sentence itself has spaces) via its l10n getter.
     final parts = token.isEmpty ? [warning] : warning.split(token);
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: BrandColors.warningBg,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.warning_amber_rounded, color: BrandColors.warning, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                style: TextStyle(fontSize: 12.5, height: 1.4, color: BrandColors.ink),
-                children: [
-                  TextSpan(text: parts.first),
-                  TextSpan(
-                    text: percent,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  if (parts.length > 1) TextSpan(text: parts.last),
-                ],
-              ),
+    return WarningCard(
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: parts.first),
+            TextSpan(
+              text: percent,
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-          ),
-        ],
+            if (parts.length > 1) TextSpan(text: parts.last),
+          ],
+        ),
+        style: BrandText.body,
       ),
     );
   }
