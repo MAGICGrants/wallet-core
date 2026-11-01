@@ -157,6 +157,7 @@ class AllocationBar extends StatelessWidget {
           child: SizedBox(
             height: 10,
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               spacing: 3,
               children: [
                 for (final s in shown)

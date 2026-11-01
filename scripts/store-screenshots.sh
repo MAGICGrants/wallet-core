@@ -47,7 +47,8 @@
 #   avdmanager create avd -n Store_Shots_Pixel_8 -d pixel_8 \
 #     -k "system-images;android-35;google_apis;arm64-v8a"
 # The script starts it when no emulator is running, removes the app, puts the
-# status bar in demo mode (9:41, full signal and battery, no notifications) and
+# status bar in demo mode (9:41, full Wi-Fi and battery, no cellular or
+# notification icons) and
 # switches the system theme with `cmd uimode night`.
 #
 # Environment: STORE_SHOTS, FLUTTER (default: flutter on PATH), ANDROID_HOME
@@ -207,21 +208,29 @@ capture_android() {
   echo "== android: preparing $serial"
   "${a[@]}" uninstall "$PACKAGE" >/dev/null 2>&1 || true
   demo() { "${a[@]}" shell am broadcast -a com.android.systemui.demo -e command "$@" >/dev/null; }
+  # Set again before every picture: System UI ignores `enter` until it has
+  # seen sysui_demo_allowed, which on a fresh boot is after the broadcast, and
+  # it can say nothing of whether demo mode is on.
+  status_bar() {
+    demo enter
+    demo clock -e hhmm 0941
+    demo battery -e level 100 -e plugged false
+    demo network -e wifi show -e level 4 -e fully true
+    # Hidden: shown, it carries the emulator's own "3G" whatever datatype says.
+    demo network -e mobile hide
+    demo notifications -e visible false
+  }
   "${a[@]}" shell settings put global sysui_demo_allowed 1
-  demo enter
-  demo clock -e hhmm 0941
-  demo battery -e level 100 -e plugged false
-  demo network -e wifi show -e level 4 -e fully true
-  demo network -e mobile show -e datatype none -e level 4 -e fully true
-  demo notifications -e visible false
+  status_bar
   "${a[@]}" shell cmd uimode night no >/dev/null
 
   echo "== android: running $TEST (log: $log)"
   "$FLUTTER" test "$TEST" -d "$serial" --dart-define=DEMO_MODE=true >"$log" 2>&1 &
   pid=$!
 
-  # The request sits in the app's cache directory (Directory.systemTemp), which
-  # `run-as` reaches in a debug build.
+  # The request sits in Directory.systemTemp, which Flutter on Android puts in
+  # the app's code_cache directory (not cache/), and `run-as` reaches in a
+  # debug build.
   while kill -0 "$pid" 2>/dev/null; do
     if "${a[@]}" shell pm path "$PACKAGE" >/dev/null 2>&1; then
       if [ "$granted" = 0 ]; then
@@ -230,10 +239,11 @@ capture_android() {
         "${a[@]}" shell pm grant "$PACKAGE" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
         granted=1
       fi
-      request="$("${a[@]}" shell run-as "$PACKAGE" cat cache/store_shots/request 2>/dev/null | tr -d '\r' || true)"
+      request="$("${a[@]}" shell run-as "$PACKAGE" cat code_cache/store_shots/request 2>/dev/null | tr -d '\r' || true)"
       if [ -n "$request" ]; then
-        "${a[@]}" shell run-as "$PACKAGE" rm -f cache/store_shots/request
+        "${a[@]}" shell run-as "$PACKAGE" rm -f code_cache/store_shots/request
         read -r name themes <<<"$request"
+        status_bar
         for theme in ${themes//,/ }; do
           "${a[@]}" shell cmd uimode night "$([ "$theme" = dark ] && echo yes || echo no)" >/dev/null
           sleep 2
@@ -244,7 +254,7 @@ capture_android() {
           "${a[@]}" shell cmd uimode night no >/dev/null
           sleep 1
         fi
-        "${a[@]}" shell run-as "$PACKAGE" touch cache/store_shots/done
+        "${a[@]}" shell run-as "$PACKAGE" touch code_cache/store_shots/done
       fi
     fi
     sleep 0.5

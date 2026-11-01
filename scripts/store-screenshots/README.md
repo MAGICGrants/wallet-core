@@ -94,20 +94,22 @@ When the test fails, it photographs the screen it stopped on (`<device>-failure.
 the text on it. Look for `store shots: stopped on:` in `<device>-test.log`. `Never appeared:
 <finder>` names the step that broke.
 
-## Not yet run: Android
+## Android
 
-The Android path was written without an emulator to hand. What it relies on, in case the first
-run stops:
+First run on 2026-10-31, for both apps, on `Store_Shots_Pixel_8` (Android 15). What it relies
+on:
 
-- `Directory.systemTemp` is the app's cache directory, which the script reads with
-  `adb shell run-as <package> cat cache/store_shots/request`. `run-as` needs a debug build,
-  which `flutter test` makes.
+- `Directory.systemTemp` is the app's `code_cache` directory (Flutter's choice, not `cache`),
+  which the script reads with `adb shell run-as <package> cat code_cache/store_shots/request`.
+  `run-as` needs a debug build, which `flutter test` makes.
 - The notification permission is granted with `pm grant` as soon as the app is installed,
   before the app can ask: the system's dialog is out of the test's reach. Another system
   dialog would need the same treatment, or a tap with `adb shell input`.
 - Dark mode is the system's, switched with `adb shell cmd uimode night yes|no`, and the app's
   theme setting is System.
-- The status bar is System UI's demo mode: 9:41, full signal and battery, no notification
-  icons.
+- The status bar is System UI's demo mode: 9:41, full Wi-Fi and battery, no cellular or
+  notification icons. The script sets it again before every picture, because on a fresh boot
+  System UI ignores `enter` until it has seen `sysui_demo_allowed`. The cellular icon stays
+  hidden: shown, it carries the emulator's "3G" whatever `datatype` says.
 - The onboarding taps match the iOS walk. A label or step that differs on Android needs the
   test changed for both, or a `Platform.isAndroid` branch.
