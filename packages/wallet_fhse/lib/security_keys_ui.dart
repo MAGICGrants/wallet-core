@@ -19,4 +19,4 @@ export 'src/ui/advanced_security_screen.dart';
 export 'src/ui/security_key_flow.dart';
 export 'src/ui/security_key_setup_screen.dart';
 export 'src/ui/security_key_unlock_screen.dart';
-export 'src/ui/security_keys_app.dart';
+export 'src/ui/security_keys_app.dart' hide sampleSecurityKeysState;

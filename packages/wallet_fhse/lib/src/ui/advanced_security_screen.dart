@@ -452,8 +452,9 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
                           const SizedBox(height: BrandSpacing.lg),
                         ],
                         ...content,
-                        // Developer tooling (test/README.md); compiled out of release builds.
-                        if (kDebugMode && state != null) ...[
+                        // Developer tooling (test/README.md); compiled out of release builds,
+                        // and left out of store screenshots, which are debug builds.
+                        if (kDebugMode && state != null && sampleSecurityKeysState == null) ...[
                           const SizedBox(height: 18),
                           SettingsGroup(
                             label: 'Developer',

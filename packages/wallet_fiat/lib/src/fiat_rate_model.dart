@@ -54,6 +54,11 @@ class FiatRates {
 
   static TorProxyProvider getTorProxy = () async => null;
 
+  /// Store screenshots only: these rates, in the user's currency and keyed by
+  /// coin (`XMR`), stand in for Kraken's, so the pictures show the same figures
+  /// on every run. Null in the apps, which always fetch.
+  static Map<String, double>? fixedRates;
+
   static void install({required TorProxyProvider getTorProxy}) {
     FiatRates.getTorProxy = getTorProxy;
   }
@@ -306,6 +311,8 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
   /// Fetches the rate for one coin, applying the USD->fiat bridge for fiat codes
   /// Kraken doesn't quote directly.
   Future<double> _fetchCoinRate(String coin) async {
+    final fixed = FiatRates.fixedRates?[coin];
+    if (fixed != null) return fixed;
     final krakenBase = _krakenBase[coin]!;
     final isIndirect = FiatCurrency.of(_fiatCode).bridgedViaUsd;
     final pair1 = isIndirect ? '${krakenBase}USD' : '$krakenBase$_fiatCode';
