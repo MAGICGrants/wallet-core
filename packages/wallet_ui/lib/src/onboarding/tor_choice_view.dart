@@ -46,8 +46,10 @@ class TorChoiceLabels {
 /// Onboarding "Tor choice" screen: a [StepDots] header plus three
 /// [ModeSelectCard]s (Built-in / External / No Tor). External expands inline
 /// with a SOCKS port field, an Orbot checkbox (mobile), and a connection test
-/// with a live status row. Continue unlocks once a mode is picked — External
-/// also requires a passing test.
+/// with a live status row. Built-in, the recommended mode, starts selected, as
+/// on the apps' desktop screens and as the price step starts on Tor-Only;
+/// External also requires a passing test before Continue. Selecting saves and
+/// starts nothing: the app does both in [onContinue].
 ///
 /// Presentational only: mode is an int index (0=built-in, 1=external,
 /// 2=disabled) so the view doesn't couple to any Tor enum. The view owns the
@@ -56,7 +58,6 @@ class TorChoiceLabels {
 /// [onContinue].
 class TorChoiceView extends StatefulWidget {
   final TorChoiceLabels labels;
-  final int? initialModeIndex;
   final String initialPort;
   final bool initialUseOrbot;
   final bool isMobile;
@@ -73,7 +74,6 @@ class TorChoiceView extends StatefulWidget {
     required this.onContinue,
     required this.stepCount,
     required this.stepIndex,
-    this.initialModeIndex,
     this.initialPort = '9050',
     this.initialUseOrbot = false,
     this.isMobile = false,
@@ -88,7 +88,7 @@ class _TorChoiceViewState extends State<TorChoiceView> {
   static const int _external = 1;
   static const int _disabled = 2;
 
-  late int? _selected = widget.initialModeIndex;
+  int _selected = _builtIn;
   late final TextEditingController _portController = TextEditingController(
     text: widget.initialPort,
   );
@@ -97,7 +97,7 @@ class _TorChoiceViewState extends State<TorChoiceView> {
   bool _tested = false;
   bool _testOk = false;
 
-  bool get _canCommit => _selected != null && (_selected != _external || _testOk);
+  bool get _canCommit => _selected != _external || _testOk;
 
   @override
   void dispose() {
@@ -131,7 +131,7 @@ class _TorChoiceViewState extends State<TorChoiceView> {
   }
 
   void _continue() {
-    widget.onContinue(modeIndex: _selected!, port: _portController.text, useOrbot: _useOrbot);
+    widget.onContinue(modeIndex: _selected, port: _portController.text, useOrbot: _useOrbot);
   }
 
   @override

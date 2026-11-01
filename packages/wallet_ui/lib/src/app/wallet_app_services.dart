@@ -10,8 +10,9 @@ import 'package:wallet_infra/wallet_infra.dart' show TorSettingsService;
 /// (after [WidgetsBindingObserver], which the app registers):
 ///
 /// * at launch ([startWalletServices]): the built-in Tor when it is the chosen
-///   mode, fiat rates, and on a desktop OS the incoming-transaction
-///   announcements, since there is no background isolate there;
+///   mode (before onboarding, nothing is chosen yet), fiat rates, and on a
+///   desktop OS the incoming-transaction announcements, since there is no
+///   background isolate there;
 /// * back in front: a fiat fetch that failed is retried at once;
 /// * leaving for the background on a phone ([markIncomingTxsSeen]): what was on
 ///   screen counts as seen, so a background isolate does not announce it again.
@@ -29,7 +30,7 @@ mixin WalletAppServices<T extends StatefulWidget> on State<T>, WidgetsBindingObs
   void startWalletServices({required bool walletExists}) {
     if (_servicesStarted) return;
     _servicesStarted = true;
-    unawaited(TorSettingsService.sharedInstance.startBuiltInIfChosen());
+    unawaited(TorSettingsService.sharedInstance.startBuiltInIfChosen(walletExists: walletExists));
 
     // Attached once so the model knows which coins to price; every
     // startService() afterwards needs no manager.

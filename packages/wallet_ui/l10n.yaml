@@ -1,0 +1,11 @@
+# Strings both apps show with the same meaning (lib/src/l10n). Generated into
+# the same directory and committed; regenerate with `flutter gen-l10n` here
+# after editing ui_en.arb. Apps add WalletUiLocalizations.delegate to their
+# localizationsDelegates. What belongs here, and how each kind of text is
+# capitalised: docs/strings.md at the wallet-core root.
+arb-dir: lib/src/l10n
+template-arb-file: ui_en.arb
+output-localization-file: wallet_ui_localizations.dart
+output-class: WalletUiLocalizations
+nullable-getter: false
+preferred-supported-locales: [en, pt]

@@ -157,7 +157,7 @@ abstract class BackupLocalizations {
   /// No description provided for @backupExportCsv.
   ///
   /// In en, this message translates to:
-  /// **'Export unencrypted CSV'**
+  /// **'Export Unencrypted CSV'**
   String get backupExportCsv;
 
   /// No description provided for @backupCsvExported.
@@ -553,7 +553,7 @@ abstract class BackupLocalizations {
   /// No description provided for @importNotFoundTitle.
   ///
   /// In en, this message translates to:
-  /// **'No Backup Found'**
+  /// **'No backup found'**
   String get importNotFoundTitle;
 
   /// No description provided for @importOk.

@@ -61,6 +61,10 @@ TEST=integration_test/store_screenshots_test.dart
 DEVICES=()
 UPDATE_FDROID=0
 APP_STORE_LIMIT=10
+# Seconds to wait after the system theme changes, before the picture and before
+# the walk goes on: a debug build re-themes every route and animates borders,
+# and 2 seconds caught Spice's home with its tab bar still light.
+THEME_SETTLE=6
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -163,13 +167,20 @@ capture_ios() {
       rm "$request"
       for theme in ${themes//,/ }; do
         xcrun simctl ui "$udid" appearance "$theme"
-        sleep 2
-        xcrun simctl io "$udid" screenshot --type=png "$shots/$name-$theme.png" >/dev/null 2>&1
+        sleep "$([ "$theme" = light ] && echo 2 || echo "$THEME_SETTLE")"
+        # Into $WORK first: the simulator may not write where the app is (an
+        # external drive, without Removable Volumes access), and that failure
+        # must not end the run unexplained.
+        if ! xcrun simctl io "$udid" screenshot --type=png "$WORK/shot.png" >/dev/null 2>"$WORK/shot.err"; then
+          cat "$WORK/shot.err" >&2
+          exit 1
+        fi
+        mv "$WORK/shot.png" "$shots/$name-$theme.png"
         echo "   $name-$theme"
       done
       if [ "$theme" != light ]; then
         xcrun simctl ui "$udid" appearance light
-        sleep 1
+        sleep "$THEME_SETTLE"
       fi
       touch "$container/tmp/store_shots/done"
     fi
@@ -246,13 +257,13 @@ capture_android() {
         status_bar
         for theme in ${themes//,/ }; do
           "${a[@]}" shell cmd uimode night "$([ "$theme" = dark ] && echo yes || echo no)" >/dev/null
-          sleep 2
+          sleep "$([ "$theme" = light ] && echo 2 || echo "$THEME_SETTLE")"
           "${a[@]}" exec-out screencap -p >"$shots/$name-$theme.png"
           echo "   $name-$theme"
         done
         if [ "$theme" != light ]; then
           "${a[@]}" shell cmd uimode night no >/dev/null
-          sleep 1
+          sleep "$THEME_SETTLE"
         fi
         "${a[@]}" shell run-as "$PACKAGE" touch code_cache/store_shots/done
       fi

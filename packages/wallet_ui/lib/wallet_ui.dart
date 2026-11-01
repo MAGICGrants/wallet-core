@@ -5,9 +5,12 @@
 ///
 /// Widgets carry no localization. The app passes its own translated strings in
 /// (e.g. [TxDetailsLabels]) instead of the package depending on app l10n.
+/// Strings both apps word the same way live in [WalletUiLocalizations], which
+/// the apps read for their own screens.
 library;
 
 export 'design.dart';
+export 'src/l10n/wallet_ui_localizations.dart';
 
 // The services both apps run beside their screens, for the root State.
 export 'src/app/wallet_app_services.dart';

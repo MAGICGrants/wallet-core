@@ -10,7 +10,7 @@
   "backupLegacyStep2": "Send the funds from this legacy wallet to your modern wallet.",
   "backupLegacyStep3": "Export your wallet data from this legacy wallet in an unencrypted CSV. Save this in a secure location along with your legacy recovery phrase.",
   "backupLegacyStep4": "Restore the modern wallet on this device.",
-  "backupExportCsv": "Export unencrypted CSV",
+  "backupExportCsv": "Export Unencrypted CSV",
   "backupCsvExported": "History exported",
   "backupCsvExportFailed": "Could not export the history",
   "backupUnsupportedPassphrase": "Backup isn't available yet for recovery phrases with an offset passphrase.",
@@ -176,7 +176,7 @@
     }
   },
   "importReading": "Reading the backup file…",
-  "importNotFoundTitle": "No Backup Found",
+  "importNotFoundTitle": "No backup found",
   "importOk": "OK",
   "importNotFound": "No backup of this wallet in {where}.",
   "@importNotFound": {

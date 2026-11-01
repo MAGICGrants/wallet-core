@@ -106,7 +106,9 @@ on:
   before the app can ask: the system's dialog is out of the test's reach. Another system
   dialog would need the same treatment, or a tap with `adb shell input`.
 - Dark mode is the system's, switched with `adb shell cmd uimode night yes|no`, and the app's
-  theme setting is System.
+  theme setting is System. After each switch the script waits `THEME_SETTLE` (6 seconds, on
+  iOS too): a debug build re-themes every route and animates borders, and 2 seconds caught
+  Spice's home with its tab bar still light.
 - The status bar is System UI's demo mode: 9:41, full Wi-Fi and battery, no cellular or
   notification icons. The script sets it again before every picture, because on a fresh boot
   System UI ignores `enter` until it has seen `sysui_demo_allowed`. The cellular icon stays

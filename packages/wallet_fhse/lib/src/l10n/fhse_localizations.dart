@@ -126,7 +126,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysUnreadableTitle.
   ///
   /// In en, this message translates to:
-  /// **'Set up your security keys again'**
+  /// **'Set Up Your Security Keys Again'**
   String get securityKeysUnreadableTitle;
 
   /// No description provided for @securityKeysUnreadableBody.
@@ -144,7 +144,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysIntroTitle.
   ///
   /// In en, this message translates to:
-  /// **'Protect this wallet with a security key'**
+  /// **'Protect This Wallet With a Security Key'**
   String get securityKeysIntroTitle;
 
   /// No description provided for @securityKeysIntroBody.
@@ -162,7 +162,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysSetUpButton.
   ///
   /// In en, this message translates to:
-  /// **'Set up security keys'**
+  /// **'Set Up Security Keys'**
   String get securityKeysSetUpButton;
 
   /// No description provided for @securityKeysUpgradeFailed.
@@ -174,7 +174,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysYourKeys.
   ///
   /// In en, this message translates to:
-  /// **'Your keys'**
+  /// **'Your Keys'**
   String get securityKeysYourKeys;
 
   /// No description provided for @securityKeysLegacySeedNote.
@@ -198,7 +198,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysAddButton.
   ///
   /// In en, this message translates to:
-  /// **'Add a security key'**
+  /// **'Add a Security Key'**
   String get securityKeysAddButton;
 
   /// No description provided for @securityKeysManageSection.
@@ -210,7 +210,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysRemoveTitle.
   ///
   /// In en, this message translates to:
-  /// **'Remove a key'**
+  /// **'Remove a Key'**
   String get securityKeysRemoveTitle;
 
   /// No description provided for @securityKeysRemoveSubtitle.
@@ -222,7 +222,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysRemoveLink.
   ///
   /// In en, this message translates to:
-  /// **'Set up'**
+  /// **'Set Up'**
   String get securityKeysRemoveLink;
 
   /// No description provided for @securityKeysRemoveExplain.
@@ -240,7 +240,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysTurnOff.
   ///
   /// In en, this message translates to:
-  /// **'Turn off security keys'**
+  /// **'Turn Off Security Keys'**
   String get securityKeysTurnOff;
 
   /// No description provided for @securityKeysTurnOffBody.
@@ -306,13 +306,13 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysSetupTitle.
   ///
   /// In en, this message translates to:
-  /// **'Set up security keys'**
+  /// **'Set Up Security Keys'**
   String get securityKeysSetupTitle;
 
   /// No description provided for @securityKeysSetupAgainTitle.
   ///
   /// In en, this message translates to:
-  /// **'Set up keys again'**
+  /// **'Set Up Keys Again'**
   String get securityKeysSetupAgainTitle;
 
   /// No description provided for @securityKeysSetupAgainNote.
@@ -330,13 +330,13 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysAddFirst.
   ///
   /// In en, this message translates to:
-  /// **'Add your first key'**
+  /// **'Add Your First Key'**
   String get securityKeysAddFirst;
 
   /// No description provided for @securityKeysAddAnother.
   ///
   /// In en, this message translates to:
-  /// **'Add another key'**
+  /// **'Add Another Key'**
   String get securityKeysAddAnother;
 
   /// No description provided for @securityKeysFinish.
@@ -348,7 +348,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysOneKeyTitle.
   ///
   /// In en, this message translates to:
-  /// **'Use only one key?'**
+  /// **'Use Only One Key?'**
   String get securityKeysOneKeyTitle;
 
   /// No description provided for @securityKeysOneKeyBody.
@@ -360,19 +360,19 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysFinishAnyway.
   ///
   /// In en, this message translates to:
-  /// **'Use one key'**
+  /// **'Use One Key'**
   String get securityKeysFinishAnyway;
 
   /// No description provided for @securityKeysNameLabel.
   ///
   /// In en, this message translates to:
-  /// **'Key name'**
+  /// **'Key Name'**
   String get securityKeysNameLabel;
 
   /// No description provided for @securityKeysNameDefault.
   ///
   /// In en, this message translates to:
-  /// **'Security key {number}'**
+  /// **'Security Key {number}'**
   String securityKeysNameDefault(int number);
 
   /// No description provided for @securityKeysPinLabel.
@@ -390,7 +390,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeysNewPinTitle.
   ///
   /// In en, this message translates to:
-  /// **'Create a PIN for this key'**
+  /// **'Create a PIN for This Key'**
   String get securityKeysNewPinTitle;
 
   /// No description provided for @securityKeysNewPinLabel.
@@ -492,7 +492,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyUnlockTitle.
   ///
   /// In en, this message translates to:
-  /// **'Unlock with your security key'**
+  /// **'Unlock With Your Security Key'**
   String get securityKeyUnlockTitle;
 
   /// No description provided for @securityKeyUnlockButton.
@@ -504,7 +504,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyLostKeys.
   ///
   /// In en, this message translates to:
-  /// **'Lost your keys?'**
+  /// **'Lost Your Keys?'**
   String get securityKeyLostKeys;
 
   /// No description provided for @securityKeyLostKeysBody.
@@ -516,7 +516,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyUseRecoveryPhrase.
   ///
   /// In en, this message translates to:
-  /// **'Use recovery phrase'**
+  /// **'Use Recovery Phrase'**
   String get securityKeyUseRecoveryPhrase;
 
   /// No description provided for @securityKeyRecoveryPhraseHint.
@@ -546,7 +546,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyConnectTitle.
   ///
   /// In en, this message translates to:
-  /// **'Connect your security key'**
+  /// **'Connect Your Security Key'**
   String get securityKeyConnectTitle;
 
   /// No description provided for @securityKeyConnectBodyAndroid.
@@ -564,13 +564,13 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyConnectButton.
   ///
   /// In en, this message translates to:
-  /// **'Connect key'**
+  /// **'Connect Key'**
   String get securityKeyConnectButton;
 
   /// No description provided for @securityKeyTryAgain.
   ///
   /// In en, this message translates to:
-  /// **'Try again'**
+  /// **'Try Again'**
   String get securityKeyTryAgain;
 
   /// No description provided for @securityKeyWaiting.
@@ -594,7 +594,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyTouchToSelect.
   ///
   /// In en, this message translates to:
-  /// **'Touch your key'**
+  /// **'Touch Your Key'**
   String get securityKeyTouchToSelect;
 
   /// No description provided for @securityKeyTouchBody.
@@ -606,7 +606,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyPinTitle.
   ///
   /// In en, this message translates to:
-  /// **'Enter your key\'s PIN'**
+  /// **'Enter Your Key\'s PIN'**
   String get securityKeyPinTitle;
 
   /// No description provided for @securityKeyPinBody.
@@ -624,19 +624,19 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyUseAnotherKey.
   ///
   /// In en, this message translates to:
-  /// **'Use a different key'**
+  /// **'Use a Different Key'**
   String get securityKeyUseAnotherKey;
 
   /// No description provided for @securityKeyUseFingerprint.
   ///
   /// In en, this message translates to:
-  /// **'Use fingerprint instead'**
+  /// **'Use Fingerprint Instead'**
   String get securityKeyUseFingerprint;
 
   /// No description provided for @securityKeyUsePin.
   ///
   /// In en, this message translates to:
-  /// **'Use PIN instead'**
+  /// **'Use PIN Instead'**
   String get securityKeyUsePin;
 
   /// No description provided for @securityKeysNewPinBodyCount.
@@ -672,49 +672,49 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyHoldAgain.
   ///
   /// In en, this message translates to:
-  /// **'Hold your key to your phone again'**
+  /// **'Hold Your Key to Your Phone Again'**
   String get securityKeyHoldAgain;
 
   /// No description provided for @securityKeyConnectAgain.
   ///
   /// In en, this message translates to:
-  /// **'Connect your key again'**
+  /// **'Connect Your Key Again'**
   String get securityKeyConnectAgain;
 
   /// No description provided for @securityKeyTouchToConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Touch your key to confirm'**
+  /// **'Touch Your Key to Confirm'**
   String get securityKeyTouchToConfirm;
 
   /// No description provided for @securityKeyTouchOnceMore.
   ///
   /// In en, this message translates to:
-  /// **'Touch your key once more'**
+  /// **'Touch Your Key Once More'**
   String get securityKeyTouchOnceMore;
 
   /// No description provided for @securityKeyTouchToUnlock.
   ///
   /// In en, this message translates to:
-  /// **'Touch your key to unlock'**
+  /// **'Touch Your Key to Unlock'**
   String get securityKeyTouchToUnlock;
 
   /// No description provided for @securityKeyFingerprintToConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Touch the fingerprint sensor'**
+  /// **'Touch the Fingerprint Sensor'**
   String get securityKeyFingerprintToConfirm;
 
   /// No description provided for @securityKeyFingerprintOnceMore.
   ///
   /// In en, this message translates to:
-  /// **'Touch the sensor once more'**
+  /// **'Touch the Sensor Once More'**
   String get securityKeyFingerprintOnceMore;
 
   /// No description provided for @securityKeyFingerprintToUnlock.
   ///
   /// In en, this message translates to:
-  /// **'Touch the sensor to unlock'**
+  /// **'Touch the Sensor to Unlock'**
   String get securityKeyFingerprintToUnlock;
 
   /// No description provided for @securityKeyFingerprintBody.
@@ -732,7 +732,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyAddedTitle.
   ///
   /// In en, this message translates to:
-  /// **'Key added'**
+  /// **'Key Added'**
   String get securityKeyAddedTitle;
 
   /// No description provided for @securityKeyNameBody.
@@ -930,7 +930,7 @@ abstract class FhseLocalizations {
   /// No description provided for @securityKeyUseButton.
   ///
   /// In en, this message translates to:
-  /// **'Use security key'**
+  /// **'Use Security Key'**
   String get securityKeyUseButton;
 
   /// No description provided for @advancedSecurityAuthReason.
@@ -948,7 +948,7 @@ abstract class FhseLocalizations {
   /// No description provided for @advancedSecurityPasswordTitle.
   ///
   /// In en, this message translates to:
-  /// **'Enter your password'**
+  /// **'Enter Your Password'**
   String get advancedSecurityPasswordTitle;
 
   /// No description provided for @advancedSecurityPasswordBody.

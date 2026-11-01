@@ -50,7 +50,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
 
   @override
   String get backupExportCsv =>
-      'Exportar CSV não criptografado';
+      'Exportar CSV Não Criptografado';
 
   @override
   String get backupCsvExported =>
@@ -355,7 +355,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
   String get importReading => 'Lendo o arquivo de backup…';
 
   @override
-  String get importNotFoundTitle => 'Nenhum Backup Encontrado';
+  String get importNotFoundTitle => 'Nenhum backup encontrado';
 
   @override
   String get importOk => 'OK';

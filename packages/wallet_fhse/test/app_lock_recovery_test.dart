@@ -4,7 +4,7 @@ import 'package:wallet_domain/wallet_domain.dart';
 import 'package:wallet_fhse/security_keys_ui.dart';
 import 'package:wallet_infra/wallet_infra.dart' show SecureScreenMixin;
 
-/// App Lock's "Use recovery phrase", for a device that cannot confirm its
+/// App Lock's "Use Recovery Phrase", for a device that cannot confirm its
 /// owner: the phrase checked against the wallet opens it, any other is refused.
 
 const _phrase =

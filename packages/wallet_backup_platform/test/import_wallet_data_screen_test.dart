@@ -191,13 +191,13 @@ void main() {
     await pumpScreen(tester, b);
 
     await tester.tap(find.text('From iCloud'));
-    await settle(tester, () => shows('No Backup Found'));
-    expect(find.text('No Backup Found'), findsOneWidget);
+    await settle(tester, () => shows('No backup found'));
+    expect(find.text('No backup found'), findsOneWidget);
     expect(find.text('No backup of this wallet in iCloud.'), findsOneWidget);
 
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-    expect(find.text('No Backup Found'), findsNothing);
+    expect(find.text('No backup found'), findsNothing);
     expect(find.text('From iCloud'), findsOneWidget);
 
     expect(b.service.enabled, isFalse);
@@ -233,7 +233,7 @@ void main() {
     await pumpScreen(tester, b);
 
     await tester.tap(find.text('From a Sync Folder'));
-    await settle(tester, () => shows('No Backup Found'));
+    await settle(tester, () => shows('No backup found'));
     expect(find.text('No backup of this wallet in Documents/Skylight Backup.'), findsOneWidget);
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
@@ -250,7 +250,7 @@ void main() {
     await pumpScreen(tester, b);
 
     await tester.tap(find.text('From iCloud'));
-    await settle(tester, () => shows('No Backup Found'));
+    await settle(tester, () => shows('No backup found'));
     expect(find.text('No backup of this wallet in iCloud.'), findsOneWidget);
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
