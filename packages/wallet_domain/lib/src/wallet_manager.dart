@@ -312,8 +312,10 @@ class WalletManager with ChangeNotifier {
   /// App Lock alone only covers the screen; this is the lock that takes the
   /// key out of memory.
   Future<void> fullyLock() async {
-    // A security-key upgrade finishes first ([_guardUpgradeInFlight]).
-    await _guardUpgradeInFlight;
+    // A security-key upgrade finishes first ([_guardUpgradeInFlight]). Only
+    // then an await: with none under way, the password goes before this yields.
+    final upgrade = _guardUpgradeInFlight;
+    if (upgrade != null) await upgrade;
     AppSession.lock();
     // The password goes first, before the slow part (each close stores its
     // wallet). Nothing below needs it: every wallet closes with its own cache
@@ -341,8 +343,9 @@ class WalletManager with ChangeNotifier {
   /// running (otherwise [fullyLock] closes everything). The next open with the
   /// password ([unlockSpend], [openWalletFilesAndSync]) takes the keys back.
   Future<void> lockSpend() async {
-    // A security-key upgrade finishes first ([_guardUpgradeInFlight]).
-    await _guardUpgradeInFlight;
+    // As in [fullyLock]: an upgrade under way finishes first.
+    final upgrade = _guardUpgradeInFlight;
+    if (upgrade != null) await upgrade;
     AppSession.lock();
     // The password first, as in [fullyLock]: nothing below needs it.
     _password = null;

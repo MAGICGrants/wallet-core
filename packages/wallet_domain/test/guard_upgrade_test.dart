@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -45,6 +46,10 @@ class _FileWallet extends FakeWallet {
 
   bool failMove = false;
 
+  /// Holds the move, when set, until it completes; [moving] says it began.
+  Completer<void>? hold;
+  final moving = Completer<void>();
+
   Future<File> file() async => File('${(await getAppDir()).path}/xmr_keys');
 
   @override
@@ -55,6 +60,8 @@ class _FileWallet extends FakeWallet {
 
   @override
   Future<void> changeWalletPassword({required String from, required String to}) async {
+    if (!moving.isCompleted) moving.complete();
+    await hold?.future;
     await super.changeWalletPassword(from: from, to: to);
     if (!await rekeyWalletFile(await file(), from: from, to: to)) throw StateError('neither');
     if (failMove) throw StateError('disk full');
@@ -177,6 +184,28 @@ void main() {
     expect(guard.forgotten, 0);
     expect(await fileUnder(w, 'from-guard'), 'keys');
     expect(await GuardUpgradeFiles.inProgress(), isFalse);
+    expect(leftovers(), isEmpty);
+    m.dispose();
+  });
+
+  test('a lock during the upgrade waits for it, then forgets the password', () async {
+    final w = _FileWallet()..hold = Completer<void>();
+    await olderWallet(w);
+    final m = WalletManager(coins: () => [w]);
+    final open = m.openAll();
+    await w.moving.future;
+
+    final lock = m.fullyLock();
+    w.hold!.complete();
+    await open;
+    await lock;
+
+    // A lock that did not wait would be undone: the upgrade sets the new
+    // password once it is through.
+    expect(m.hasPassword, isFalse);
+    expect(w.isLoaded, isFalse);
+    expect(await readKeystoreWalletPassword(), 'from-guard');
+    expect(await fileUnder(w, 'from-guard'), 'keys');
     expect(leftovers(), isEmpty);
     m.dispose();
   });
