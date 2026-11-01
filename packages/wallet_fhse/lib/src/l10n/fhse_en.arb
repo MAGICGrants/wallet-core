@@ -5,7 +5,7 @@
   "advancedSecurityOff": "Off",
   "advancedSecurityKeyCount": "{count, plural, =1{1 key} other{{count} keys}}",
   "advancedSecurityNeedsAttention": "Needs attention",
-  "securityKeysUnreadableTitle": "Set up your security keys again",
+  "securityKeysUnreadableTitle": "Set Up Your Security Keys Again",
   "securityKeysUnreadableBody": "This happens after moving to a new phone. Your wallet is safe and your recovery phrase still opens it. Set up your keys again, or turn security keys off.",
   "securityKeysLoadFailed": "Couldn't load your security key settings.",
   "@advancedSecurityKeyCount": {
@@ -15,12 +15,13 @@
       }
     }
   },
-  "securityKeysIntroTitle": "Protect this wallet with a security key",
+  "securityKeysIntroTitle": "Protect This Wallet With a Security Key",
   "securityKeysIntroBody": "Advanced Security is another layer of protection for your wallet beyond locking the app. When enabled, your wallet can only be opened with your security key and its PIN.",
   "securityKeysRequirements": "Works with most FIDO2 capable hardware security keys over NFC. Over USB, only YubiKeys work for now (on iPhone, with firmware 5.8 or later).",
-  "securityKeysSetUpButton": "Set up security keys",
-  "securityKeysUnavailable": "Security keys only work with a wallet created or restored in this version of {appName}.",
-  "securityKeysYourKeys": "Your keys",
+  "securityKeysSetUpButton": "Set Up Security Keys",
+  "securityKeysUpgradeFailed": "There is an issue with this wallet that prevents the use of Advanced Security settings. Please ensure your recovery phrase is saved, then delete this wallet and restore from the recovery phrase to fix this issue. We are sorry that the automatic migration failed. Please report this issue with your logs to the app developers.",
+  "securityKeysYourKeys": "Your Keys",
+  "securityKeysLegacySeedNote": "This wallet uses a 25-word recovery phrase. If you get locked out of your wallet, restoring from the phrase recovers your funds only, not your labels or payment details. We recommend that you migrate to a modern recovery phrase.",
   "securityKeysAdded": "Added {date}",
   "@securityKeysAdded": {
     "placeholders": {
@@ -30,14 +31,14 @@
     }
   },
   "securityKeysOneKeyWarning": "You have only one key. Add a second one as a backup. Without a key, you'll need your recovery phrase.",
-  "securityKeysAddButton": "Add a security key",
+  "securityKeysAddButton": "Add a Security Key",
   "securityKeysManageSection": "Manage",
-  "securityKeysRemoveTitle": "Remove a key",
+  "securityKeysRemoveTitle": "Remove a Key",
   "securityKeysRemoveSubtitle": "Set up again without that key",
-  "securityKeysRemoveLink": "Set up",
+  "securityKeysRemoveLink": "Set Up",
   "securityKeysRemoveExplain": "To remove a key, set up again with only the keys you want to keep. Any key you leave out stops working. Have all the keys you're keeping with you.",
   "securityKeysRemoveConfirm": "Set up again",
-  "securityKeysTurnOff": "Turn off security keys",
+  "securityKeysTurnOff": "Turn Off Security Keys",
   "securityKeysTurnOffBody": "Your wallet will open without a security key again.",
   "securityKeysTurnOffConfirm": "Turn off",
   "securityKeysTurnedOff": "Security keys are off",
@@ -62,21 +63,21 @@
     }
   },
   "securityKeysBackgroundNote": "While locked, the wallet keeps syncing and can show new payments, but it can't spend.",
-  "securityKeysSetupTitle": "Set up security keys",
-  "securityKeysSetupAgainTitle": "Set up keys again",
+  "securityKeysSetupTitle": "Set Up Security Keys",
+  "securityKeysSetupAgainTitle": "Set Up Keys Again",
   "securityKeysSetupAgainNote": "Add only the keys you want to keep. Any key you leave out stops working.",
   "securityKeysSetupNote": "Add each security key you want to use, then tap Finish.",
   "@securityKeysSetupNote": {
     "description": "Set up security keys screen, first setup: the one line above the keys added so far."
   },
-  "securityKeysAddFirst": "Add your first key",
-  "securityKeysAddAnother": "Add another key",
+  "securityKeysAddFirst": "Add Your First Key",
+  "securityKeysAddAnother": "Add Another Key",
   "securityKeysFinish": "Finish",
-  "securityKeysOneKeyTitle": "Use only one key?",
+  "securityKeysOneKeyTitle": "Use Only One Key?",
   "securityKeysOneKeyBody": "We recommend at least two. If you lose your only key, you'll need your recovery phrase.",
-  "securityKeysFinishAnyway": "Use one key",
-  "securityKeysNameLabel": "Key name",
-  "securityKeysNameDefault": "Security key {number}",
+  "securityKeysFinishAnyway": "Use One Key",
+  "securityKeysNameLabel": "Key Name",
+  "securityKeysNameDefault": "Security Key {number}",
   "@securityKeysNameDefault": {
     "placeholders": {
       "number": {
@@ -86,7 +87,7 @@
   },
   "securityKeysPinLabel": "Key PIN",
   "securityKeysContinue": "Continue",
-  "securityKeysNewPinTitle": "Create a PIN for this key",
+  "securityKeysNewPinTitle": "Create a PIN for This Key",
   "securityKeysNewPinLabel": "New PIN",
   "securityKeysConfirmPinLabel": "Confirm PIN",
   "securityKeysSetPinButton": "Set PIN",
@@ -124,26 +125,26 @@
       }
     }
   },
-  "securityKeyUnlockTitle": "Unlock with your security key",
+  "securityKeyUnlockTitle": "Unlock With Your Security Key",
   "securityKeyUnlockButton": "Unlock",
-  "securityKeyLostKeys": "Lost your keys?",
+  "securityKeyLostKeys": "Lost Your Keys?",
   "securityKeyLostKeysBody": "Open the wallet with your recovery phrase, then set up new keys in Settings.",
-  "securityKeyUseRecoveryPhrase": "Use recovery phrase",
+  "securityKeyUseRecoveryPhrase": "Use Recovery Phrase",
   "securityKeyRecoveryPhraseHint": "Enter your recovery phrase",
   "securityKeyRecoveryWrongPhrase": "That recovery phrase doesn't match this wallet.",
   "securityKeyRecoveryNotPossible": "This wallet was restored from a 25-word recovery phrase, which can't unlock it here. Delete the wallet, then restore it from that phrase.",
   "securityKeyRecoveredToast": "Unlocked with your recovery phrase. Set up your keys again in Settings.",
-  "securityKeyConnectTitle": "Connect your security key",
+  "securityKeyConnectTitle": "Connect Your Security Key",
   "securityKeyConnectBodyAndroid": "Plug in your security key and touch it when it blinks, or hold it flat against the back of your phone.",
   "securityKeyConnectBodyIos": "Hold your security key near the top of your iPhone, or plug it in and touch it when it blinks.",
-  "securityKeyConnectButton": "Connect key",
-  "securityKeyTryAgain": "Try again",
+  "securityKeyConnectButton": "Connect Key",
+  "securityKeyTryAgain": "Try Again",
   "securityKeyWaiting": "Waiting for your key…",
   "securityKeyTalkingToKey": "Connecting to your key…",
   "securityKeyKeyBlinking": "Your key is blinking",
-  "securityKeyTouchToSelect": "Touch your key",
+  "securityKeyTouchToSelect": "Touch Your Key",
   "securityKeyTouchBody": "Touch your security key while it blinks.",
-  "securityKeyPinTitle": "Enter your key's PIN",
+  "securityKeyPinTitle": "Enter Your Key's PIN",
   "securityKeyPinBody": "This is your security key's PIN, not your phone's passcode.",
   "securityKeyPinAttemptsLeft": "{count, plural, =1{1 attempt left before the key locks.} other{{count} attempts left before the key locks.}}",
   "@securityKeyPinAttemptsLeft": {
@@ -153,9 +154,9 @@
       }
     }
   },
-  "securityKeyUseAnotherKey": "Use a different key",
-  "securityKeyUseFingerprint": "Use fingerprint instead",
-  "securityKeyUsePin": "Use PIN instead",
+  "securityKeyUseAnotherKey": "Use a Different Key",
+  "securityKeyUseFingerprint": "Use Fingerprint Instead",
+  "securityKeyUsePin": "Use PIN Instead",
   "securityKeysNewPinBodyCount": "This key doesn't have a PIN yet. Choose one with at least {count} characters, so someone who finds your key can't use it.",
   "@securityKeysNewPinBodyCount": {
     "placeholders": {
@@ -175,14 +176,14 @@
   "securityKeyCheckingPin": "Checking your PIN…",
   "securityKeyWorking": "One moment…",
   "securityKeyKeepHolding": "Keep holding your key to the phone.",
-  "securityKeyHoldAgain": "Hold your key to your phone again",
-  "securityKeyConnectAgain": "Connect your key again",
-  "securityKeyTouchToConfirm": "Touch your key to confirm",
-  "securityKeyTouchOnceMore": "Touch your key once more",
-  "securityKeyTouchToUnlock": "Touch your key to unlock",
-  "securityKeyFingerprintToConfirm": "Touch the fingerprint sensor",
-  "securityKeyFingerprintOnceMore": "Touch the sensor once more",
-  "securityKeyFingerprintToUnlock": "Touch the sensor to unlock",
+  "securityKeyHoldAgain": "Hold Your Key to Your Phone Again",
+  "securityKeyConnectAgain": "Connect Your Key Again",
+  "securityKeyTouchToConfirm": "Touch Your Key to Confirm",
+  "securityKeyTouchOnceMore": "Touch Your Key Once More",
+  "securityKeyTouchToUnlock": "Touch Your Key to Unlock",
+  "securityKeyFingerprintToConfirm": "Touch the Fingerprint Sensor",
+  "securityKeyFingerprintOnceMore": "Touch the Sensor Once More",
+  "securityKeyFingerprintToUnlock": "Touch the Sensor to Unlock",
   "securityKeyFingerprintBody": "Use a finger you added to this security key.",
   "securityKeyTouchCount": "Touch {current} of {total}",
   "@securityKeyTouchCount": {
@@ -195,7 +196,7 @@
       }
     }
   },
-  "securityKeyAddedTitle": "Key added",
+  "securityKeyAddedTitle": "Key Added",
   "securityKeyNameBody": "Give it a name so you can tell your keys apart.",
   "securityKeySaveName": "Save",
   "securityKeysErrorKeyUnsupported": "This security key isn't supported. Try a different one.",
@@ -245,14 +246,6 @@
   "@securityKeysSharedPhraseWarning": {
     "description": "Advanced Security: the wallet is only as safe as its least protected copy, so protect the recovery phrase and every device that has the wallet."
   },
-  "@securityKeysUnavailable": {
-    "placeholders": {
-      "appName": {
-        "type": "String",
-        "example": "Skylight"
-      }
-    }
-  },
   "@securityKeysFullLockDescription": {
     "placeholders": {
       "appName": {
@@ -285,10 +278,10 @@
   "securityKeyWindowsPromptEnrollBody": "Windows will ask twice. Each time, enter your security key's PIN, then touch the key.",
   "securityKeyWindowsStorageNote": "Windows may say that this will save something to your key, but this generic wording is not accurate. This does not take up any storage slots on your security key.",
   "securityKeyWindowsWaiting": "Waiting for Windows Security…",
-  "securityKeyUseButton": "Use security key",
+  "securityKeyUseButton": "Use Security Key",
   "advancedSecurityAuthReason": "Confirm it's you to open Advanced Security",
   "advancedSecurityAuthFailed": "Couldn't confirm it's you.",
-  "advancedSecurityPasswordTitle": "Enter your password",
+  "advancedSecurityPasswordTitle": "Enter Your Password",
   "advancedSecurityPasswordBody": "Enter the password you use to unlock {appName}.",
   "@advancedSecurityPasswordBody": {
     "placeholders": {

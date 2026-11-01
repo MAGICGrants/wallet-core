@@ -7,6 +7,7 @@ import '../design/brand_button.dart';
 import '../design/brand_card.dart';
 import '../design/brand_segmented.dart';
 import '../design/section_header.dart';
+import '../design/sheet.dart';
 import '../design/warning_callout.dart';
 import 'connection_pills.dart';
 
@@ -114,6 +115,11 @@ class ConnectionFormView extends StatelessWidget {
   /// onboarding footer's Continue button sits beside Back).
   final bool showSave;
 
+  /// A settings sheet's Cancel, set together: Save and Cancel then sit as the
+  /// other settings sheets' do ([SheetActions]). Onboarding passes neither.
+  final String? cancelLabel;
+  final VoidCallback? onCancel;
+
   const ConnectionFormView({
     super.key,
     required this.labels,
@@ -146,7 +152,9 @@ class ConnectionFormView extends StatelessWidget {
     this.successLatency,
     this.pinnedSave = false,
     this.showSave = true,
-  });
+    this.cancelLabel,
+    this.onCancel,
+  }) : assert((cancelLabel == null) == (onCancel == null));
 
   List<Widget> _routePills() =>
       connectionRoutePills(useTor: useTor, proxyPort: pillProxyPort, address: pillAddress);
@@ -246,7 +254,17 @@ class ConnectionFormView extends StatelessWidget {
       _buildTestCard(),
     ];
 
-    final saveButton = BrandButton(label: saveButtonLabel, onPressed: canSave ? onSave : null);
+    final save = BrandButton(label: saveButtonLabel, onPressed: canSave ? onSave : null);
+    final saveButton = onCancel == null
+        ? save
+        : SheetActions(
+            primary: save,
+            secondary: BrandButton.ghost(
+              label: cancelLabel!,
+              color: BrandColors.inkMuted,
+              onPressed: onCancel,
+            ),
+          );
 
     final warningCallout = warning != null ? WarningCallout(warning!) : null;
 

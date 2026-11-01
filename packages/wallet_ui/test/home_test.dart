@@ -523,6 +523,27 @@ void main() {
       expect(find.text('1%'), findsOneWidget);
     });
 
+    testWidgets('the bar draws each share at its full height', (tester) async {
+      await tester.pumpWidget(
+        app(
+          const AllocationBar(
+            slices: [
+              AllocationSlice(label: 'XMR', color: Colors.orange, value: 16),
+              AllocationSlice(label: 'BTC', color: Colors.amber, value: 64),
+            ],
+          ),
+        ),
+      );
+      final segments = find.descendant(
+        of: find.byType(AllocationBar),
+        matching: find.byType(ColoredBox),
+      );
+      expect(segments, findsNWidgets(2));
+      for (var i = 0; i < 2; i++) {
+        expect(tester.getSize(segments.at(i)).height, 10);
+      }
+    });
+
     testWidgets('only open checklist steps are tappable', (tester) async {
       final tapped = <String>[];
       await tester.pumpWidget(

@@ -91,6 +91,52 @@ void main() {
       await expectLater(settings.save(torMode: TorMode.disabled), completes);
       expect(settings.torMode, TorMode.disabled);
     });
+
+    test('at launch an external proxy gets no built-in Tor', () async {
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torMode, 'external');
+      await settings.startBuiltInIfChosen(walletExists: true);
+      expect(calls, isEmpty);
+    });
+
+    test('at launch before onboarding nothing starts: the default is not a choice', () async {
+      await settings.startBuiltInIfChosen(walletExists: false);
+      expect(settings.torMode, TorMode.builtIn, reason: 'still the fail-closed default');
+      expect(calls, isEmpty);
+    });
+
+    test('at launch a saved Built-in starts, and a failed bootstrap does not throw', () async {
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torMode, 'builtIn');
+      await settings.startBuiltInIfChosen(walletExists: false);
+      expect(calls, ['start'], reason: 'chosen at onboarding, before the wallet was made');
+
+      settings.startBuiltIn = () async => throw StateError('bootstrap timed out');
+      await expectLater(settings.startBuiltInIfChosen(walletExists: true), completes);
+    });
+
+    test('at launch a wallet with nothing saved keeps the built-in default', () async {
+      // Its onboarding predates the Tor step, and it has run on built-in since.
+      await settings.startBuiltInIfChosen(walletExists: true);
+      expect(calls, ['start']);
+    });
+
+    test('a choice saved this session counts at the next launch check', () async {
+      await settings.save(torMode: TorMode.builtIn);
+      await Future<void>.delayed(Duration.zero);
+      calls.clear();
+      await settings.startBuiltInIfChosen(walletExists: false);
+      expect(calls, ['start']);
+    });
+
+    test('ensureConnected starts no Tor for an external proxy or none', () async {
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torMode, 'external');
+      expect(await settings.ensureConnected(), isTrue, reason: 'the proxy is the user\'s');
+
+      settings.resetForTesting();
+      settings.startBuiltIn = () async => calls.add('start');
+      await SharedPreferencesService.set<String>(InfraPreferenceKeys.torMode, 'disabled');
+      expect(await settings.ensureConnected(), isFalse, reason: 'there is no Tor to report');
+      expect(calls, isEmpty);
+    });
   });
 
   group('load and save', () {

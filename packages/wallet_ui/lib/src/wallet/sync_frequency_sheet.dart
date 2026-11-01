@@ -4,7 +4,6 @@ import 'package:wallet_infra/wallet_infra.dart' show SyncFrequency, loadSyncFreq
 import '../design/brand.dart';
 import '../design/brand_button.dart';
 import '../design/mode_select_card.dart';
-import '../design/section_header.dart';
 import '../design/sheet.dart';
 
 /// The Sync Frequency sheet's strings, from the app's own l10n.
@@ -12,7 +11,6 @@ class SyncFrequencyLabels {
   const SyncFrequencyLabels({
     required this.title,
     required this.subtitle,
-    required this.modeLabel,
     required this.continuous,
     required this.continuousDesc,
     required this.periodic,
@@ -25,7 +23,6 @@ class SyncFrequencyLabels {
 
   final String title;
   final String subtitle;
-  final String modeLabel;
   final String continuous;
   final String continuousDesc;
   final String periodic;
@@ -142,9 +139,9 @@ class _SyncFrequencySheetState extends State<_SyncFrequencySheet> {
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            SectionHeader(label: l.modeLabel),
                             for (final frequency in options) ...[
-                              const SizedBox(height: BrandSpacing.md),
+                              if (frequency != options.first)
+                                const SizedBox(height: BrandSpacing.md),
                               ModeSelectCard(
                                 title: l.nameOf(frequency),
                                 description: _description(frequency),

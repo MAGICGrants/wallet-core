@@ -112,11 +112,18 @@ class MetadataBackupSetup {
     _syncFolder = null;
     androidForTesting = null;
     syncFolderForTesting = null;
+    serviceForTesting = null;
   }
 
   /// Sets up Android's location whatever the host, for tests of its screens.
   @visibleForTesting
   static bool? androidForTesting;
+
+  /// Builds the service from the platform's locations in place of the real
+  /// one: for store screenshots, a backup that reports itself on without
+  /// keeping one (`package:wallet_backup/screenshots.dart`).
+  @visibleForTesting
+  static MetadataBackupService Function(List<BackupLocationConfig> locations)? serviceForTesting;
 
   /// Stands in for the platform's sync folder, for tests of its screens.
   @visibleForTesting
@@ -146,11 +153,13 @@ class MetadataBackupSetup {
       // Payments held back like iCloud's: the sync app sees when files land.
       BackupLocationConfig(location: syncFolder, delayPayments: true, retryUnreadable: true),
     ];
-    final service = MetadataBackupService(
-      localRoot: () async => Directory('${(await getAppDir()).path}/metadata_backup_local'),
-      stateRoot: () => _stateRoot(config),
-      locations: locations,
-    );
+    final service =
+        serviceForTesting?.call(locations) ??
+        MetadataBackupService(
+          localRoot: () async => Directory('${(await getAppDir()).path}/metadata_backup_local'),
+          stateRoot: () => _stateRoot(config),
+          locations: locations,
+        );
     MetadataBackup.instance = service;
     return _service = service;
   }

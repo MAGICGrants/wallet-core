@@ -985,6 +985,40 @@ abstract class CryptoWallet with ChangeNotifier {
     await loadPersistedConnection();
   }
 
+  // ----- Wallet password changes -----
+
+  /// Every file this coin keeps under the wallet password, as paths whether or
+  /// not they exist: the encrypted cache, and a subclass's own files. The
+  /// security-key upgrade (`WalletManager`) copies them before it re-keys
+  /// anything, and puts the copies back if it is cut short.
+  @mustCallSuper
+  Future<List<String>> walletPasswordFilePaths() async => [
+    await WalletCacheStore.pathFor(coinSymbol),
+  ];
+
+  /// Moves this coin's files from the wallet password [from] to [to], for the
+  /// security-key upgrade. An open wallet writes what it holds under [to] and
+  /// goes on using it; a closed one (a hidden testnet coin) has its files
+  /// re-encrypted as they are. The base moves the cache; a coin with files of
+  /// its own moves them too. Throws when an open wallet's files cannot move.
+  @mustCallSuper
+  Future<void> changeWalletPassword({required String from, required String to}) async {
+    if (_cacheLoaded && _cachePassword == from) {
+      _cachePassword = to;
+      _cacheDirty = true;
+      await persistCache();
+      return;
+    }
+    await WalletCacheStore.rekey(coinSymbol, from: from, to: to);
+    if (_cachePassword == from) _cachePassword = to;
+  }
+
+  /// The recovery phrase and restore point read back from the open wallet, for
+  /// a wallet older than the app's own copy of its seed ([SeedStore]): the
+  /// security-key upgrade derives the new password from it and keeps it. Null
+  /// when this coin cannot say.
+  Future<({SeedSource seed, RestorePoint from})?> seedFromWallet() async => null;
+
   // ----- Encrypted cache -----
 
   void setCachePassword(String? password) => _cachePassword = password;

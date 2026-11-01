@@ -309,6 +309,12 @@ class FfiMoneroBackend extends MoneroBackend {
   }
 
   @override
+  Future<bool> setPassword(NativeHandle wallet, String password) {
+    final w = wallet.id;
+    return Isolate.run(() => monero.Wallet_setPassword(Pointer.fromAddress(w), password: password));
+  }
+
+  @override
   Future<String> cacheAttribute(NativeHandle wallet, String key) {
     final w = wallet.id;
     return Isolate.run(() => monero.Wallet_getCacheAttribute(Pointer.fromAddress(w), key: key));

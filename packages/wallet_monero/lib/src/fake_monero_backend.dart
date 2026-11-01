@@ -556,6 +556,20 @@ class FakeMoneroBackend extends MoneroBackend {
     return true;
   }
 
+  /// When true, [setPassword] fails as `Wallet_setPassword` reports it.
+  bool setPasswordFails = false;
+
+  @override
+  Future<bool> setPassword(NativeHandle wallet, String password) async {
+    _record('setPassword');
+    if (setPasswordFails) {
+      errorStrings[wallet.id] = 'fake setPassword failure';
+      return false;
+    }
+    walletPasswords[wallet.id] = password;
+    return true;
+  }
+
   /// The wallet file's cache attributes, kept across close and reopen like the
   /// file itself.
   final Map<String, String> cacheAttributes = {};

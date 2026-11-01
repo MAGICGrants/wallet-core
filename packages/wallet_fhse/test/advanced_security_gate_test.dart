@@ -116,7 +116,7 @@ void main() {
     testWidgets('a wrong password is refused, the right one opens it', (tester) async {
       await open(tester, typesPassword: true);
       expect(find.text('advanced security'), findsNothing);
-      expect(find.text('Enter your password'), findsOneWidget);
+      expect(find.text('Enter Your Password'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), 'wrong');
       await tester.tap(find.text('Continue'));

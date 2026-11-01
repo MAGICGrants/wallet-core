@@ -12,6 +12,7 @@ import '../design/brand_segmented.dart';
 import '../design/icon_circle_button.dart';
 import '../design/section_header.dart';
 import '../design/share_anchor.dart';
+import '../design/warning_callout.dart';
 import 'coin_mark.dart';
 
 /// A selectable receiving asset for [ReceiveView]'s dropdown.
@@ -39,7 +40,7 @@ class ReceiveLabels {
 
 /// The receive screen: a coin card, an optional subaddress/primary segmented
 /// toggle, a white QR panel with the tappable mono address, an optional warning
-/// line, and a Copy button. Presentational only — the app computes the
+/// card, and a Copy button. Presentational only — the app computes the
 /// address/heading/warning + tab and enlarge state and supplies the callbacks.
 ///
 /// The QR panel is fixed dark-on-white so it always scans, regardless of theme.
@@ -198,14 +199,7 @@ class ReceiveView extends StatelessWidget {
                               ),
                               if (warning != null) ...[
                                 const SizedBox(height: 14),
-                                Text(
-                                  warning!,
-                                  textAlign: TextAlign.center,
-                                  style: BrandText.caption.copyWith(
-                                    color: BrandColors.warning,
-                                    height: 1.4,
-                                  ),
-                                ),
+                                WarningCard.text(warning!),
                               ],
                               const SizedBox(height: 14),
                               BrandButton(

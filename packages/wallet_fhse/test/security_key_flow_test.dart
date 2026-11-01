@@ -201,11 +201,11 @@ void main() {
       onDone: () => done = true,
     );
 
-    expect(find.text('Connect your security key'), findsOneWidget);
-    await tap(tester, 'Connect key');
+    expect(find.text('Connect Your Security Key'), findsOneWidget);
+    await tap(tester, 'Connect Key');
     expect(calls.single.method, 'inspect');
     expect(calls.single.arguments['touch'], isTrue, reason: 'insert and touch comes first');
-    expect(find.text("Enter your key's PIN"), findsOneWidget);
+    expect(find.text("Enter Your Key's PIN"), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), '123456');
     await tap(tester, 'Continue');
@@ -213,16 +213,16 @@ void main() {
     expect(find.text('Checking your PIN…'), findsOneWidget);
 
     await status(tester, 'touchNeeded');
-    expect(find.text('Touch your key to confirm'), findsOneWidget);
+    expect(find.text('Touch Your Key to Confirm'), findsOneWidget);
     expect(find.text('Touch 1 of 2'), findsOneWidget);
     await status(tester, 'processing');
     await status(tester, 'touchNeeded');
-    expect(find.text('Touch your key once more'), findsOneWidget);
+    expect(find.text('Touch Your Key Once More'), findsOneWidget);
     expect(find.text('Touch 2 of 2'), findsOneWidget);
 
     result.complete(SecurityKeyRecord(id: 'k1', name: 'YubiKey 1', addedAt: DateTime(2026)));
     await settle(tester);
-    expect(find.text('Key added'), findsOneWidget);
+    expect(find.text('Key Added'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'Blue');
     await tap(tester, 'Save');
     expect(renamed, 'Blue');
@@ -236,11 +236,11 @@ void main() {
       useKey: (_, _) async =>
           throw const SecurityKeyException(SecurityKeyFailure.pinInvalid, retries: 2),
     );
-    await tap(tester, 'Connect key');
+    await tap(tester, 'Connect Key');
     await tester.enterText(find.byType(TextField), '0000');
     await tap(tester, 'Continue');
 
-    expect(find.text("Enter your key's PIN"), findsOneWidget);
+    expect(find.text("Enter Your Key's PIN"), findsOneWidget);
     expect(find.text('Incorrect PIN. 2 attempts left before the key locks.'), findsOneWidget);
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
   });
@@ -262,20 +262,20 @@ void main() {
         return result.future;
       },
     );
-    await tap(tester, 'Connect key');
+    await tap(tester, 'Connect Key');
 
     // The first attempt went straight to the sensor and missed.
     expect(attempts.single.isBuiltIn, isTrue);
     expect(find.text('Fingerprint not recognized. 2 tries left.'), findsOneWidget);
-    expect(find.text('Use PIN instead'), findsOneWidget);
+    expect(find.text('Use PIN Instead'), findsOneWidget);
 
-    await tap(tester, 'Try again');
+    await tap(tester, 'Try Again');
     expect(attempts.last.isBuiltIn, isTrue);
-    expect(find.text('Touch the fingerprint sensor'), findsOneWidget);
+    expect(find.text('Touch the Fingerprint Sensor'), findsOneWidget);
     await status(tester, 'fingerprintNeeded');
     await status(tester, 'processing');
     await status(tester, 'fingerprintNeeded');
-    expect(find.text('Touch the sensor once more'), findsOneWidget);
+    expect(find.text('Touch the Sensor Once More'), findsOneWidget);
   });
 
   testWidgets('a Bio whose sensor is locked falls back to its PIN', (tester) async {
@@ -285,8 +285,8 @@ void main() {
       enrolling: false,
       useKey: (_, _) async => throw const SecurityKeyException(SecurityKeyFailure.uvBlocked),
     );
-    await tap(tester, 'Connect key');
-    expect(find.text("Enter your key's PIN"), findsOneWidget);
+    await tap(tester, 'Connect Key');
+    expect(find.text("Enter Your Key's PIN"), findsOneWidget);
     expect(find.text('Fingerprint is locked on this key. Enter its PIN instead.'), findsOneWidget);
   });
 
@@ -301,9 +301,9 @@ void main() {
         return Completer<SecurityKeyRecord?>().future;
       },
     );
-    await tap(tester, 'Connect key');
+    await tap(tester, 'Connect Key');
     expect(used, isNull);
-    expect(find.text('Create a PIN for this key'), findsOneWidget);
+    expect(find.text('Create a PIN for This Key'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).at(0), '123456');
     await tester.enterText(find.byType(TextField).at(1), '123456');
@@ -326,9 +326,9 @@ void main() {
         return Future.error(const SecurityKeyException(SecurityKeyFailure.pinNotSet));
       },
     );
-    await tap(tester, 'Connect key');
+    await tap(tester, 'Connect Key');
     expect(attempts.single.isBuiltIn, isTrue);
-    expect(find.text('Create a PIN for this key'), findsOneWidget);
+    expect(find.text('Create a PIN for This Key'), findsOneWidget);
   });
 
   testWidgets('unlocking with a Bio that has no PIN uses neither', (tester) async {
@@ -342,7 +342,7 @@ void main() {
         return null;
       },
     );
-    await tap(tester, 'Connect key');
+    await tap(tester, 'Connect Key');
     expect(find.text("This key isn't set up for this wallet."), findsOneWidget);
     expect(used, isFalse);
   });
@@ -358,9 +358,9 @@ void main() {
         return null;
       },
     );
-    await tap(tester, 'Connect key');
+    await tap(tester, 'Connect Key');
     expect(find.text("This key isn't set up for this wallet."), findsOneWidget);
-    expect(find.text('Try again'), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget);
     expect(used, isFalse);
   });
 
@@ -375,8 +375,8 @@ void main() {
         return Completer<SecurityKeyRecord?>().future;
       },
     );
-    await tap(tester, 'Connect key');
-    expect(find.text('Create a PIN for this key'), findsOneWidget);
+    await tap(tester, 'Connect Key');
+    expect(find.text('Create a PIN for This Key'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).at(0), '123');
     await tester.enterText(find.byType(TextField).at(1), '123');
@@ -394,18 +394,18 @@ void main() {
   testWidgets('cancelling while the key waits returns to connecting', (tester) async {
     final result = Completer<SecurityKeyRecord?>();
     await pumpFlow(tester, enrolling: false, useKey: (_, _) => result.future);
-    await tap(tester, 'Connect key');
+    await tap(tester, 'Connect Key');
     await tester.enterText(find.byType(TextField), '123456');
     await tap(tester, 'Continue');
     await status(tester, 'touchNeeded');
-    expect(find.text('Touch your key to unlock'), findsOneWidget);
+    expect(find.text('Touch Your Key to Unlock'), findsOneWidget);
 
     await tap(tester, 'Cancel');
     expect(calls.last.method, 'cancel');
     result.completeError(const SecurityKeyException(SecurityKeyFailure.cancelled));
     await settle(tester);
-    expect(find.text('Try again'), findsOneWidget);
-    expect(find.text('Unlock with your security key'), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget);
+    expect(find.text('Unlock With Your Security Key'), findsOneWidget);
   });
 
   group('serial numbers', () {
@@ -427,7 +427,7 @@ void main() {
           return null;
         },
       );
-      await tap(tester, 'Connect key');
+      await tap(tester, 'Connect Key');
       expect(find.text('Enter the PIN for Blue'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), '123456');
@@ -444,7 +444,7 @@ void main() {
         registered: [record('Blue', 111), record('Spare', 222)],
         useKey: (_, _) async => null,
       );
-      await tap(tester, 'Connect key');
+      await tap(tester, 'Connect Key');
       expect(find.text("This key isn't set up for this wallet."), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
     });
@@ -457,8 +457,8 @@ void main() {
         registered: [record('Blue', 111), record('Old key', null)],
         useKey: (_, _) async => null,
       );
-      await tap(tester, 'Connect key');
-      expect(find.text("Enter your key's PIN"), findsOneWidget);
+      await tap(tester, 'Connect Key');
+      expect(find.text("Enter Your Key's PIN"), findsOneWidget);
     });
 
     testWidgets('adding a key that is already registered stops at the first step', (tester) async {
@@ -469,7 +469,7 @@ void main() {
         registered: [record('Blue', 111)],
         useKey: (_, _) async => null,
       );
-      await tap(tester, 'Connect key');
+      await tap(tester, 'Connect Key');
       expect(find.text('This key is already set up for this wallet.'), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
     });
@@ -482,14 +482,14 @@ void main() {
         registered: [record('Blue', 111)],
         useKey: (_, _) async => throw const SecurityKeyException(SecurityKeyFailure.differentKey),
       );
-      await tap(tester, 'Connect key');
+      await tap(tester, 'Connect Key');
       await tester.enterText(find.byType(TextField), '123456');
       await tap(tester, 'Continue');
       expect(
         find.text("This isn't the key you touched. Start again with the key you want to use."),
         findsOneWidget,
       );
-      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text('Try Again'), findsOneWidget);
     });
 
     testWidgets('several keys no touch could tell apart stop before any PIN', (tester) async {
@@ -501,7 +501,7 @@ void main() {
         },
       );
       await pumpFlow(tester, enrolling: false, useKey: (_, _) async => null);
-      await tap(tester, 'Connect key');
+      await tap(tester, 'Connect Key');
       expect(
         find.text('More than one security key is plugged in. Unplug the others, then try again.'),
         findsOneWidget,
@@ -532,19 +532,19 @@ void main() {
       // Windows' dialog says the passkey is saved to the key; the flow says
       // it isn't, before the dialog and while it is up.
       final storageNote = find.textContaining('does not take up any storage slots');
-      expect(find.text('Use security key'), findsOneWidget);
+      expect(find.text('Use Security Key'), findsOneWidget);
       expect(storageNote, findsOneWidget);
-      await tap(tester, 'Use security key');
+      await tap(tester, 'Use Security Key');
       expect(used?.isSystem, isTrue);
       expect(backend.inspected, isFalse, reason: 'nothing is read from the key first');
-      expect(find.text("Enter your key's PIN"), findsNothing);
+      expect(find.text("Enter Your Key's PIN"), findsNothing);
       expect(find.text('Continue in Windows Security'), findsOneWidget);
       expect(find.text('Waiting for Windows Security…'), findsOneWidget);
       expect(storageNote, findsOneWidget);
 
       result.complete(SecurityKeyRecord(id: 'k1', name: 'YubiKey 1', addedAt: DateTime(2026)));
       await settle(tester);
-      expect(find.text('Key added'), findsOneWidget);
+      expect(find.text('Key Added'), findsOneWidget);
     });
 
     testWidgets('closing the Windows dialog goes back to the start', (tester) async {
@@ -554,9 +554,9 @@ void main() {
         useKey: (_, _) async => throw const SecurityKeyException(SecurityKeyFailure.cancelled),
       );
       expect(find.textContaining('storage slots'), findsNothing, reason: 'unlocking saves nothing');
-      await tap(tester, 'Use security key');
-      expect(find.text('Try again'), findsOneWidget);
-      expect(find.text('Unlock with your security key'), findsOneWidget);
+      await tap(tester, 'Use Security Key');
+      expect(find.text('Try Again'), findsOneWidget);
+      expect(find.text('Unlock With Your Security Key'), findsOneWidget);
     });
   });
 }

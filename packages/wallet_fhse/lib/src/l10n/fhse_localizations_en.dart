@@ -33,7 +33,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get advancedSecurityNeedsAttention => 'Needs attention';
 
   @override
-  String get securityKeysUnreadableTitle => 'Set up your security keys again';
+  String get securityKeysUnreadableTitle => 'Set Up Your Security Keys Again';
 
   @override
   String get securityKeysUnreadableBody =>
@@ -43,7 +43,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysLoadFailed => 'Couldn\'t load your security key settings.';
 
   @override
-  String get securityKeysIntroTitle => 'Protect this wallet with a security key';
+  String get securityKeysIntroTitle => 'Protect This Wallet With a Security Key';
 
   @override
   String get securityKeysIntroBody =>
@@ -54,15 +54,18 @@ class FhseLocalizationsEn extends FhseLocalizations {
       'Works with most FIDO2 capable hardware security keys over NFC. Over USB, only YubiKeys work for now (on iPhone, with firmware 5.8 or later).';
 
   @override
-  String get securityKeysSetUpButton => 'Set up security keys';
+  String get securityKeysSetUpButton => 'Set Up Security Keys';
 
   @override
-  String securityKeysUnavailable(String appName) {
-    return 'Security keys only work with a wallet created or restored in this version of $appName.';
-  }
+  String get securityKeysUpgradeFailed =>
+      'There is an issue with this wallet that prevents the use of Advanced Security settings. Please ensure your recovery phrase is saved, then delete this wallet and restore from the recovery phrase to fix this issue. We are sorry that the automatic migration failed. Please report this issue with your logs to the app developers.';
 
   @override
-  String get securityKeysYourKeys => 'Your keys';
+  String get securityKeysYourKeys => 'Your Keys';
+
+  @override
+  String get securityKeysLegacySeedNote =>
+      'This wallet uses a 25-word recovery phrase. If you get locked out of your wallet, restoring from the phrase recovers your funds only, not your labels or payment details. We recommend that you migrate to a modern recovery phrase.';
 
   @override
   String securityKeysAdded(String date) {
@@ -74,19 +77,19 @@ class FhseLocalizationsEn extends FhseLocalizations {
       'You have only one key. Add a second one as a backup. Without a key, you\'ll need your recovery phrase.';
 
   @override
-  String get securityKeysAddButton => 'Add a security key';
+  String get securityKeysAddButton => 'Add a Security Key';
 
   @override
   String get securityKeysManageSection => 'Manage';
 
   @override
-  String get securityKeysRemoveTitle => 'Remove a key';
+  String get securityKeysRemoveTitle => 'Remove a Key';
 
   @override
   String get securityKeysRemoveSubtitle => 'Set up again without that key';
 
   @override
-  String get securityKeysRemoveLink => 'Set up';
+  String get securityKeysRemoveLink => 'Set Up';
 
   @override
   String get securityKeysRemoveExplain =>
@@ -96,7 +99,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysRemoveConfirm => 'Set up again';
 
   @override
-  String get securityKeysTurnOff => 'Turn off security keys';
+  String get securityKeysTurnOff => 'Turn Off Security Keys';
 
   @override
   String get securityKeysTurnOffBody => 'Your wallet will open without a security key again.';
@@ -148,10 +151,10 @@ class FhseLocalizationsEn extends FhseLocalizations {
       'While locked, the wallet keeps syncing and can show new payments, but it can\'t spend.';
 
   @override
-  String get securityKeysSetupTitle => 'Set up security keys';
+  String get securityKeysSetupTitle => 'Set Up Security Keys';
 
   @override
-  String get securityKeysSetupAgainTitle => 'Set up keys again';
+  String get securityKeysSetupAgainTitle => 'Set Up Keys Again';
 
   @override
   String get securityKeysSetupAgainNote =>
@@ -161,30 +164,30 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysSetupNote => 'Add each security key you want to use, then tap Finish.';
 
   @override
-  String get securityKeysAddFirst => 'Add your first key';
+  String get securityKeysAddFirst => 'Add Your First Key';
 
   @override
-  String get securityKeysAddAnother => 'Add another key';
+  String get securityKeysAddAnother => 'Add Another Key';
 
   @override
   String get securityKeysFinish => 'Finish';
 
   @override
-  String get securityKeysOneKeyTitle => 'Use only one key?';
+  String get securityKeysOneKeyTitle => 'Use Only One Key?';
 
   @override
   String get securityKeysOneKeyBody =>
       'We recommend at least two. If you lose your only key, you\'ll need your recovery phrase.';
 
   @override
-  String get securityKeysFinishAnyway => 'Use one key';
+  String get securityKeysFinishAnyway => 'Use One Key';
 
   @override
-  String get securityKeysNameLabel => 'Key name';
+  String get securityKeysNameLabel => 'Key Name';
 
   @override
   String securityKeysNameDefault(int number) {
-    return 'Security key $number';
+    return 'Security Key $number';
   }
 
   @override
@@ -194,7 +197,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeysContinue => 'Continue';
 
   @override
-  String get securityKeysNewPinTitle => 'Create a PIN for this key';
+  String get securityKeysNewPinTitle => 'Create a PIN for This Key';
 
   @override
   String get securityKeysNewPinLabel => 'New PIN';
@@ -255,20 +258,20 @@ class FhseLocalizationsEn extends FhseLocalizations {
   }
 
   @override
-  String get securityKeyUnlockTitle => 'Unlock with your security key';
+  String get securityKeyUnlockTitle => 'Unlock With Your Security Key';
 
   @override
   String get securityKeyUnlockButton => 'Unlock';
 
   @override
-  String get securityKeyLostKeys => 'Lost your keys?';
+  String get securityKeyLostKeys => 'Lost Your Keys?';
 
   @override
   String get securityKeyLostKeysBody =>
       'Open the wallet with your recovery phrase, then set up new keys in Settings.';
 
   @override
-  String get securityKeyUseRecoveryPhrase => 'Use recovery phrase';
+  String get securityKeyUseRecoveryPhrase => 'Use Recovery Phrase';
 
   @override
   String get securityKeyRecoveryPhraseHint => 'Enter your recovery phrase';
@@ -285,7 +288,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
       'Unlocked with your recovery phrase. Set up your keys again in Settings.';
 
   @override
-  String get securityKeyConnectTitle => 'Connect your security key';
+  String get securityKeyConnectTitle => 'Connect Your Security Key';
 
   @override
   String get securityKeyConnectBodyAndroid =>
@@ -296,10 +299,10 @@ class FhseLocalizationsEn extends FhseLocalizations {
       'Hold your security key near the top of your iPhone, or plug it in and touch it when it blinks.';
 
   @override
-  String get securityKeyConnectButton => 'Connect key';
+  String get securityKeyConnectButton => 'Connect Key';
 
   @override
-  String get securityKeyTryAgain => 'Try again';
+  String get securityKeyTryAgain => 'Try Again';
 
   @override
   String get securityKeyWaiting => 'Waiting for your key…';
@@ -311,13 +314,13 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeyKeyBlinking => 'Your key is blinking';
 
   @override
-  String get securityKeyTouchToSelect => 'Touch your key';
+  String get securityKeyTouchToSelect => 'Touch Your Key';
 
   @override
   String get securityKeyTouchBody => 'Touch your security key while it blinks.';
 
   @override
-  String get securityKeyPinTitle => 'Enter your key\'s PIN';
+  String get securityKeyPinTitle => 'Enter Your Key\'s PIN';
 
   @override
   String get securityKeyPinBody => 'This is your security key\'s PIN, not your phone\'s passcode.';
@@ -334,13 +337,13 @@ class FhseLocalizationsEn extends FhseLocalizations {
   }
 
   @override
-  String get securityKeyUseAnotherKey => 'Use a different key';
+  String get securityKeyUseAnotherKey => 'Use a Different Key';
 
   @override
-  String get securityKeyUseFingerprint => 'Use fingerprint instead';
+  String get securityKeyUseFingerprint => 'Use Fingerprint Instead';
 
   @override
-  String get securityKeyUsePin => 'Use PIN instead';
+  String get securityKeyUsePin => 'Use PIN Instead';
 
   @override
   String securityKeysNewPinBodyCount(int count) {
@@ -362,28 +365,28 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeyKeepHolding => 'Keep holding your key to the phone.';
 
   @override
-  String get securityKeyHoldAgain => 'Hold your key to your phone again';
+  String get securityKeyHoldAgain => 'Hold Your Key to Your Phone Again';
 
   @override
-  String get securityKeyConnectAgain => 'Connect your key again';
+  String get securityKeyConnectAgain => 'Connect Your Key Again';
 
   @override
-  String get securityKeyTouchToConfirm => 'Touch your key to confirm';
+  String get securityKeyTouchToConfirm => 'Touch Your Key to Confirm';
 
   @override
-  String get securityKeyTouchOnceMore => 'Touch your key once more';
+  String get securityKeyTouchOnceMore => 'Touch Your Key Once More';
 
   @override
-  String get securityKeyTouchToUnlock => 'Touch your key to unlock';
+  String get securityKeyTouchToUnlock => 'Touch Your Key to Unlock';
 
   @override
-  String get securityKeyFingerprintToConfirm => 'Touch the fingerprint sensor';
+  String get securityKeyFingerprintToConfirm => 'Touch the Fingerprint Sensor';
 
   @override
-  String get securityKeyFingerprintOnceMore => 'Touch the sensor once more';
+  String get securityKeyFingerprintOnceMore => 'Touch the Sensor Once More';
 
   @override
-  String get securityKeyFingerprintToUnlock => 'Touch the sensor to unlock';
+  String get securityKeyFingerprintToUnlock => 'Touch the Sensor to Unlock';
 
   @override
   String get securityKeyFingerprintBody => 'Use a finger you added to this security key.';
@@ -394,7 +397,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   }
 
   @override
-  String get securityKeyAddedTitle => 'Key added';
+  String get securityKeyAddedTitle => 'Key Added';
 
   @override
   String get securityKeyNameBody => 'Give it a name so you can tell your keys apart.';
@@ -523,7 +526,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get securityKeyWindowsWaiting => 'Waiting for Windows Security…';
 
   @override
-  String get securityKeyUseButton => 'Use security key';
+  String get securityKeyUseButton => 'Use Security Key';
 
   @override
   String get advancedSecurityAuthReason => 'Confirm it\'s you to open Advanced Security';
@@ -532,7 +535,7 @@ class FhseLocalizationsEn extends FhseLocalizations {
   String get advancedSecurityAuthFailed => 'Couldn\'t confirm it\'s you.';
 
   @override
-  String get advancedSecurityPasswordTitle => 'Enter your password';
+  String get advancedSecurityPasswordTitle => 'Enter Your Password';
 
   @override
   String advancedSecurityPasswordBody(String appName) {

@@ -135,10 +135,19 @@ class SecurityKeysState {
   final bool unreadable;
 }
 
+/// Store screenshots only: when set, [securityKeysState] and [securityKeysOn]
+/// report this instead of asking the vault, so Advanced Security can be shown
+/// with keys set up that do not exist. Null in the apps; nothing else reads it,
+/// so the wallet's password stays where it is. Set through
+/// `package:wallet_fhse/screenshots.dart`.
+SecurityKeysState? sampleSecurityKeysState;
+
 /// Never throws for a file it cannot open: that is [SecurityKeysState.unreadable],
 /// so the screen can offer a way out rather than wait forever. The file is not
 /// deleted: for a 25-word wallet it is the only copy of the password.
 Future<SecurityKeysState> securityKeysState() async {
+  final sample = sampleSecurityKeysState;
+  if (sample != null) return sample;
   final available = SecurityKeyService.isSupportedPlatform && await FhseVault.isAvailable();
   final engaged = await FhseVault.isEngaged();
   if (!engaged) return SecurityKeysState(available: available, engaged: false, keys: const []);
@@ -153,6 +162,8 @@ Future<SecurityKeysState> securityKeysState() async {
 /// checklist. Null where they cannot be set up: a platform with no way to
 /// reach a key, or a wallet created before keys existed.
 Future<bool?> securityKeysOn() async {
+  final sample = sampleSecurityKeysState;
+  if (sample != null) return sample.engaged;
   if (!SecurityKeyService.isSupportedPlatform || !await FhseVault.isAvailable()) return null;
   return FhseVault.isEngaged();
 }

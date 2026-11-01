@@ -136,7 +136,7 @@ void main() {
       );
       await open(tester);
       expect(find.text('the phrase'), findsNothing);
-      expect(find.text('Enter your password'), findsOneWidget);
+      expect(find.text('Enter Your Password'), findsOneWidget);
       expect(deviceAsked, isFalse);
     });
 

@@ -69,8 +69,9 @@ class SettingsNavTile extends StatelessWidget {
           children: [
             // Title takes its intrinsic width; the value fills the rest and
             // right-aligns so it (and the chevron) sit flush at the edge.
-            Text(title, style: _titleStyle),
-            if (value != null)
+            // Without a value the title fills the row, wrapping if it is long.
+            if (value != null) ...[
+              Text(title, style: _titleStyle),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.only(left: 12),
@@ -85,9 +86,9 @@ class SettingsNavTile extends StatelessWidget {
                     ),
                   ),
                 ),
-              )
-            else
-              const Spacer(),
+              ),
+            ] else
+              Expanded(child: Text(title, style: _titleStyle)),
             const SizedBox(width: 6),
             Icon(Icons.chevron_right, size: 18, color: BrandColors.inkMuted),
           ],

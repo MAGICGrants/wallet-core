@@ -37,6 +37,18 @@ abstract class WalletPasswordGuard {
   /// True when the guard, not the keystore, holds the password.
   Future<bool> isEngaged();
 
+  /// Whether what [keepForNewWallet] kept for this wallet is here and opens
+  /// with [password]. False for a wallet made before the guard existed, which
+  /// [WalletManager] brings over at its next unlock: the wallet password
+  /// becomes [passwordForNewWallet]'s, as a wallet created now gets. A guard
+  /// that keeps nothing per wallet has nothing to bring over.
+  Future<bool> keptUnder(String password) async => true;
+
+  /// A wallet's move onto the guard was put back: forget what
+  /// [keepForNewWallet] kept, which is under a password the wallet no longer
+  /// has.
+  Future<void> forgetKept() async {}
+
   /// The wallet was deleted; forget everything kept for it.
   Future<void> walletDeleted();
 

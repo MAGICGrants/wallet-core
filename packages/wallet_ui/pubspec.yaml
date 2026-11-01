@@ -1,5 +1,5 @@
 name: wallet_ui
-description: "Shared Flutter widgets built on the wallet engine (e.g. the tx-details dialog). Kept separate so non-UI consumers don't pull in Material. Strings are injected by the app; no l10n dependency."
+description: "Shared Flutter widgets built on the wallet engine (e.g. the tx-details dialog). Kept separate so non-UI consumers don't pull in Material. Widgets take their strings from the app; strings both apps word the same live in WalletUiLocalizations."
 publish_to: "none"
 version: 0.1.0
 resolution: workspace
@@ -10,6 +10,8 @@ environment:
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   intl: any
   flutter_svg: 2.2.3
@@ -28,5 +30,7 @@ dev_dependencies:
     sdk: flutter
 
 flutter:
+  # gen-l10n for lib/src/l10n (l10n.yaml); the output is committed.
+  generate: true
   assets:
     - assets/icons/

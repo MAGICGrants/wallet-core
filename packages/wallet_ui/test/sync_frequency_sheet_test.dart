@@ -9,7 +9,6 @@ import 'package:wallet_ui/wallet_ui.dart';
 const _labels = SyncFrequencyLabels(
   title: 'Sync Frequency',
   subtitle: 'How often your wallets sync while the app is closed.',
-  modeLabel: 'Frequency',
   continuous: 'Continuous',
   continuousDesc: 'Always up to date',
   periodic: 'Periodic',

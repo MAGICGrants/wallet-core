@@ -8,6 +8,7 @@ import 'package:wallet_infra/wallet_infra.dart';
 import 'app_config.dart';
 import 'app_session.dart';
 import 'crypto_wallet.dart';
+import 'guard_upgrade_files.dart';
 import 'metadata_backup.dart';
 import 'seed/seed.dart';
 import 'seed/seed_policy.dart';
@@ -179,6 +180,7 @@ class WalletManager with ChangeNotifier {
   /// guard's own unlock comes next ([isPasswordGuarded], then
   /// [unlockWithGuardedPassword]).
   Future<bool> unlockWithTypedPassword(String password) async {
+    await _settleTypedGuardUpgrade();
     final opened = await WalletPasswordStore.current.unlockTyped(password, guard: passwordGuard);
     switch (opened.kind) {
       case TypedUnlockKind.wrongPassword:
@@ -310,6 +312,10 @@ class WalletManager with ChangeNotifier {
   /// App Lock alone only covers the screen; this is the lock that takes the
   /// key out of memory.
   Future<void> fullyLock() async {
+    // A security-key upgrade finishes first ([_guardUpgradeInFlight]). Only
+    // then an await: with none under way, the password goes before this yields.
+    final upgrade = _guardUpgradeInFlight;
+    if (upgrade != null) await upgrade;
     AppSession.lock();
     // The password goes first, before the slow part (each close stores its
     // wallet). Nothing below needs it: every wallet closes with its own cache
@@ -337,6 +343,9 @@ class WalletManager with ChangeNotifier {
   /// running (otherwise [fullyLock] closes everything). The next open with the
   /// password ([unlockSpend], [openWalletFilesAndSync]) takes the keys back.
   Future<void> lockSpend() async {
+    // As in [fullyLock]: an upgrade under way finishes first.
+    final upgrade = _guardUpgradeInFlight;
+    if (upgrade != null) await upgrade;
     AppSession.lock();
     // The password first, as in [fullyLock]: nothing below needs it.
     _password = null;
@@ -570,19 +579,42 @@ class WalletManager with ChangeNotifier {
         for (final w in _visibleWallets)
           if (w.isViewOnly) w: w.leaveViewOnly(password),
       };
-      final storedSeed = await _loadStoredSeed();
+      // An upgrade to security keys the app did not live to finish is kept or
+      // put back, and one that is due copies the files, both before any wallet
+      // file is opened: on Windows an open Monero wallet locks its keys file.
+      await _settleGuardUpgrade();
+      final upgrading = await _guardUpgradeDue() && await _backUpForGuardUpgrade();
+      var storedSeed = await _loadStoredSeed();
 
       // Fan out so per-wallet opens (each in its own isolate or FFI thread)
       // overlap. A failure in one wallet must not cancel the others.
-      await Future.wait([
+      Future<void> openEach() => Future.wait([
         for (final w in _visibleWallets)
           leaving.containsKey(w)
               ? _afterLeavingViewOnly(w, leaving[w]!, storedSeed)
               : _openOneWallet(w, storedSeed),
       ]);
+      await openEach();
       // With logging on, once per process: how long a key derivation
       // takes here, to choose the iteration counts from real numbers.
       unawaited(WalletFileCrypto.logDerivationTimes());
+
+      if (upgrading) {
+        final upgrade = _upgradeToGuard(storedSeed);
+        _guardUpgradeInFlight = upgrade;
+        try {
+          switch (await upgrade) {
+            case _GuardUpgrade.kept:
+              storedSeed = await _loadStoredSeed();
+            case _GuardUpgrade.putBack:
+              await openEach();
+            case _GuardUpgrade.notDue:
+              break;
+          }
+        } finally {
+          _guardUpgradeInFlight = null;
+        }
+      }
 
       if (storedSeed != null) _openBackup(storedSeed.seed);
       await applyViewOnlySetting();
@@ -965,6 +997,196 @@ class WalletManager with ChangeNotifier {
     _openBackup(seed, restored: true);
   }
 
+  // ----- Security-key upgrade -----
+  //
+  // A wallet made before its [passwordGuard] existed has a password the guard
+  // cannot serve: a random one in the keystore, or on Linux and Windows the
+  // typed one. At its first unlock after the update it is moved onto the
+  // guard, as a wallet created now is made: the password becomes the guard's
+  // ([WalletPasswordGuard.passwordForNewWallet], derived from the seed, or
+  // random for a 25-word seed), every file under the password is re-encrypted
+  // with it, and the guard keeps its record. On Linux and Windows the typed
+  // password then unlocks `wallet.key`, as for a new wallet.
+  //
+  // Crash safety: every file is copied first ([GuardUpgradeFiles]), while
+  // nothing holds it open. The commit is the kept copy taking the new
+  // password ([WalletPasswordStore.saveCopy]), after the guard's record, which
+  // only the new password opens. An upgrade the app did not live to finish is
+  // therefore kept when the password the kept copy gives opens the guard's
+  // record, and put back from the copies otherwise; a failure short of the
+  // commit puts it back at once.
+
+  /// The upgrade under way, which a lock waits for: it must not drop the
+  /// password, or take Monero into background mode, halfway through.
+  Future<_GuardUpgrade>? _guardUpgradeInFlight;
+
+  /// Whether this unlock moves the wallet onto the guard: one is installed and
+  /// not engaged, its record for this wallet is missing, and nothing is open
+  /// yet (an unlock after a relock waits for the next launch).
+  Future<bool> _guardUpgradeDue() async {
+    final guard = passwordGuard;
+    final password = _password;
+    if (guard == null || password == null || isUnattendedRun) return false;
+    if (_wallets.values.any((w) => w.isLoaded)) return false;
+    final store = WalletPasswordStore.current;
+    if (store.typesPassword && store.typedPassword == null) return false;
+    try {
+      if (await guard.isEngaged() || await guard.keptUnder(password)) return false;
+      return await hasAnyExistingWallet();
+    } catch (e) {
+      log(
+        LogLevel.warn,
+        '[WalletManager] Could not tell whether a security-key upgrade is due: $e',
+      );
+      return false;
+    }
+  }
+
+  /// Copies every file the upgrade may write; false, with nothing left behind,
+  /// when the copies could not all be taken.
+  Future<bool> _backUpForGuardUpgrade() async {
+    try {
+      await GuardUpgradeFiles.backUp([
+        await SeedStore.path(),
+        for (final w in _wallets.values) ...await w.walletPasswordFilePaths(),
+      ]);
+      return true;
+    } catch (e) {
+      log(
+        LogLevel.error,
+        '[WalletManager] Could not copy the files for a security-key upgrade: $e',
+      );
+      try {
+        await GuardUpgradeFiles.discard();
+      } catch (_) {}
+      return false;
+    }
+  }
+
+  /// The upgrade, with the wallets open under the old password.
+  Future<_GuardUpgrade> _upgradeToGuard(({SeedSource seed, RestorePoint from})? storedSeed) async {
+    final guard = passwordGuard!;
+    final store = WalletPasswordStore.current;
+    final from = _password!;
+    try {
+      // Every wallet with a file must be open: one left closed would keep the
+      // old password after the commit, and never open again.
+      for (final w in _visibleWallets) {
+        if (!w.isLoaded && await w.hasExistingWallet()) {
+          throw StateError('${w.coinSymbol} did not open');
+        }
+      }
+      final kept = storedSeed ?? await _seedFromWallets();
+      if (kept == null || !_seedPolicy.accepts(kept.seed.format)) {
+        log(LogLevel.warn, '[WalletManager] No seed to upgrade to security keys from');
+        await GuardUpgradeFiles.discard();
+        return _GuardUpgrade.notDue;
+      }
+      final to = await guard.passwordForNewWallet(kept.seed);
+      // A seed-derived password the wallet already has (a creation cut short
+      // before the guard's record) needs only that record.
+      if (to != from) {
+        _useFileCost(typed: false);
+        for (final w in _wallets.values) {
+          await w.changeWalletPassword(from: from, to: to);
+        }
+      }
+      await SeedStore.save(seed: kept.seed, from: kept.from, password: to);
+      await guard.keepForNewWallet(to);
+      // The commit.
+      await store.saveCopy(to, typed: store.typedPassword);
+      _setPassword(to, _PasswordSource.guard);
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Security-key upgrade failed; putting it back: $e');
+      await _putBackGuardUpgrade();
+      return _GuardUpgrade.putBack;
+    }
+    log(LogLevel.info, '[WalletManager] Upgraded the wallet for security keys');
+    // Kept: what is left is cleaning up, which the next unlock finishes if
+    // this does not ([_settleGuardUpgrade]).
+    try {
+      await GuardUpgradeFiles.discard();
+    } catch (e) {
+      log(LogLevel.warn, '[WalletManager] Could not delete the upgrade copies yet: $e');
+    }
+    return _GuardUpgrade.kept;
+  }
+
+  /// Puts a failed upgrade back within the session: every wallet closes, so
+  /// nothing holds its files, the copies go back, and the old password stays
+  /// in memory. The caller opens the wallets again.
+  Future<void> _putBackGuardUpgrade() async {
+    await Future.wait([
+      for (final w in _wallets.values)
+        w.close().catchError((Object e) {
+          log(LogLevel.warn, 'close failed: $e', coin: w.coinSymbol);
+        }),
+    ]);
+    try {
+      await GuardUpgradeFiles.restore();
+      await passwordGuard?.forgetKept();
+    } catch (e) {
+      // The copies and the marker stay, and the next unlock tries again.
+      log(LogLevel.error, '[WalletManager] Could not put the upgrade back yet: $e');
+    }
+    _useFileCost(typed: _passwordSource == _PasswordSource.typed);
+  }
+
+  /// An upgrade the app did not live to finish: kept when the password in
+  /// memory (from the kept copy) opens the guard's record, which only the new
+  /// one does; put back from the copies otherwise.
+  Future<void> _settleGuardUpgrade() async {
+    // Never under an open wallet, which would write over what is put back.
+    if (_wallets.values.any((w) => w.isLoaded)) return;
+    if (!await GuardUpgradeFiles.inProgress()) return;
+    final guard = passwordGuard;
+    final password = _password;
+    final kept = guard != null && password != null && await guard.keptUnder(password);
+    try {
+      if (kept) {
+        await GuardUpgradeFiles.discard();
+        _setPassword(password, _PasswordSource.guard);
+        log(LogLevel.info, '[WalletManager] Finished an interrupted security-key upgrade');
+      } else {
+        await GuardUpgradeFiles.restore();
+        await guard?.forgetKept();
+        log(LogLevel.warn, '[WalletManager] Put back an interrupted security-key upgrade');
+      }
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Could not settle an interrupted upgrade yet: $e');
+    }
+  }
+
+  /// Linux and Windows, before the typed password is checked: an upgrade cut
+  /// short before its commit (no `wallet.key`) is put back first, since the
+  /// typed password no longer opens a stored seed it already re-encrypted.
+  /// One that got as far as `wallet.key` is settled after the unlock.
+  Future<void> _settleTypedGuardUpgrade() async {
+    if (_wallets.values.any((w) => w.isLoaded)) return;
+    try {
+      if (!await GuardUpgradeFiles.inProgress()) return;
+      if (await (await TypedPasswordStore.wrapFile()).exists()) return;
+      await GuardUpgradeFiles.restore();
+      await passwordGuard?.forgetKept();
+      log(LogLevel.warn, '[WalletManager] Put back an interrupted security-key upgrade');
+    } catch (e) {
+      log(LogLevel.error, '[WalletManager] Could not settle an interrupted upgrade yet: $e');
+    }
+  }
+
+  /// The seed read back from the first open wallet that can give one.
+  Future<({SeedSource seed, RestorePoint from})?> _seedFromWallets() async {
+    for (final w in loadedWallets) {
+      try {
+        final seed = await w.seedFromWallet();
+        if (seed != null) return seed;
+      } catch (e) {
+        log(LogLevel.warn, 'Could not read the seed back: $e', coin: w.coinSymbol);
+      }
+    }
+    return null;
+  }
+
   // ----- Metadata backup -----
 
   /// Opens the metadata backup, if the app installed one. Not awaited by the
@@ -1074,6 +1296,18 @@ class WalletManager with ChangeNotifier {
 }
 
 /// Where [WalletManager]'s in-memory password came from.
+/// How a security-key upgrade ended ([WalletManager]'s open path).
+enum _GuardUpgrade {
+  /// Moved onto the guard: the new password is in memory and kept.
+  kept,
+
+  /// Failed and put back: the wallets are closed, to be opened again.
+  putBack,
+
+  /// No seed to derive the new password from: nothing changed.
+  notDue,
+}
+
 enum _PasswordSource {
   /// Typed by the user (Linux, Windows).
   typed,

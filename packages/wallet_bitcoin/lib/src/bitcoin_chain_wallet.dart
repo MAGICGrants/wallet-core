@@ -469,6 +469,28 @@ class BitcoinChainWallet extends CryptoWallet {
   @override
   bool get storeTracksChainProgress => false;
 
+  // ----- Wallet password changes -----
+
+  @override
+  Future<List<String>> walletPasswordFilePaths() async => [
+    ...await super.walletPasswordFilePaths(),
+    (await _walletFile()).path,
+  ];
+
+  /// Open, this wallet writes its file again under [to] and keeps using it.
+  /// Closed (a hidden testnet coin), its file is re-encrypted as it is; one
+  /// that opens with neither password is left, and rebuilt from the seed
+  /// when the coin next opens.
+  @override
+  Future<void> changeWalletPassword({required String from, required String to}) async {
+    await super.changeWalletPassword(from: from, to: to);
+    if (_mnemonic != null && _lastPassword != null) {
+      await _persistTo(to);
+    } else if (!await rekeyWalletFile(await _walletFile(), from: from, to: to)) {
+      walletLog(LogLevel.warn, 'Wallet file opens with neither password; left as it is');
+    }
+  }
+
   @override
   Future<bool> store() async {
     if (_mnemonic == null || _lastPassword == null) return false;

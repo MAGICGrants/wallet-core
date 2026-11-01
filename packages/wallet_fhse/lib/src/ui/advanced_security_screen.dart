@@ -4,6 +4,7 @@ import 'package:wallet_infra/wallet_infra.dart' show SharedPreferencesService;
 import 'package:wallet_ui/wallet_ui.dart';
 
 import '../fhse_vault.dart' show FhseVault;
+import '../wallet_key_tree.dart';
 import '../l10n/fhse_localizations.dart';
 import 'app_lock.dart' show confirmOwnerToLockLater;
 import 'hmac_parity_screen.dart';
@@ -52,9 +53,19 @@ Future<int?> pickFullLockMinutes(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SheetHandle(),
-            Text(title, style: BrandText.sheetTitle),
-            const SizedBox(height: BrandSpacing.xs),
-            Text(description, style: BrandText.bodyMuted),
+            Row(
+              children: [
+                SheetIcon(
+                  icon: Icons.lock_clock_outlined,
+                  bg: BrandColors.surfaceAccent,
+                  color: BrandColors.primaryDeep,
+                ),
+                const SizedBox(width: 11),
+                Expanded(child: Text(title, style: BrandText.sheetTitle)),
+              ],
+            ),
+            const SizedBox(height: 7),
+            Text(description, style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5)),
             const SizedBox(height: BrandSpacing.lg),
             SettingsGroup(
               tiles: [
@@ -148,6 +159,10 @@ class AdvancedSecurityScreen extends StatefulWidget {
 class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
   SecurityKeysState? _state;
   bool _loadFailed = false;
+
+  /// False for a wallet whose FHSE seed is random (a 25-word seed): its
+  /// recovery phrase cannot rebuild the keys' setup, and it has no backup.
+  bool _phraseRecovers = true;
   int _fullLockMinutes = SecurityKeysPreferences.fullLockDefaultMinutes;
   bool _turningOff = false;
 
@@ -158,14 +173,18 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
   }
 
   Future<void> _load() async {
+    final manager = SecurityKeysUi.config.walletManagerOf(context);
     try {
       final state = await securityKeysState();
+      final stored = await manager.loadStoredSeed();
+      final phraseRecovers = stored == null || WalletKeyTree.isSeedDerived(stored.seed);
       final minutes =
           await SharedPreferencesService.get<int>(SecurityKeysPreferences.fullLockAfterMinutes) ??
           SecurityKeysPreferences.fullLockDefaultMinutes;
       if (!mounted) return;
       setState(() {
         _state = state;
+        _phraseRecovers = phraseRecovers;
         _loadFailed = false;
         _fullLockMinutes = minutes;
       });
@@ -263,12 +282,7 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
     final List<Widget> content;
     if (_loadFailed) {
       content = [
-        BrandCard(
-          color: BrandColors.warningBg,
-          borderColor: BrandColors.warningBg,
-          padding: const EdgeInsets.all(BrandSpacing.lg),
-          child: Text(i18n.securityKeysLoadFailed, style: BrandText.body),
-        ),
+        WarningCard.text(i18n.securityKeysLoadFailed),
         const SizedBox(height: BrandSpacing.xl),
         BrandButton(label: i18n.securityKeyTryAgain, onPressed: _retry),
       ];
@@ -276,10 +290,7 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
       content = [const Center(child: CircularProgressIndicator())];
     } else if (state.engaged && state.unreadable) {
       content = [
-        BrandCard(
-          color: BrandColors.warningBg,
-          borderColor: BrandColors.warningBg,
-          padding: const EdgeInsets.all(BrandSpacing.lg),
+        WarningCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -310,10 +321,7 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
       content = [
         BrandCard(
           padding: const EdgeInsets.all(BrandSpacing.lg),
-          child: Text(
-            i18n.securityKeysUnavailable(SecurityKeysUi.config.appName),
-            style: BrandText.body,
-          ),
+          child: Text(i18n.securityKeysUpgradeFailed, style: BrandText.body),
         ),
       ];
     } else if (!state.engaged) {
@@ -349,19 +357,7 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
     } else {
       content = [
         if (state.keys.length == 1) ...[
-          BrandCard(
-            color: BrandColors.warningBg,
-            borderColor: BrandColors.warningBg,
-            padding: const EdgeInsets.all(BrandSpacing.lg),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.warning_amber_rounded, size: 19, color: BrandColors.warning),
-                const SizedBox(width: BrandSpacing.md),
-                Expanded(child: Text(i18n.securityKeysOneKeyWarning, style: BrandText.body)),
-              ],
-            ),
-          ),
+          WarningCard.text(i18n.securityKeysOneKeyWarning),
           const SizedBox(height: BrandSpacing.xl),
         ],
         SettingsGroup(
@@ -450,9 +446,15 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // A 25-word wallet gets keys, with what that means.
+                        if (state != null && state.available && !_phraseRecovers) ...[
+                          WarningCard.text(i18n.securityKeysLegacySeedNote),
+                          const SizedBox(height: BrandSpacing.lg),
+                        ],
                         ...content,
-                        // Developer tooling (test/README.md); compiled out of release builds.
-                        if (kDebugMode && state != null) ...[
+                        // Developer tooling (test/README.md); compiled out of release builds,
+                        // and left out of store screenshots, which are debug builds.
+                        if (kDebugMode && state != null && sampleSecurityKeysState == null) ...[
                           const SizedBox(height: 18),
                           SettingsGroup(
                             label: 'Developer',

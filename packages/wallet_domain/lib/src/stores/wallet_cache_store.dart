@@ -81,6 +81,20 @@ class WalletCacheStore {
     await writeStringAtomic(file, blob);
   }
 
+  /// The cache's path, for the security-key upgrade to copy first
+  /// ([GuardUpgradeFiles]).
+  static Future<String> pathFor(String coinSymbol) async => (await _file(coinSymbol)).path;
+
+  /// Re-encrypts the cache from [from] to [to]: the wallet password changed
+  /// while this coin was not open. One that opens with neither is dropped,
+  /// being derived data the next sync rebuilds; one already under [to] stays.
+  static Future<void> rekey(String coinSymbol, {required String from, required String to}) async {
+    if (!await (await _file(coinSymbol)).exists()) return;
+    final data = await load(coinSymbol, from);
+    if (data.isNotEmpty) return save(coinSymbol, data, to);
+    if ((await load(coinSymbol, to)).isEmpty) await delete(coinSymbol);
+  }
+
   static Future<void> delete(String coinSymbol) async {
     final file = await _file(coinSymbol);
     if (await file.exists()) await file.delete();

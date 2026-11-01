@@ -31,6 +31,10 @@ class SeedStore {
 
   static Future<bool> exists() async => (await _file()).exists();
 
+  /// The file's path, for the security-key upgrade to copy first
+  /// ([GuardUpgradeFiles]).
+  static Future<String> path() async => (await _file()).path;
+
   static Future<void> save({
     required SeedSource seed,
     required RestorePoint from,

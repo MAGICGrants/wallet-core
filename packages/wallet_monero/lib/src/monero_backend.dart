@@ -294,6 +294,12 @@ abstract class MoneroBackend {
 
   Future<bool> store(NativeHandle wallet);
 
+  /// Re-encrypts the wallet under [password] (`Wallet_setPassword`); false,
+  /// with the reason in [walletErrorString], when it could not. wallet2
+  /// rewrites its keys and cache files at once; LWSF only takes the password,
+  /// and writes the file under it at the next [store].
+  Future<bool> setPassword(NativeHandle wallet, String password);
+
   /// A string the app keeps inside the wallet file (`Wallet_getCacheAttribute`),
   /// or empty when there is none. Saved with the file by [store].
   Future<String> cacheAttribute(NativeHandle wallet, String key);

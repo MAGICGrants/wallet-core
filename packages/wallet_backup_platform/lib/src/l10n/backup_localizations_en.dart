@@ -26,7 +26,39 @@ class BackupLocalizationsEn extends BackupLocalizations {
 
   @override
   String get backupLegacySeed =>
-      'Backup isn\'t available for 25-word recovery phrases. To use it, create a new wallet with a 16-word recovery phrase and send your funds to it.';
+      'Encrypted backups aren\'t available for 25-word recovery phrases.';
+
+  @override
+  String get backupLegacyStepsIntro =>
+      'Please follow these steps to migrate to a modern wallet, which we recommend doing with two devices:';
+
+  @override
+  String get backupLegacyStep1 =>
+      'Create a new wallet with a modern recovery phrase on another device.';
+
+  @override
+  String get backupLegacyStep2 =>
+      'Send the funds from this legacy wallet to your modern wallet.';
+
+  @override
+  String get backupLegacyStep3 =>
+      'Export your wallet data from this legacy wallet in an unencrypted CSV. Save this in a secure location along with your legacy recovery phrase.';
+
+  @override
+  String get backupLegacyStep4 =>
+      'Restore the modern wallet on this device.';
+
+  @override
+  String get backupExportCsv =>
+      'Export Unencrypted CSV';
+
+  @override
+  String get backupCsvExported =>
+      'History exported';
+
+  @override
+  String get backupCsvExportFailed =>
+      'Could not export the history';
 
   @override
   String get backupUnsupportedPassphrase =>
@@ -323,7 +355,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
   String get importReading => 'Reading the backup file…';
 
   @override
-  String get importNotFoundTitle => 'No Backup Found';
+  String get importNotFoundTitle => 'No backup found';
 
   @override
   String get importOk => 'OK';
