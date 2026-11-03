@@ -18,8 +18,11 @@ class BrandTextField extends StatelessWidget {
   final Widget? suffix;
   final int? maxLines;
 
-  /// A secret is typed here (a recovery phrase): no autocorrect, no
-  /// suggestions, and nothing for the keyboard to learn or remember.
+  /// A secret is typed here (a password, a PIN, a recovery phrase): no
+  /// autocorrect, no suggestions, no smart punctuation, and nothing for the
+  /// keyboard to learn or remember. Set it on every field that can be
+  /// obscured too: [obscureText] covers this only until a show button turns
+  /// it off.
   final bool sensitive;
 
   const BrandTextField({

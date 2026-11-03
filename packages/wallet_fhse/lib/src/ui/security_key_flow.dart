@@ -671,6 +671,7 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
         label: label,
         obscureText: _obscure,
         keyboardType: TextInputType.visiblePassword,
+        sensitive: true,
         onSubmitted: onSubmitted == null ? null : (_) => onSubmitted(),
         suffix: IconButton(
           icon: Icon(

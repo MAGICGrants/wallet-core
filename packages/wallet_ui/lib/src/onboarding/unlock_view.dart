@@ -120,6 +120,7 @@ class UnlockView extends StatelessWidget {
                   controller: passwordController,
                   hint: labels.passwordHint,
                   obscureText: obscure,
+                  sensitive: true,
                   onSubmitted: (_) => onUnlockPassword(),
                   suffix: IconButton(
                     icon: Icon(

@@ -159,6 +159,7 @@ class _PasswordSheetState extends State<_PasswordSheet> {
               label: i18n.advancedSecurityPasswordLabel,
               obscureText: _obscure,
               keyboardType: TextInputType.visiblePassword,
+              sensitive: true,
               onSubmitted: (_) => _check(),
               suffix: IconButton(
                 icon: Icon(
