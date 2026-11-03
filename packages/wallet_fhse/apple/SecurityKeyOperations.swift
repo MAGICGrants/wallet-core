@@ -38,9 +38,10 @@ import YubiKit
 // declares the 5Ci's protocol, Lightning; macOS over USB HID.
 //
 // This file has no Flutter types; SecurityKeyChannel.swift maps it to the
-// method channel. Nothing here logs PINs, salts, user ids, credential ids,
-// serial numbers or hmac-secret outputs, and YubiKit's own logging is capped
-// at warnings (its debug level can print credential ids).
+// method channel and passes its log lines (SecurityKeyLogHandler) to the
+// app's log. Nothing here logs PINs, salts, user ids, credential ids, serial
+// numbers or hmac-secret outputs, and YubiKit's own logging is capped at
+// warnings (its debug level can print credential ids).
 
 // MARK: - Results and errors
 
@@ -79,6 +80,11 @@ enum SecurityKeyStatus: String, Sendable {
 /// Hears one request's progress, with the key's transport once connected.
 /// Called on the operations actor; it must hand off to its own thread.
 typealias SecurityKeyStatusHandler = @Sendable (SecurityKeyStatus, SecurityKeyTransport?) -> Void
+
+/// Takes one line for the app's log, `warning` for a failure: each request
+/// says which key answered (transport, firmware, getInfo) and how it ended.
+/// Called on the operations actor; it must hand off to its own thread.
+typealias SecurityKeyLogHandler = @Sendable (_ line: String, _ warning: Bool) -> Void
 
 struct SecurityKeyCapabilities: Sendable {
   let nfc: Bool
@@ -237,8 +243,13 @@ actor SecurityKeyOperations {
     Logs.configure(logLevel: .warning)
   }()
 
+  private let logLine: SecurityKeyLogHandler
+
   private var isRunning = false
   private var cancelRequested = false
+
+  // The steps the current request got through, for its log line.
+  private var steps: [String] = []
 
   // Connection phase. The generation keeps a late result or a stale timer
   // from one request from touching the next one.
@@ -261,8 +272,9 @@ actor SecurityKeyOperations {
   // cannot tell them apart.
   private var chosenDevice: KeyLink.DeviceID?
 
-  init() {
+  init(log: @escaping SecurityKeyLogHandler = { _, _ in }) {
     _ = Self.configureLogging
+    logLine = log
   }
 
   // MARK: Capabilities
@@ -293,19 +305,29 @@ actor SecurityKeyOperations {
     touch: Bool,
     onStatus: @escaping SecurityKeyStatusHandler
   ) async throws -> SecurityKeyInfo {
-    try await withKey(prompt: prompt, choosing: touch, onStatus: onStatus) { session, link, serial in
-      let info = try await session.getInfo()
-      try checkCancelled()
+    try await withKey(
+      "inspect", prompt: prompt, choosing: touch, onStatus: onStatus
+    ) { session, info, link, serial in
       let pinProtocol = Self.pinProtocol(for: info)
       let pinSet = info.options.clientPin == true
       var pinRetries: Int?
       if pinSet {
+        step("PIN retries")
         pinRetries = try? await session.getPinRetries(protocol: pinProtocol).retries
       }
       let uv = info.options.userVerification == true
       var uvRetries: Int?
       if uv {
+        step("UV retries")
         uvRetries = try? await session.getUVRetries(protocol: pinProtocol)
+      }
+      // Next to the count on a wrong PIN's failure line, this shows whether
+      // the key counted every attempt.
+      var attempts: [String] = []
+      if pinSet { attempts.append("PIN \(pinRetries.map(String.init) ?? "unknown")") }
+      if uv { attempts.append("fingerprint \(uvRetries.map(String.init) ?? "unknown")") }
+      if !attempts.isEmpty {
+        logLine("inspect: attempts left: " + attempts.joined(separator: ", "), false)
       }
       try checkCancelled()
 
@@ -343,9 +365,8 @@ actor SecurityKeyOperations {
   ) async throws {
     guard !newPin.isEmpty else { throw SecurityKeyError(.pinPolicy, "The PIN is empty.") }
     try await withKey(
-      prompt: prompt, expectSerial: expectSerial, onStatus: onStatus
-    ) { session, _, _ in
-      let info = try await session.getInfo()
+      "setPin", prompt: prompt, expectSerial: expectSerial, onStatus: onStatus
+    ) { session, info, _, _ in
       guard let clientPin = info.options.clientPin else {
         throw SecurityKeyError.unsupported("This security key does not support a PIN.")
       }
@@ -355,6 +376,7 @@ actor SecurityKeyOperations {
         throw SecurityKeyError(.pinPolicy, "The PIN must be at least \(minLength) characters.")
       }
       try checkCancelled()
+      step("setPin")
       do {
         try await session.setPin(newPin, protocol: Self.pinProtocol(for: info))
       } catch CTAP2.SessionError.illegalArgument {
@@ -382,11 +404,10 @@ actor SecurityKeyOperations {
     }
 
     return try await withKey(
-      prompt: prompt, builtInUV: verification.usesBuiltInUV, expectSerial: expectSerial,
-      onStatus: onStatus
-    ) { session, link, serial in
+      "enroll", prompt: prompt, builtInUV: verification.usesBuiltInUV,
+      expectSerial: expectSerial, onStatus: onStatus
+    ) { session, info, link, serial in
       // a. Capabilities.
-      let info = try await session.getInfo()
       let missing = [CTAP2.Extension.Identifier.hmacSecret, .credProtect]
         .filter { !info.extensions.contains($0) }
         .map(\.value)
@@ -406,6 +427,7 @@ actor SecurityKeyOperations {
       try checkCancelled()
 
       // d. makeCredential: non-discoverable, hmac-secret, credProtect 3.
+      step("makeCredential")
       let credProtect = try await CTAP2.Extension.CredProtect(
         level: .userVerificationRequired, session: session, enforce: true)
       let hmacSecret = CTAP2.Extension.HmacSecret()
@@ -464,10 +486,9 @@ actor SecurityKeyOperations {
     guard !credentialIds.isEmpty else { throw SecurityKeyError.noCredentials }
 
     return try await withKey(
-      prompt: prompt, builtInUV: verification.usesBuiltInUV, expectSerial: expectSerial,
-      onStatus: onStatus
-    ) { session, _, serial in
-      let info = try await session.getInfo()
+      "getHmacSecret", prompt: prompt, builtInUV: verification.usesBuiltInUV,
+      expectSerial: expectSerial, onStatus: onStatus
+    ) { session, info, _, serial in
       guard info.extensions.contains(.hmacSecret) else {
         throw SecurityKeyError.unsupported("This security key does not support hmac-secret.")
       }
@@ -508,21 +529,23 @@ actor SecurityKeyOperations {
   // MARK: Request lifecycle
 
   /// Waits for a key, reads its serial number, opens a CTAP2 session, runs
-  /// `body` with the serial, then closes the connection (with a success or
-  /// failure message on the NFC sheet). With `expectSerial`, a key reporting
-  /// a different serial fails with `differentKey` before `body` runs, so
-  /// before any PIN or UV token request. So does a key plugged in other than
-  /// the one `choosing` (a touch inspect) last connected to, unless their
-  /// serials match. `onStatus` hears this request's progress until it
-  /// returns; with `builtInUV` a wait on the key is reported as a
-  /// fingerprint.
+  /// `body` with the key's getInfo and serial, then closes the connection
+  /// (with a success or failure message on the NFC sheet). The log hears
+  /// which key answered and how `operation` ended. With `expectSerial`, a
+  /// key reporting a different serial fails with `differentKey` before
+  /// `body` runs, so before any PIN or UV token request. So does a key
+  /// plugged in other than the one `choosing` (a touch inspect) last
+  /// connected to, unless their serials match. `onStatus` hears this
+  /// request's progress until it returns; with `builtInUV` a wait on the key
+  /// is reported as a fingerprint.
   private func withKey<T: Sendable>(
+    _ operation: String,
     prompt: String,
     builtInUV: Bool = false,
     expectSerial: Int? = nil,
     choosing: Bool = false,
     onStatus: @escaping SecurityKeyStatusHandler,
-    _ body: (CTAP2.Session, KeyLink, Int?) async throws -> T
+    _ body: (CTAP2.Session, CTAP2.GetInfo.Response, KeyLink, Int?) async throws -> T
   ) async throws -> T {
     guard !isRunning else { throw SecurityKeyError.busy }
     isRunning = true
@@ -530,6 +553,7 @@ actor SecurityKeyOperations {
     self.onStatus = onStatus
     statusTransport = nil
     usesBuiltInUV = builtInUV
+    steps = []
     defer {
       isRunning = false
       ctapCancel = nil
@@ -539,13 +563,16 @@ actor SecurityKeyOperations {
     }
 
     report(.waitingForKey)
+    step("connect")
     let link: KeyLink
     do {
       link = try await connect(prompt: prompt, choosing: choosing)
-    } catch let error as SecurityKeyError where error.code == .differentKey {
+    } catch {
+      let failure = Self.map(error)
       // The chosen key is gone; the next request starts afresh.
-      chosenDevice = nil
-      throw error
+      if failure.code == .differentKey { chosenDevice = nil }
+      logFailure(operation, failure, cause: error)
+      throw failure
     }
     statusTransport = link.transport
     report(.keyConnected)
@@ -553,7 +580,9 @@ actor SecurityKeyOperations {
       try checkCancelled()
       await link.setStatus(Self.holdMessage)
       // A key that hides its serial (or is not a YubiKey) is let through.
-      let serial = await Self.readSerial(link.connection)
+      step("serial")
+      let device = await Self.readDevice(link.connection)
+      let serial = device?.serial
       try checkCancelled()
       if let expectSerial, let serial, serial != expectSerial {
         throw SecurityKeyError.differentKey
@@ -567,6 +596,7 @@ actor SecurityKeyOperations {
         chosenDevice = nil
         throw SecurityKeyError.differentKey
       }
+      step("session")
       let session: CTAP2.Session
       do {
         session = try await CTAP2.Session.makeSession(connection: link.connection)
@@ -582,15 +612,42 @@ actor SecurityKeyOperations {
         #endif
       }
       report(.processing)
+      step("getInfo")
+      let info = try await session.getInfo()
+      logLine(Self.keyLine(operation, link.transport, device, info), false)
+      try checkCancelled()
       // Once the key has done the work, a late cancel no longer undoes it.
-      let result = try await body(session, link, serial)
+      let result = try await body(session, info, link, serial)
       await link.closeSucceeded(Self.doneMessage)
+      logLine("\(operation) finished", false)
       return result
     } catch {
       let failure = cancelRequested ? SecurityKeyError.cancelled : Self.map(error, builtInUV: builtInUV)
+      logFailure(operation, failure, cause: error)
       await link.closeFailed(failure)
       throw failure
     }
+  }
+
+  /// Notes that the current request reached `name`, for its log line.
+  private func step(_ name: String) {
+    steps.append(name)
+  }
+
+  /// How a request that did not finish ended: the channel's code, attempts
+  /// left, the steps it got through and what lay under the failure. A cancel
+  /// is the user's choice, not a failure, so it is not a warning.
+  private func logFailure(_ operation: String, _ failure: SecurityKeyError, cause: Error) {
+    let cancelled = failure.code == .cancelled
+    var line =
+      cancelled ? "\(operation) cancelled" : "\(operation) failed: \(failure.code.rawValue)"
+    if let retries = failure.retries { line += ", \(retries) attempts left" }
+    line += "; steps " + steps.joined(separator: " > ")
+    if !cancelled {
+      line += "; \(failure.message)"
+      if let cause = Self.describe(cause) { line += " [\(cause)]" }
+    }
+    logLine(line, !cancelled)
   }
 
   private func checkCancelled() throws {
@@ -719,19 +776,27 @@ actor SecurityKeyOperations {
 
   // MARK: Serial number
 
-  /// The YubiKey serial number from the Management application
-  /// (DeviceInfo.serialNumber), or nil when the key hides it (YubiKit reports
-  /// 0), is not a YubiKey, or the read fails for any reason; it never fails
-  /// the request. It must run before the CTAP2 session is made: making that
-  /// session selects the FIDO applet again, so a failed or partial
-  /// Management exchange cannot leave CTAP2 talking to the wrong applet.
-  /// Never logged.
-  private static func readSerial(_ connection: KeyLink.Connection) async -> Int? {
+  /// What the Management application says about a YubiKey.
+  private struct KeyDevice: Sendable {
+    /// Nil when the key hides it (YubiKit reports 0). Never logged.
+    let serial: Int?
+    /// Firmware version, form factor and FIPS series, for the log.
+    let summary: String
+  }
+
+  /// The YubiKey's serial number and firmware from the Management
+  /// application (DeviceInfo), or nil when the key is not a YubiKey or the
+  /// read fails for any reason; it never fails the request. It must run
+  /// before the CTAP2 session is made: making that session selects the FIDO
+  /// applet again, so a failed or partial Management exchange cannot leave
+  /// CTAP2 talking to the wrong applet.
+  private static func readDevice(_ connection: KeyLink.Connection) async -> KeyDevice? {
     guard let management = try? await Management.Session.makeSession(connection: connection),
-      let info = try? await management.getDeviceInfo(),
-      info.serialNumber != 0
+      let info = try? await management.getDeviceInfo()
     else { return nil }
-    return Int(exactly: info.serialNumber)
+    return KeyDevice(
+      serial: info.serialNumber == 0 ? nil : Int(exactly: info.serialNumber),
+      summary: "firmware \(info.version), \(info.formFactor)\(info.isFIPS ? ", FIPS" : "")")
   }
 
   // MARK: CTAP steps
@@ -746,6 +811,7 @@ actor SecurityKeyOperations {
     info: CTAP2.GetInfo.Response
   ) async throws -> Bool {
     guard info.versions.contains(.fido2_1) else { return false }
+    step("selection")
     report(.touchNeeded)
     do {
       try await finish(await session.selection())
@@ -767,9 +833,11 @@ actor SecurityKeyOperations {
   ) async throws -> CTAP2.Token {
     switch verification {
     case .pin(let pin):
+      step("PIN token")
       return try await pinToken(
         session, pin: pin, permissions: permissions, rpId: rpId, protocol: pinProtocol)
     case .uv:
+      step("UV token")
       return try await uvToken(
         session, permissions: permissions, rpId: rpId, protocol: pinProtocol)
     }
@@ -841,6 +909,7 @@ actor SecurityKeyOperations {
     token: CTAP2.Token,
     serial: Int?
   ) async throws -> SecurityKeySecret {
+    step("getAssertion")
     let hmacSecret = try await CTAP2.Extension.HmacSecret(session: session)
     let parameters = CTAP2.GetAssertion.Parameters(
       rpId: rpId,
@@ -953,6 +1022,74 @@ actor SecurityKeyOperations {
     case .fido2_1: return "FIDO_2_1"
     case .unknown(let value): return value
     }
+  }
+
+  // MARK: Log lines
+
+  /// Which key answered: its transport, what the Management application
+  /// says about it, and its getInfo. The AAGUID names the model, not the key.
+  private static func keyLine(
+    _ operation: String,
+    _ transport: SecurityKeyTransport,
+    _ device: KeyDevice?,
+    _ info: CTAP2.GetInfo.Response
+  ) -> String {
+    let pin: String
+    switch info.options.clientPin {
+    case .some(true): pin = "PIN set"
+    case .some(false): pin = "no PIN yet"
+    case .none: pin = "no PIN support"
+    }
+    var parts = [
+      transport.rawValue,
+      device?.summary ?? "no device info",
+      info.versions.map(versionString).joined(separator: "/"),
+      "PIN protocols " + info.pinUVAuthProtocols.map { String($0.rawValue) }.joined(separator: "/"),
+      pin,
+    ]
+    if info.options.pinUVAuthToken == true { parts.append("pinUvAuthToken") }
+    if let uv = info.options.userVerification {
+      parts.append(uv ? "fingerprint set up" : "no fingerprint yet")
+    }
+    parts.append("aaguid " + info.aaguid.rawValue.map { String(format: "%02x", $0) }.joined())
+    return "\(operation): " + parts.joined(separator: ", ")
+  }
+
+  /// What lay under a failure: the key's CTAP status, a status word, or the
+  /// error's kind, with an NFC or system error's domain and code. Never an
+  /// error's other associated values, which could hold response bytes. Nil
+  /// for this file's own errors, whose message says it all.
+  private static func describe(_ error: Error) -> String? {
+    if error is SecurityKeyError { return nil }
+    if let error = error as? CTAP2.SessionError {
+      switch error {
+      case .ctapError(let ctap, _):
+        return "CTAP \(ctap)"
+      case .failedResponse(let response, _):
+        return "status \(String(format: "%04X", response.rawStatus))"
+      case .connectionError(let connection, _):
+        return describe(connection)
+      default:
+        return "CTAP2.SessionError.\(caseName(error))"
+      }
+    }
+    if let error = error as? SmartCardConnectionError {
+      switch error {
+      case .setupFailed(_, let underlying?), .transmitFailed(_, let underlying?):
+        let underlying = underlying as NSError
+        return
+          "SmartCardConnectionError.\(caseName(error)) (\(underlying.domain) \(underlying.code))"
+      default:
+        return "SmartCardConnectionError.\(caseName(error))"
+      }
+    }
+    let nsError = error as NSError
+    return "\(type(of: error)) (\(nsError.domain) \(nsError.code))"
+  }
+
+  /// An enum value's case name, without its associated values.
+  private static func caseName(_ value: Any) -> String {
+    Mirror(reflecting: value).children.first?.label ?? String(describing: value)
   }
 
   // MARK: Error mapping

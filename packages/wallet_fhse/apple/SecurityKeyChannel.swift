@@ -10,8 +10,9 @@ import Foundation
 /// Thin glue over SecurityKeyOperations: it reads arguments, allows one key
 /// request at a time (`busy` otherwise), runs the work off the main thread and
 /// replies on the main thread. While a request runs, its progress goes to Dart
-/// as `status` calls on this channel. All state here is touched on the main
-/// thread only, which is where Flutter delivers method calls.
+/// as `status` calls on this channel, and lines for the app's log as `log`
+/// calls. All state here is touched on the main thread only, which is where
+/// Flutter delivers method calls.
 ///
 /// One file for iOS and macOS, compiled into each app's Runner (see README.md
 /// here).
@@ -26,11 +27,13 @@ final class SecurityKeyChannel: @unchecked Sendable {
   #endif
 
   private let channel: FlutterMethodChannel
-  private let operations = SecurityKeyOperations()
+  private let operations: SecurityKeyOperations
   private var isBusy = false
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(name: Self.name, binaryMessenger: messenger)
+    let logRelay = LogRelay(channel: channel)
+    operations = SecurityKeyOperations(log: { logRelay.send($0, warning: $1) })
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self else {
         result(FlutterMethodNotImplemented)
@@ -211,6 +214,25 @@ final class SecurityKeyChannel: @unchecked Sendable {
           "state": state.rawValue,
           "transport": transport?.rawValue ?? NSNull(),
         ] as [String: Any])
+    }
+  }
+
+  /// Sends lines for the app's log to Dart as `log` calls: on the main
+  /// thread, fire and forget. A request's lines go out before its result.
+  private final class LogRelay: @unchecked Sendable {
+    // Main thread only.
+    private weak var channel: FlutterMethodChannel?
+
+    init(channel: FlutterMethodChannel) {
+      self.channel = channel
+    }
+
+    /// Any thread.
+    func send(_ line: String, warning: Bool) {
+      DispatchQueue.main.async {
+        self.channel?.invokeMethod(
+          "log", arguments: ["line": line, "warning": warning] as [String: Any])
+      }
     }
   }
 

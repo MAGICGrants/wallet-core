@@ -248,6 +248,19 @@ See `test/README.md`. The tests run the real native library on the host. They
 pin FHSE's own test vector and run the vault lifecycle against a simulated
 key: set up, unlock, add, set up again, recovery phrase, turn off, delete.
 
+## Logs
+
+With Diagnostic Logs on, every key request on Android, iOS and macOS writes
+to the app's log, tagged `[SecurityKey]`: which key answered (transport,
+firmware and form factor from the Management application, CTAP versions, PIN
+protocols, whether a PIN is set, the AAGUID), the attempts left that an
+inspect reads, and how the request ended (the steps it reached, the channel's
+code, attempts left, and the key's CTAP error or the NFC or smart card error
+under it, as a warning). PINs, salts, user ids, credential ids, hmac-secret
+outputs and serial numbers never go in. Android writes the same lines to
+logcat (tag `SecurityKey`). Windows logs its WebAuthn path (`[WebAuthn]`);
+Linux logs nothing yet.
+
 ## Known limits
 
 - **FIDO2 over USB-C on iPhone and iPad** needs YubiKey firmware 5.8 or later.
