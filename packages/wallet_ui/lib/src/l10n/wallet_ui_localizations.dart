@@ -956,7 +956,7 @@ abstract class WalletUiLocalizations {
   /// No description provided for @receivePrimaryTab.
   ///
   /// In en, this message translates to:
-  /// **'Primary Address'**
+  /// **'Primary'**
   String get receivePrimaryTab;
 
   /// No description provided for @receiveCopyAddress.
@@ -1276,6 +1276,30 @@ abstract class WalletUiLocalizations {
   /// In en, this message translates to:
   /// **'Address book deleted'**
   String get settingsAddressBookDeleted;
+
+  /// Data settings row and its confirm sheet's title; shown only while there are labels. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Address Labels'**
+  String get settingsDeleteAddressLabelsButton;
+
+  /// Body of the confirm sheet, worded as the address book's. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete your address labels? If automatic backup is turned on, it will also delete the address labels in these automatic backups.'**
+  String get settingsDeleteAddressLabelsDialogText;
+
+  /// Confirm button. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get settingsDeleteAddressLabelsDialogDeleteButton;
+
+  /// Toast. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Address labels deleted'**
+  String get settingsAddressLabelsDeleted;
 
   /// No description provided for @txDetailsTitle.
   ///
@@ -1852,6 +1876,192 @@ abstract class WalletUiLocalizations {
   /// In en, this message translates to:
   /// **'{appName} Wallet asks for your password before showing these words again.'**
   String generateSeedPasswordNote(String appName);
+
+  /// Receive tab showing the next fresh address of a chain whose addresses are not called subaddresses (Bitcoin). Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Address'**
+  String get receiveAddressTab;
+
+  /// Receive tab listing the used addresses, which the user can label. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Labeled'**
+  String get receiveLabeledTab;
+
+  /// Line above the used-address list on Receive's Labeled tab. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Optionally label addresses if you want to easily search for transactions involving them.'**
+  String get labeledCaption;
+
+  /// Section label over every used address; shown upper-cased. Title Case. kind is subaddress (Monero) or address.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, subaddress{Used Subaddresses} other{Used Addresses}} · {count}'**
+  String labeledUsedHeader(String kind, int count);
+
+  /// Section label while Hide Unlabeled is on; shown upper-cased. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, subaddress{Labeled Subaddresses} other{Labeled Addresses}} · {count}'**
+  String labeledOnlyHeader(String kind, int count);
+
+  /// Toggle beside the used-address list that hides addresses without a label. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Unlabeled'**
+  String get labeledHideUnlabeled;
+
+  /// Row title of a used address without a label. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, subaddress{Subaddress #{index}} other{Address #{index}}}'**
+  String labeledAddressTitle(String kind, int index);
+
+  /// How many transactions an address received, beside its total. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 transaction} other{{count} transactions}}'**
+  String labeledTransactionCount(int count);
+
+  /// When an address last received a transaction; time is a timeAgo string. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Last used {time}'**
+  String labeledLastUsed(String time);
+
+  /// Button on a used address that opens the label sheet. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Label'**
+  String get labeledLabelButton;
+
+  /// Empty-state title on the Labeled tab. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, subaddress{No used subaddresses yet} other{No used addresses yet}}'**
+  String labeledEmptyTitle(String kind);
+
+  /// Empty-state body on the Labeled tab. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Optionally label addresses if you want to easily search for transactions involving them. {kind, select, subaddress{A subaddress shows up here after its first transaction.} other{An address shows up here after its first transaction.}}'**
+  String labeledEmptyBody(String kind);
+
+  /// Title of the sheet that sets an address's label. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, subaddress{Label Subaddress #{index}} other{Label Address #{index}}}'**
+  String labelSheetTitle(String kind, int index);
+
+  /// Field label in the label sheet; shown upper-cased. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Label'**
+  String get labelSheetField;
+
+  /// Button that saves a label; an empty one removes it. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Label'**
+  String get labelSheetSave;
+
+  /// Stat label and button on an address's own screen: the button opens History filtered to it. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Transactions'**
+  String get addressDetailTransactions;
+
+  /// Stat label: when the address last received a transaction. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Last Transaction'**
+  String get addressDetailLastTransaction;
+
+  /// Button on a labeled address's screen. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Label'**
+  String get addressDetailEditLabel;
+
+  /// Button on an unlabeled address's screen. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Label'**
+  String get addressDetailAddLabel;
+
+  /// Section label in History's address filter, over the labeled addresses to pick from; shown upper-cased. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Labeled Addresses'**
+  String get historyFilterLabeledAddresses;
+
+  /// Relative time under 45 seconds, after Last used. Lower case, as timeago words it.
+  ///
+  /// In en, this message translates to:
+  /// **'a moment ago'**
+  String get timeAgoMoment;
+
+  /// Relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'a minute ago'**
+  String get timeAgoMinute;
+
+  /// Relative time; count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} minutes ago'**
+  String timeAgoMinutes(int count);
+
+  /// Relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'about an hour ago'**
+  String get timeAgoHour;
+
+  /// Relative time; count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} hours ago'**
+  String timeAgoHours(int count);
+
+  /// Relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'a day ago'**
+  String get timeAgoDay;
+
+  /// Relative time; count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} days ago'**
+  String timeAgoDays(int count);
+
+  /// Relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'about a month ago'**
+  String get timeAgoMonth;
+
+  /// Relative time; count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} months ago'**
+  String timeAgoMonths(int count);
+
+  /// Relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'about a year ago'**
+  String get timeAgoYear;
+
+  /// Relative time; count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} years ago'**
+  String timeAgoYears(int count);
 }
 
 class _WalletUiLocalizationsDelegate extends LocalizationsDelegate<WalletUiLocalizations> {

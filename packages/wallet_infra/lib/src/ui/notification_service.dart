@@ -37,6 +37,7 @@ class NotificationService {
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
+    const initSettingsMacOS = DarwinInitializationSettings();
     const initSettingsLinux = LinuxInitializationSettings(defaultActionName: 'Open wallet');
 
     // Windows requires an absolute path to an .ico file.
@@ -59,6 +60,7 @@ class NotificationService {
       InitializationSettings(
         android: initSettingsAndroid,
         iOS: initSettingsIOS,
+        macOS: initSettingsMacOS,
         linux: initSettingsLinux,
         windows: initSettingsWindows,
       ),
@@ -79,6 +81,11 @@ class NotificationService {
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       final granted = await androidPlugin?.requestNotificationsPermission();
       return granted ?? true; // Older Android versions don't need permission.
+    } else if (Platform.isMacOS) {
+      final macOSPlugin = notificationsPlugin
+          .resolvePlatformSpecificImplementation<MacOSFlutterLocalNotificationsPlugin>();
+      final granted = await macOSPlugin?.requestPermissions(alert: true, badge: true, sound: true);
+      return granted ?? false;
     }
     return true; // Other platforms (Linux, etc.)
   }
@@ -103,6 +110,7 @@ class NotificationService {
           icon: androidSmallIcon,
         ),
         iOS: const DarwinNotificationDetails(threadIdentifier: notificationChannelId),
+        macOS: const DarwinNotificationDetails(threadIdentifier: notificationChannelId),
       ),
     );
   }

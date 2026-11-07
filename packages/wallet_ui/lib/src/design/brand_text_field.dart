@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'brand.dart';
 
@@ -18,9 +19,20 @@ class BrandTextField extends StatelessWidget {
   final Widget? suffix;
   final int? maxLines;
 
-  /// A secret is typed here (a recovery phrase): no autocorrect, no
-  /// suggestions, and nothing for the keyboard to learn or remember.
+  /// A secret is typed here (a password, a PIN, a recovery phrase): no
+  /// autocorrect, no suggestions, no smart punctuation, and nothing for the
+  /// keyboard to learn or remember. Set it on every field that can be
+  /// obscured too: [obscureText] covers this only until a show button turns
+  /// it off.
   final bool sensitive;
+
+  final bool autofocus;
+
+  /// Characters the field takes, enforced as they are typed; no counter is
+  /// shown.
+  final int? maxLength;
+  final TextCapitalization textCapitalization;
+  final TextInputAction? textInputAction;
 
   const BrandTextField({
     super.key,
@@ -35,6 +47,10 @@ class BrandTextField extends StatelessWidget {
     this.suffix,
     this.maxLines = 1,
     this.sensitive = false,
+    this.autofocus = false,
+    this.maxLength,
+    this.textCapitalization = TextCapitalization.none,
+    this.textInputAction,
   });
 
   @override
@@ -45,6 +61,10 @@ class BrandTextField extends StatelessWidget {
       keyboardType: keyboardType,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
+      autofocus: autofocus,
+      textCapitalization: textCapitalization,
+      textInputAction: textInputAction,
+      inputFormatters: maxLength == null ? null : [LengthLimitingTextInputFormatter(maxLength)],
       maxLines: obscureText ? 1 : maxLines,
       autocorrect: !sensitive,
       enableSuggestions: !sensitive,

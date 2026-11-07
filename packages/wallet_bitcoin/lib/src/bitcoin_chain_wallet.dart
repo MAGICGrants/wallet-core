@@ -1683,6 +1683,34 @@ class BitcoinChainWallet extends CryptoWallet {
   }
 
   @override
+  RotatingAddressKind get rotatingAddressKind => RotatingAddressKind.address;
+
+  /// Every address on the external (receive) chain that has received a
+  /// transaction, by its index there. Change addresses are left out, even one
+  /// paid directly: [getReceiveAddress] never hands one out. So are this
+  /// wallet's own sends to itself, which are outgoing.
+  @override
+  Future<List<UsedReceiveAddress>> loadUsedReceiveAddresses() async {
+    final receiveIndex = {
+      for (final a in _addresses)
+        if (!a.isChange) a.address: a.index,
+    };
+    return summarizeReceipts([
+      for (final tx in txHistory)
+        if (tx.direction == txDirectionIncoming)
+          for (final r in tx.recipients)
+            if (receiveIndex[r.address] case final index? when !r.isChange)
+              (
+                address: r.address,
+                index: index,
+                amountBaseUnits: r.amountBaseUnits,
+                txHash: tx.hash,
+                timestamp: tx.timestamp,
+              ),
+    ]);
+  }
+
+  @override
   bool isAddressValid(String address) => _tryDecodeAddress(address) != null;
 
   /// Every address form this wallet will pay to, or null.

@@ -117,6 +117,8 @@ class _SeedWordSlotState extends State<SeedWordSlot> {
                 autocorrect: false,
                 enableSuggestions: false,
                 enableIMEPersonalizedLearning: false,
+                smartDashesType: SmartDashesType.disabled,
+                smartQuotesType: SmartQuotesType.disabled,
                 textInputAction: widget.isLast ? TextInputAction.done : TextInputAction.next,
                 cursorColor: BrandColors.primary,
                 // Force the field box down to the text height so it doesn't add

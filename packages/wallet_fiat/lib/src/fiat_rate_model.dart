@@ -96,16 +96,29 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     await SharedPreferencesService.set<String>(SettingsKeys.fiatApiMode, mode.name);
   }
 
-  /// Clears every persisted per-coin rate. Called when the user changes the fiat
-  /// currency or API mode so the UI doesn't briefly show a stale rate quoted in
-  /// the previous fiat.
+  /// Clears every persisted rate, in every currency. Called when the user
+  /// changes the fiat currency or API mode, so a rate saved long ago is not
+  /// shown if they come back to that currency.
   static Future<void> clearPersistedRates() async {
     for (final coin in _krakenBase.keys) {
-      await SharedPreferencesService.remove(_persistKeyFor(coin));
+      await SharedPreferencesService.remove(_legacyPersistKeyFor(coin));
+      for (final currency in FiatCurrency.all) {
+        await SharedPreferencesService.remove(_persistKeyFor(coin, currency.code));
+      }
     }
   }
 
-  final Map<String, double?> _rates = {};
+  /// Stands in for Kraken in tests: the price for a ticker pair, ahead of the
+  /// API mode and the Tor proxy. Null in the apps.
+  @visibleForTesting
+  static Future<double> Function(String pair)? requestPairForTesting;
+
+  /// Each coin's latest rate with the currency it was fetched in, so a rate is
+  /// only ever shown in that currency ([rateFor]). `fetch` numbers the fetch
+  /// that got it (0 for one read from disk), so an older fetch that ends last
+  /// cannot replace a newer rate.
+  final Map<String, ({String fiat, double value, int fetch})?> _rates = {};
+  int _fetchCount = 0;
   bool _isLoading = false;
   bool _hasFailed = false;
   bool _isDisabled = false;
@@ -140,18 +153,24 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     return _krakenBase.containsKey(base);
   }
 
-  /// Latest fiat rate for [coinSymbol], or `null` if it hasn't been fetched yet
-  /// (or the most recent fetch failed). Testnet coins resolve to their mainnet
-  /// `CryptoWallet.fiatBaseSymbol` rate (e.g. TBTC → BTC).
+  /// Latest fiat rate for [coinSymbol] in [fiatCode], or `null` if none has
+  /// been fetched in that currency yet (or the most recent fetch failed).
+  /// Testnet coins resolve to their mainnet `CryptoWallet.fiatBaseSymbol` rate
+  /// (e.g. TBTC → BTC).
   double? rateFor(String coinSymbol, {bool? walletActive}) {
     final symbol = coinSymbol.toUpperCase();
     final wallet = _walletManager?.getWallet(symbol);
     if (walletActive == false) return null;
     if (wallet != null && wallet.connectionAddress.isEmpty) return null;
-    return _rates[(wallet?.fiatBaseSymbol ?? symbol).toUpperCase()];
+    return _rateInFiat(_rates[(wallet?.fiatBaseSymbol ?? symbol).toUpperCase()]);
   }
 
-  Map<String, double?> get rates => Map.unmodifiable(_rates);
+  /// Every coin's rate in [fiatCode]; null where there is none in it.
+  Map<String, double?> get rates =>
+      Map.unmodifiable(_rates.map((coin, rate) => MapEntry(coin, _rateInFiat(rate))));
+
+  double? _rateInFiat(({String fiat, double value, int fetch})? rate) =>
+      rate != null && rate.fiat == _fiatCode ? rate.value : null;
   bool get isLoading => _isLoading;
   bool get hasFailed => _hasFailed;
   bool get isDisabled => _isDisabled;
@@ -171,7 +190,15 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     return (currency: fiatCurrency, rate: rate);
   }
 
-  static String _persistKeyFor(String coinSymbol) =>
+  /// One key per coin and currency, so a saved rate always says which
+  /// currency it is in.
+  static String _persistKeyFor(String coinSymbol, String fiat) =>
+      '${SettingsKeys.fiatRate}_${coinSymbol.toLowerCase()}_${fiat.toLowerCase()}';
+
+  /// Where builds before the currency was part of the key saved a rate. Not
+  /// read: nothing says which currency it was in, and a fetch that ended after
+  /// a currency change could have saved one in the old currency.
+  static String _legacyPersistKeyFor(String coinSymbol) =>
       '${SettingsKeys.fiatRate}_${coinSymbol.toLowerCase()}';
 
   void attachWalletManager(WalletManager manager) {
@@ -229,13 +256,16 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
   Future<void> _loadPersisted() async {
     _fiatCode = await SharedPreferencesService.get<String>(SettingsKeys.fiatCurrency) ?? 'USD';
     _fiatApiMode = await FiatRateModel.loadFiatApiMode();
+    final fiat = _fiatCode;
     for (final coin in _krakenBase.keys) {
-      _rates[coin] = await SharedPreferencesService.get<double>(_persistKeyFor(coin));
+      await SharedPreferencesService.remove(_legacyPersistKeyFor(coin));
+      final rate = await SharedPreferencesService.get<double>(_persistKeyFor(coin, fiat));
+      _rates[coin] = rate == null ? null : (fiat: fiat, value: rate, fetch: 0);
     }
   }
 
-  Future<void> _persist(String coin, double rate) async {
-    await SharedPreferencesService.set<double>(_persistKeyFor(coin), rate);
+  Future<void> _persist(String coin, String fiat, double rate) async {
+    await SharedPreferencesService.set<double>(_persistKeyFor(coin, fiat), rate);
   }
 
   Future<double> _requestPairRateClearnet(String pair) async {
@@ -297,6 +327,8 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
   }
 
   Future<double> _requestPairRate(String pair) async {
+    final fake = requestPairForTesting;
+    if (fake != null) return fake(pair);
     if (_fiatApiMode == FiatApiMode.clearnet) {
       try {
         return await _requestPairRateClearnet(pair);
@@ -308,15 +340,15 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     return _requestPairRateTor(pair);
   }
 
-  /// Fetches the rate for one coin, applying the USD->fiat bridge for fiat codes
-  /// Kraken doesn't quote directly.
-  Future<double> _fetchCoinRate(String coin) async {
+  /// Fetches the rate for one coin in [fiat], applying the USD->fiat bridge for
+  /// fiat codes Kraken doesn't quote directly.
+  Future<double> _fetchCoinRate(String coin, String fiat) async {
     final fixed = FiatRates.fixedRates?[coin];
     if (fixed != null) return fixed;
     final krakenBase = _krakenBase[coin]!;
-    final isIndirect = FiatCurrency.of(_fiatCode).bridgedViaUsd;
-    final pair1 = isIndirect ? '${krakenBase}USD' : '$krakenBase$_fiatCode';
-    final pair2 = isIndirect ? 'USDT$_fiatCode' : null;
+    final isIndirect = FiatCurrency.of(fiat).bridgedViaUsd;
+    final pair1 = isIndirect ? '${krakenBase}USD' : '$krakenBase$fiat';
+    final pair2 = isIndirect ? 'USDT$fiat' : null;
 
     final rates = await Future.wait([
       _requestPairRate(pair1),
@@ -342,6 +374,11 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     _isDisabled = false;
 
     _fiatCode = await SharedPreferencesService.get<String>(SettingsKeys.fiatCurrency) ?? 'USD';
+    // This fetch's currency and number. Fetches overlap (a currency change
+    // restarts the service while the last one is still out), and each answer
+    // is kept only if it is still current when it arrives.
+    final fiat = _fiatCode;
+    final fetch = ++_fetchCount;
 
     _isLoading = true;
     notifyListeners();
@@ -362,22 +399,35 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     await Future.wait(
       coinsToFetch.map((coin) async {
         try {
-          final rate = await _fetchCoinRate(coin);
-          _rates[coin] = rate;
-          await _persist(coin, rate);
+          final rate = await _fetchCoinRate(coin, fiat);
           anySucceeded = true;
-          log(LogLevel.info, '$_fiatCode/$coin rate: $rate');
+          if (fiat != _fiatCode) {
+            log(LogLevel.info, 'Dropped the $fiat/$coin rate: the currency is now $_fiatCode.');
+            return;
+          }
+          final current = _rates[coin];
+          if (current != null && current.fiat == fiat && current.fetch > fetch) {
+            log(LogLevel.info, 'Dropped the $fiat/$coin rate: a newer fetch already answered.');
+            return;
+          }
+          _rates[coin] = (fiat: fiat, value: rate, fetch: fetch);
+          await _persist(coin, fiat, rate);
+          log(LogLevel.info, '$fiat/$coin rate: $rate');
         } catch (error) {
-          log(LogLevel.error, 'Failed to get $coin/$_fiatCode rate. $error');
+          log(LogLevel.error, 'Failed to get $coin/$fiat rate. $error');
           anyFailed = true;
         }
       }),
     );
 
-    _hasFailed = anyFailed && !anySucceeded;
-    _lastFetchFailed = anyFailed;
-    _isLoading = false;
-    _scheduleRetry(failed: anyFailed);
+    // A fetch that a newer one has overtaken leaves loading, failure and
+    // retries to that one.
+    if (fetch == _fetchCount) {
+      _hasFailed = anyFailed && !anySucceeded;
+      _lastFetchFailed = anyFailed;
+      _isLoading = false;
+      _scheduleRetry(failed: anyFailed);
+    }
     notifyListeners();
   }
 

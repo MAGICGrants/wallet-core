@@ -11,6 +11,7 @@ import 'app_config.dart';
 import 'background_sync_mode.dart';
 import 'metadata_backup.dart';
 import 'payment_uri.dart';
+import 'receive/used_receive_address.dart';
 import 'seed/seed.dart';
 import 'stores/tx_notification_store.dart';
 import 'stores/wallet_cache_store.dart';
@@ -656,6 +657,17 @@ abstract class CryptoWallet with ChangeNotifier {
   String getPrimaryAddress();
 
   String? getReceiveAddress() => getPrimaryAddress();
+
+  /// What this wallet calls the receive addresses it hands out one after
+  /// another, or null when it keeps a single address (Ethereum and its
+  /// tokens). Only a wallet with a kind lists its used addresses on Receive.
+  RotatingAddressKind? get rotatingAddressKind => null;
+
+  /// Every receive address handed out by [getReceiveAddress] that has received
+  /// a transaction, most recently used first ([summarizeReceipts]). Change
+  /// addresses, and Monero's primary address, are not among them. Empty for a
+  /// wallet with no [rotatingAddressKind].
+  Future<List<UsedReceiveAddress>> loadUsedReceiveAddresses() async => const [];
 
   bool isAddressValid(String address);
 

@@ -245,6 +245,23 @@ void main() {
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
   });
 
+  testWidgets('a shown PIN still gets no autocorrect, suggestions or keyboard learning', (
+    tester,
+  ) async {
+    await pumpFlow(tester, enrolling: false, useKey: (_, _) async => null);
+    await tap(tester, 'Connect Key');
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pump();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.obscureText, isFalse);
+    expect(field.autocorrect, isFalse);
+    expect(field.enableSuggestions, isFalse);
+    expect(field.enableIMEPersonalizedLearning, isFalse);
+    expect(field.smartDashesType, SmartDashesType.disabled);
+    expect(field.smartQuotesType, SmartQuotesType.disabled);
+  });
+
   testWidgets('a YubiKey Bio skips the PIN and asks for its sensor', (tester) async {
     inspectResult = _key(fingerprint: true);
     final attempts = <KeyVerification>[];

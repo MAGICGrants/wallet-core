@@ -69,9 +69,13 @@ class SecurityKeyException(
  *
  * Nothing secret is logged or put in a status event, and no PIN/UV token
  * outlives the call that got it. The key's serial number is never logged.
+ * [appLog] gets the lines that also go to logcat for the app's own log, on
+ * the worker thread: which key answered each operation and how it ended,
+ * `warning` for a failure.
  */
 class SecurityKeyOperations(
     context: Context,
+    private val appLog: (line: String, warning: Boolean) -> Unit,
     private val activityProvider: () -> Activity?,
 ) {
     companion object {
@@ -233,6 +237,13 @@ class SecurityKeyOperations(
         @Volatile
         internal var builtInUv = false
 
+        /** The steps the operation got through, for its log line. Worker thread only. */
+        internal val steps = mutableListOf<String>()
+
+        internal fun step(name: String) {
+            steps.add(name)
+        }
+
         internal fun offer(device: YubiKeyDevice) {
             devices.offer(device)
         }
@@ -321,8 +332,13 @@ class SecurityKeyOperations(
         }
     }
 
-    /** [serial]: the YubiKey serial number read before [ctap] was opened, or null. */
-    private class KeySession(val ctap: Ctap2Session, val transport: String, val serial: Int?) {
+    /**
+     * [device]: what the Management application said before [ctap] was opened,
+     * or null. Its serial number is null when the key hides it.
+     */
+    private class KeySession(val ctap: Ctap2Session, val transport: String, val device: KeyDevice?) {
+        val serial: Int? get() = device?.serial
+
         /** The user touched this key to choose it among several ([touchSelect]). */
         var touched = false
     }
@@ -489,14 +505,23 @@ class SecurityKeyOperations(
      * touch with authenticatorSelection (CTAP 2.0 keys: a zero-length
      * pinUvAuthParam makeCredential); over NFC, holding the key is the presence.
      */
-    fun inspect(op: Operation, touch: Boolean): KeyInfo = withKey(op, choosing = touch) { session ->
+    fun inspect(op: Operation, touch: Boolean): KeyInfo = withKey("inspect", op, choosing = touch) { session ->
         val info = session.ctap.cachedInfo
         val options = info.options
         val pinSet = options["clientPin"] == true
         val uv = options["uv"] == true
         val clientPin = ClientPin(session.ctap, pinProtocolFor(info))
+        if (pinSet) op.step("PIN retries")
         val retries = if (pinSet) guardCtap { clientPin.pinRetries.count } else null
+        if (uv) op.step("UV retries")
         val uvRetries = if (uv) uvRetriesOrNull(clientPin) else null
+        // Next to the count on a wrong PIN's failure line, this shows whether
+        // the key counted every attempt.
+        val attempts = listOfNotNull(
+            if (pinSet) "PIN $retries" else null,
+            if (uv) "fingerprint ${uvRetries ?: "unknown"}" else null,
+        )
+        if (attempts.isNotEmpty()) log("inspect: attempts left: ${attempts.joinToString(", ")}")
         @Suppress("USELESS_CAST")
         val aaguid = (info.aaguid as ByteArray?)?.takeIf { it.size == 16 }?.copyOf()
         // A key touched to choose it among several is not asked again.
@@ -525,7 +550,7 @@ class SecurityKeyOperations(
      * wipes it. [expectSerial]: see [withKey].
      */
     fun setPin(op: Operation, newPin: CharArray, expectSerial: Long?) {
-        withKey(op, expectSerial) { session ->
+        withKey("setPin", op, expectSerial) { session ->
             val info = session.ctap.cachedInfo
             when (info.options["clientPin"]) {
                 true -> throw SecurityKeyException(PIN_ALREADY_SET, "This security key already has a PIN")
@@ -533,6 +558,7 @@ class SecurityKeyOperations(
             }
             checkNewPin(newPin, maxOf(MIN_PIN_LENGTH, info.minPinLength))
             op.throwIfCancelled()
+            op.step("setPin")
             guardCtap { ClientPin(session.ctap, pinProtocolFor(info)).setPin(newPin) }
         }
     }
@@ -551,7 +577,7 @@ class SecurityKeyOperations(
         verification: Verification,
         excludeCredentialIds: List<ByteArray>,
         expectSerial: Long?,
-    ): HmacSecretResult = withKey(op, expectSerial) { session ->
+    ): HmacSecretResult = withKey("enroll", op, expectSerial) { session ->
         val ctap = session.ctap
         val info = ctap.cachedInfo
         op.builtInUv = verification is Verification.BuiltInUv
@@ -581,6 +607,7 @@ class SecurityKeyOperations(
             val excludeList = descriptors(usableCredentialIds(excludeCredentialIds, info))
             val pinUvAuthParam = protocol.authenticate(token, clientDataHash)
             op.throwIfCancelled()
+            op.step("makeCredential")
             val credential = try {
                 ctap.makeCredential(
                     clientDataHash,
@@ -650,7 +677,7 @@ class SecurityKeyOperations(
         verification: Verification,
         credentialIds: List<ByteArray>,
         expectSerial: Long?,
-    ): HmacSecretResult = withKey(op, expectSerial) { session ->
+    ): HmacSecretResult = withKey("getHmacSecret", op, expectSerial) { session ->
         val ctap = session.ctap
         val info = ctap.cachedInfo
         op.builtInUv = verification is Verification.BuiltInUv
@@ -705,6 +732,7 @@ class SecurityKeyOperations(
         salt: ByteArray,
         op: Operation,
     ): HmacSecretResult {
+        op.step("getAssertion")
         val keyAgreement = clientPin.sharedSecret // getKeyAgreement + encapsulate
         val platformKey = keyAgreement.first
         val sharedSecret = keyAgreement.second
@@ -785,8 +813,14 @@ class SecurityKeyOperations(
         rpId: String,
     ): ByteArray =
         when (verification) {
-            is Verification.Pin -> getPinToken(clientPin, verification.pin, permissions, rpId)
-            Verification.BuiltInUv -> getUvToken(op, clientPin, permissions, rpId)
+            is Verification.Pin -> {
+                op.step("PIN token")
+                getPinToken(clientPin, verification.pin, permissions, rpId)
+            }
+            Verification.BuiltInUv -> {
+                op.step("UV token")
+                getUvToken(op, clientPin, permissions, rpId)
+            }
         }
 
     /**
@@ -854,6 +888,7 @@ class SecurityKeyOperations(
         Log.i(TAG, "touch: versions=${ctap.cachedInfo.versions} selection=${supportsSelection(ctap.cachedInfo)}")
         if (!canAskForTouch(ctap.cachedInfo)) return false
         op.throwIfCancelled()
+        op.step("selection")
         op.report(STATE_TOUCH_NEEDED)
         val touched = try {
             askForTouch(ctap, op.commandState)
@@ -1103,7 +1138,8 @@ class SecurityKeyOperations(
      * session on it (USB: FIDO HID; NFC: ISO-DEP), runs [block] and closes the
      * session. Maps every failure to a [SecurityKeyException]. Reports
      * waitingForKey, then keyConnected when a key turns up, then processing
-     * once its CTAP2 session is open.
+     * once its CTAP2 session is open. The log hears which key answered and
+     * how [operation] ended.
      *
      * [expectSerial]: when set and the key reports a different serial number,
      * fails with `differentKey` before [block] runs, so no PIN, UV token
@@ -1116,6 +1152,7 @@ class SecurityKeyOperations(
      * other than it fails with `differentKey`, unless their serials match.
      */
     private fun <T> withKey(
+        operation: String,
         op: Operation,
         expectSerial: Long? = null,
         choosing: Boolean = false,
@@ -1125,6 +1162,7 @@ class SecurityKeyOperations(
             val deadline = SystemClock.elapsedRealtime() + KEY_WAIT_TIMEOUT_MS
             op.transport = null
             op.report(STATE_WAITING_FOR_KEY)
+            op.step("connect")
             while (true) {
                 val offered = awaitDevice(op, deadline)
                 Log.i(TAG, "device offered: ${offered.javaClass.simpleName}")
@@ -1139,6 +1177,7 @@ class SecurityKeyOperations(
                 }
                 op.transport = transportOf(device)
                 op.report(STATE_KEY_CONNECTED)
+                op.step("session")
                 val session = try {
                     openSession(device, op)
                 } catch (e: Exception) {
@@ -1156,11 +1195,7 @@ class SecurityKeyOperations(
                 }
                 if (device is NfcYubiKeyDevice) op.nfcDevice = device
                 session.touched = touched
-                Log.i(
-                    TAG,
-                    "session open: fw=${session.ctap.version} versions=${session.ctap.cachedInfo.versions} " +
-                        "serial=${if (session.serial != null) "read" else "none"}",
-                )
+                log(keyLine(operation, session))
                 op.report(STATE_PROCESSING)
                 try {
                     op.throwIfCancelled()
@@ -1180,7 +1215,7 @@ class SecurityKeyOperations(
                         throw SecurityKeyException(DIFFERENT_KEY, "This is not the security key chosen earlier")
                     }
                     val value = block(session)
-                    Log.i(TAG, "operation finished on the key")
+                    log("$operation finished")
                     return value
                 } finally {
                     closeQuietly(session.ctap) // also closes the connection
@@ -1188,16 +1223,75 @@ class SecurityKeyOperations(
             }
         } catch (e: Exception) {
             val mapped = toSecurityKeyException(e, op.builtInUv)
-            if (op.cancelled && mapped.code in setOf(TRANSPORT, UNKNOWN, TIMEOUT)) {
-                throw SecurityKeyException(CANCELLED, "The operation was cancelled", cause = e)
+            val failure = if (op.cancelled && mapped.code in setOf(TRANSPORT, UNKNOWN, TIMEOUT)) {
+                SecurityKeyException(CANCELLED, "The operation was cancelled", cause = e)
+            } else {
+                mapped
             }
-            // Diagnostics: the failure and its cause chain, never secrets.
-            val ctap = generateSequence<Throwable>(e) { it.cause }.filterIsInstance<CtapException>().firstOrNull()
-            val chain = generateSequence<Throwable>(e) { it.cause }.take(4)
-                .joinToString(" <- ") { "${it.javaClass.simpleName}(${it.message?.take(80) ?: ""})" }
-            Log.w(TAG, "Security key operation failed: ${mapped.code}; ${ctap?.errorName ?: "-"}; $chain")
-            throw mapped
+            logFailure(operation, op, failure, e)
+            throw failure
         }
+    }
+
+    /**
+     * One line for logcat and [appLog]; [warning] for a failure. Never
+     * anything secret.
+     */
+    private fun log(line: String, warning: Boolean = false) {
+        if (warning) Log.w(TAG, line) else Log.i(TAG, line)
+        appLog(line, warning)
+    }
+
+    /**
+     * How an operation that did not finish ended: the channel's code, attempts
+     * left, the steps it got through, and the key's CTAP error with the cause
+     * chain (exception types and messages, never secrets). A cancel is the
+     * user's choice, not a failure, so it is not a warning.
+     */
+    private fun logFailure(operation: String, op: Operation, mapped: SecurityKeyException, e: Exception) {
+        val steps = op.steps.joinToString(" > ")
+        if (mapped.code == CANCELLED) {
+            log("$operation cancelled; steps $steps")
+            return
+        }
+        val retries = (mapped.details as? Int)?.let { ", $it attempts left" } ?: ""
+        val ctap = generateSequence<Throwable>(e) { it.cause }.filterIsInstance<CtapException>().firstOrNull()
+        val chain = generateSequence<Throwable>(e) { it.cause }.take(4)
+            .joinToString(" <- ") { "${it.javaClass.simpleName}(${it.message?.take(80) ?: ""})" }
+        log(
+            "$operation failed: ${mapped.code}$retries; steps $steps; ${mapped.message} " +
+                "[CTAP ${ctap?.errorName ?: "-"}; $chain]",
+            warning = true,
+        )
+    }
+
+    /**
+     * Which key answered: its transport, what the Management application said
+     * about it, and its getInfo. The AAGUID names the model, not the key.
+     */
+    private fun keyLine(operation: String, session: KeySession): String {
+        val info = session.ctap.cachedInfo
+        val parts = mutableListOf(
+            session.transport,
+            session.device?.summary ?: "no device info, FIDO applet ${session.ctap.version}",
+            info.versions.joinToString("/"),
+            "PIN protocols ${info.pinUvAuthProtocols.joinToString("/")}",
+            when (info.options["clientPin"]) {
+                true -> "PIN set"
+                false -> "no PIN yet"
+                else -> "no PIN support"
+            },
+        )
+        if (ClientPin.isTokenSupported(info)) parts.add("pinUvAuthToken")
+        when (info.options["uv"]) {
+            true -> parts.add("fingerprint set up")
+            false -> parts.add("no fingerprint yet")
+        }
+        @Suppress("USELESS_CAST")
+        (info.aaguid as ByteArray?)?.let { aaguid ->
+            parts.add("aaguid " + aaguid.joinToString("") { "%02x".format(it) })
+        }
+        return "$operation: ${parts.joinToString(", ")}"
     }
 
     private fun awaitDevice(op: Operation, deadline: Long): YubiKeyDevice {
@@ -1369,7 +1463,7 @@ class SecurityKeyOperations(
         }
 
     /**
-     * Opens the key's connection, reads its serial number ([readSerial]) and
+     * Opens the key's connection, reads its serial number ([readDevice]) and
      * then opens the CTAP2 session on the same connection.
      */
     private fun openSession(device: YubiKeyDevice, op: Operation): KeySession =
@@ -1380,9 +1474,9 @@ class SecurityKeyOperations(
                     throw SecurityKeyException(UNSUPPORTED, "This security key has FIDO disabled over USB")
                 }
                 var connection = openFidoConnection(device, op)
-                var serial: Int? = null
+                var keyDevice: KeyDevice? = null
                 try {
-                    serial = readSerial { ManagementSession(connection) }
+                    keyDevice = readDevice { ManagementSession(connection) }
                 } catch (e: IOException) {
                     // The CTAPHID exchange broke off and may have left packets
                     // behind: CTAP2 starts on a fresh connection.
@@ -1390,7 +1484,7 @@ class SecurityKeyOperations(
                     connection = openFidoConnection(device, op)
                 }
                 try {
-                    KeySession(startCtap2 { Ctap2Session(connection) }, USB, serial)
+                    KeySession(startCtap2 { Ctap2Session(connection) }, USB, keyDevice)
                 } catch (e: Throwable) {
                     closeQuietly(connection)
                     throw e
@@ -1402,12 +1496,12 @@ class SecurityKeyOperations(
             is NfcYubiKeyDevice -> {
                 val connection = device.openConnection(SmartCardConnection::class.java)
                 try {
-                    val serial = try {
-                        readSerial { ManagementSession(connection) }
+                    val keyDevice = try {
+                        readDevice { ManagementSession(connection) }
                     } catch (e: IOException) {
                         null
                     }
-                    KeySession(startCtap2 { Ctap2Session(connection) }, NFC, serial)
+                    KeySession(startCtap2 { Ctap2Session(connection) }, NFC, keyDevice)
                 } catch (e: Throwable) {
                     closeQuietly(connection)
                     throw e
@@ -1425,26 +1519,37 @@ class SecurityKeyOperations(
         }
 
     /**
-     * The YubiKey serial number, from the Management application
-     * (ManagementSession -> getDeviceInfo -> serialNumber), read before the
-     * CTAP2 session: on a smart card, selecting Management after FIDO would
-     * undo the FIDO applet selection. Over USB it is a Yubico vendor CTAPHID
-     * command on the FIDO interface. Null when the key hides it, is not a
-     * YubiKey, or the read fails: the serial never fails an operation. Only an
-     * IOException (the link may be in an unknown state) is thrown, for the
-     * caller to recover from. The ManagementSession is deliberately not closed:
-     * closing it closes the connection. The serial is never logged.
+     * What the Management application says about a YubiKey. [serial] is null
+     * when the key hides it and is never logged; [summary] (firmware version,
+     * form factor, FIPS series) is for the log.
      */
-    private fun readSerial(open: () -> ManagementSession): Int? =
+    private class KeyDevice(val serial: Int?, val summary: String)
+
+    /**
+     * The YubiKey serial number and firmware, from the Management application
+     * (ManagementSession -> getDeviceInfo), read before the CTAP2 session: on
+     * a smart card, selecting Management after FIDO would undo the FIDO applet
+     * selection. Over USB it is a Yubico vendor CTAPHID command on the FIDO
+     * interface. Null when the key is not a YubiKey or the read fails: the
+     * serial never fails an operation. Only an IOException (the link may be in
+     * an unknown state) is thrown, for the caller to recover from. The
+     * ManagementSession is deliberately not closed: closing it closes the
+     * connection.
+     */
+    private fun readDevice(open: () -> ManagementSession): KeyDevice? =
         try {
-            open().deviceInfo.serialNumber
+            val info = open().deviceInfo
+            KeyDevice(
+                info.serialNumber,
+                "firmware ${info.versionName}, ${info.formFactor}" + if (info.isFips) ", FIPS" else "",
+            )
         } catch (e: IOException) {
-            Log.d(TAG, "Serial number not read: ${e.javaClass.simpleName}")
+            Log.d(TAG, "Device info not read: ${e.javaClass.simpleName}")
             throw e
         } catch (e: Exception) {
             // Not a YubiKey / no Management applet, firmware before 4.1
             // (UnsupportedOperationException), or a malformed response.
-            Log.d(TAG, "Serial number not read: ${e.javaClass.simpleName}")
+            Log.d(TAG, "Device info not read: ${e.javaClass.simpleName}")
             null
         }
 

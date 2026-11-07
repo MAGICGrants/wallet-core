@@ -115,6 +115,7 @@ class _CreatePasswordViewState extends State<CreatePasswordView> {
                     controller: _passwordController,
                     hint: labels.passwordHint,
                     obscureText: _obscurePassword,
+                    sensitive: true,
                     suffix: IconButton(
                       icon: Icon(
                         _obscurePassword
@@ -130,6 +131,7 @@ class _CreatePasswordViewState extends State<CreatePasswordView> {
                     controller: _confirmPasswordController,
                     hint: labels.confirmPasswordHint,
                     obscureText: _obscureConfirmPassword,
+                    sensitive: true,
                     suffix: IconButton(
                       icon: Icon(
                         _obscureConfirmPassword

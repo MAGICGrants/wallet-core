@@ -9,6 +9,7 @@ import 'app_config.dart';
 import 'app_session.dart';
 import 'crypto_wallet.dart';
 import 'guard_upgrade_files.dart';
+import 'labels/address_label_store.dart';
 import 'metadata_backup.dart';
 import 'seed/seed.dart';
 import 'seed/seed_policy.dart';
@@ -1216,7 +1217,7 @@ class WalletManager with ChangeNotifier {
   ///
   /// [extraPrefKeys] lets the app clear its own (pending txs, notification
   /// state) in the same pass; the manager does not know them. The address book
-  /// and the app's settings outlive the wallet.
+  /// and the app's settings outlive the wallet; its address labels do not.
   Future<void> deleteAll({List<String> extraPrefKeys = const []}) async {
     AppSession.lock();
     // The guard first: one left behind by a delete cut short would make the
@@ -1246,6 +1247,9 @@ class WalletManager with ChangeNotifier {
       log(LogLevel.error, '[WalletManager] Failed to delete stored seed: $e');
     }
     await SeedCheckStore.delete();
+    // The labels name this seed's addresses. A restore from the seed brings
+    // them back from the metadata backup.
+    await clearAddressLabels();
 
     _password = null;
     final store = WalletPasswordStore.current;

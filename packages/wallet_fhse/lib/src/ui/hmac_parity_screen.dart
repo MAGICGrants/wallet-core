@@ -177,6 +177,7 @@ class _HmacParityScreenState extends State<HmacParityScreen> {
                               label: 'Security key PIN',
                               obscureText: true,
                               keyboardType: TextInputType.visiblePassword,
+                              sensitive: true,
                             ),
                         ],
                         const SizedBox(height: BrandSpacing.md),
@@ -191,6 +192,7 @@ class _HmacParityScreenState extends State<HmacParityScreen> {
                           controller: _credential,
                           label: 'Credential id (base64 or hex)',
                           maxLines: 3,
+                          sensitive: true,
                         ),
                         const SizedBox(height: BrandSpacing.md),
                         BrandButton.outline(

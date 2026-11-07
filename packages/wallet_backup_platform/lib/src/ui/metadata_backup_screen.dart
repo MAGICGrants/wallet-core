@@ -430,7 +430,11 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                i18n.backupSummary(service.paymentCount, service.contactCount),
+                i18n.backupSummary(
+                  service.paymentCount,
+                  service.contactCount,
+                  service.addressLabelCount,
+                ),
                 style: BrandText.listTitle,
               ),
               if (lastSync != null)
@@ -560,7 +564,11 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
               Text(i18n.backupRestoreTitle, style: BrandText.listTitle),
               const SizedBox(height: BrandSpacing.xs),
               Text(
-                i18n.backupRestoreSummary(report.payments, report.contactsRestored),
+                i18n.backupRestoreSummary(
+                  report.payments,
+                  report.contactsRestored,
+                  report.labelsRestored,
+                ),
                 style: BrandText.body,
               ),
               if (report.failed.isNotEmpty)

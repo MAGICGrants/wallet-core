@@ -43,6 +43,8 @@ class Device {
         if (contactWritesFail) throw const FileSystemException('keystore unavailable');
         contacts = applyContactChanges(contacts, changes);
       },
+      readLabels: () async => labels,
+      applyLabelChanges: (changes) async => labels = applyAddressLabelChanges(labels, changes),
       clock: () => now,
     );
   }
@@ -52,6 +54,7 @@ class Device {
   late final MetadataBackupService service;
   final wallet = FakeWallet('XMR', seedFormats: {SeedFormat.polyseed, SeedFormat.bip39});
   List<String> contacts = [];
+  List<AddressLabel> labels = [];
   DateTime now = DateTime.utc(2026, 10, 10);
 
   /// The address book cannot be written: changes from the backup are refused.
@@ -60,6 +63,9 @@ class Device {
   List<Contact> get contactList => [
     for (final e in contacts) Contact.fromJson(json.decode(e) as Map<String, dynamic>),
   ];
+
+  /// `COIN:address` → label.
+  Map<String, String> get labelTexts => {for (final l in labels) l.key: l.label};
 
   void setContacts(List<Contact> list) =>
       contacts = [for (final c in list) json.encode(c.toJson())];
@@ -270,6 +276,66 @@ void main() {
     await a.service.sync();
     await b.service.sync();
     expect(cloud.folders[a.service.folderName]!.length, files);
+
+    await a.service.close();
+    await b.service.close();
+  });
+
+  test('address labels travel between devices, removals included', () async {
+    const donations = AddressLabel(coin: 'XMR', address: '8sub1', label: 'Donations');
+    final a = device('a')..labels = [donations];
+    await a.open(const PolyseedSeed(raven));
+    expect(a.service.addressLabelCount, 1);
+
+    final b = device('b');
+    await b.open(const PolyseedSeed(raven), restored: true);
+    expect(b.labelTexts, {'XMR:8sub1': 'Donations'});
+    expect(b.service.lastRestoreReport!.labelsRestored, 1);
+
+    // B renames it and labels a Bitcoin address.
+    b.labels = [
+      const AddressLabel(coin: 'XMR', address: '8sub1', label: 'Tips'),
+      const AddressLabel(coin: 'BTC', address: 'bc1qrent', label: 'Rent'),
+    ];
+    b.service.addressLabelsChanged();
+    await b.service.sync();
+    await a.service.sync();
+    expect(a.labelTexts, {'XMR:8sub1': 'Tips', 'BTC:bc1qrent': 'Rent'});
+
+    // A removes the Monero label; B follows.
+    a.labels = a.labels.where((l) => l.coin != 'XMR').toList();
+    await a.service.sync();
+    await b.service.sync();
+    expect(b.labelTexts, {'BTC:bc1qrent': 'Rent'});
+
+    // Nothing changed: a further sync writes nothing.
+    final files = cloud.folders[a.service.folderName]!.length;
+    await a.service.sync();
+    await b.service.sync();
+    expect(cloud.folders[a.service.folderName]!.length, files);
+
+    await a.service.close();
+    await b.service.close();
+  });
+
+  test('with no location on, a saved file carries the address labels', () async {
+    final a = Device(Directory('${tmp.path}/a'), MemoryLocation('unused-a'))
+      ..labels = [const AddressLabel(coin: 'XMR', address: '8sub1', label: 'Donations')];
+    await a.open(const PolyseedSeed(raven));
+    expect(a.service.addressLabelCount, 1);
+
+    final b = Device(Directory('${tmp.path}/b'), MemoryLocation('unused-b'));
+    await b.open(const PolyseedSeed(raven), restored: true);
+    await b.service.importBundle(await a.service.exportBundle());
+    expect(b.labelTexts, {'XMR:8sub1': 'Donations'});
+    expect(b.service.lastRestoreReport!.labelsRestored, 1);
+
+    // A newer file wins over the one before it. (As for contacts, it carries
+    // the labels as they are, not removals: with no location on, nothing here
+    // remembers what an earlier file held.)
+    a.labels = [const AddressLabel(coin: 'XMR', address: '8sub1', label: 'Tips')];
+    await b.service.importBundle(await a.service.exportBundle());
+    expect(b.labelTexts, {'XMR:8sub1': 'Tips'});
 
     await a.service.close();
     await b.service.close();

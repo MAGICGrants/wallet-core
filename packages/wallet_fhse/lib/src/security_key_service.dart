@@ -297,11 +297,21 @@ class _ChannelBackend implements SecurityKeyBackend {
   @override
   bool get systemPrompts => false;
 
+  /// `status`: progress for the UI. `log`: a line for the app's log (which
+  /// key answered, how a request ended), `warning` for a failure. The native
+  /// halves put nothing secret in it: no PIN, salt, credential id or serial.
   Future<void> _onNativeCall(MethodCall call) async {
-    if (call.method != 'status') return;
     final args = call.arguments;
-    final status = args is Map ? SecurityKeyStatus.fromCode(args['state']) : null;
-    if (status != null) _status.add(status);
+    if (args is! Map) return;
+    switch (call.method) {
+      case 'status':
+        final status = SecurityKeyStatus.fromCode(args['state']);
+        if (status != null) _status.add(status);
+      case 'log':
+        final line = args['line'];
+        if (line is! String) return;
+        await log(args['warning'] == true ? LogLevel.warn : LogLevel.info, '[SecurityKey] $line');
+    }
   }
 
   Future<T> _call<T>(String method, [Map<String, Object?>? args]) async {
