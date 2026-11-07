@@ -484,7 +484,7 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
   String get receiveSubaddressTab => 'Subendereço';
 
   @override
-  String get receivePrimaryTab => 'Endereço Primário';
+  String get receivePrimaryTab => 'Primário';
 
   @override
   String get receiveCopyAddress => 'Copiar Endereço';
@@ -652,6 +652,19 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
 
   @override
   String get settingsAddressBookDeleted => 'Lista de contatos excluída';
+
+  @override
+  String get settingsDeleteAddressLabelsButton => 'Excluir Rótulos de Endereço';
+
+  @override
+  String get settingsDeleteAddressLabelsDialogText =>
+      'Tem certeza que deseja excluir seus rótulos de endereço? Se o backup automático estiver ligado, eles também serão excluídos desses backups automáticos.';
+
+  @override
+  String get settingsDeleteAddressLabelsDialogDeleteButton => 'Excluir';
+
+  @override
+  String get settingsAddressLabelsDeleted => 'Rótulos de endereço excluídos';
 
   @override
   String get txDetailsTitle => 'Detalhes da Transação';
@@ -992,5 +1005,155 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
   @override
   String generateSeedPasswordNote(String appName) {
     return 'A $appName Wallet pede sua senha antes de mostrar estas palavras novamente.';
+  }
+
+  @override
+  String get receiveAddressTab => 'Endereço';
+
+  @override
+  String get receiveLabeledTab => 'Rotulados';
+
+  @override
+  String get labeledCaption =>
+      'Rotule endereços, se quiser, para encontrar facilmente as transações que os envolvem.';
+
+  @override
+  String labeledUsedHeader(String kind, int count) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Subendereços Usados',
+      'other': 'Endereços Usados',
+    });
+    return '$_temp0 · $count';
+  }
+
+  @override
+  String labeledOnlyHeader(String kind, int count) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Subendereços Rotulados',
+      'other': 'Endereços Rotulados',
+    });
+    return '$_temp0 · $count';
+  }
+
+  @override
+  String get labeledHideUnlabeled => 'Ocultar sem Rótulo';
+
+  @override
+  String labeledAddressTitle(String kind, int index) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Subendereço #$index',
+      'other': 'Endereço #$index',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String labeledTransactionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transações',
+      one: '1 transação',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String labeledLastUsed(String time) {
+    return 'Usado pela última vez $time';
+  }
+
+  @override
+  String get labeledLabelButton => 'Rotular';
+
+  @override
+  String labeledEmptyTitle(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Nenhum subendereço usado ainda',
+      'other': 'Nenhum endereço usado ainda',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String labeledEmptyBody(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Um subendereço aparece aqui após sua primeira transação.',
+      'other': 'Um endereço aparece aqui após sua primeira transação.',
+    });
+    return 'Rotule endereços, se quiser, para encontrar facilmente as transações que os envolvem. $_temp0';
+  }
+
+  @override
+  String labelSheetTitle(String kind, int index) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Rotular Subendereço #$index',
+      'other': 'Rotular Endereço #$index',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get labelSheetField => 'Rótulo';
+
+  @override
+  String get labelSheetSave => 'Salvar Rótulo';
+
+  @override
+  String get addressDetailTransactions => 'Transações';
+
+  @override
+  String get addressDetailLastTransaction => 'Última Transação';
+
+  @override
+  String get addressDetailEditLabel => 'Editar Rótulo';
+
+  @override
+  String get addressDetailAddLabel => 'Adicionar Rótulo';
+
+  @override
+  String get historyFilterLabeledAddresses => 'Seus Endereços Rotulados';
+
+  @override
+  String get timeAgoMoment => 'há alguns segundos';
+
+  @override
+  String get timeAgoMinute => 'há cerca de um minuto';
+
+  @override
+  String timeAgoMinutes(int count) {
+    return 'há $count minutos';
+  }
+
+  @override
+  String get timeAgoHour => 'há cerca de uma hora';
+
+  @override
+  String timeAgoHours(int count) {
+    return 'há $count horas';
+  }
+
+  @override
+  String get timeAgoDay => 'há um dia';
+
+  @override
+  String timeAgoDays(int count) {
+    return 'há $count dias';
+  }
+
+  @override
+  String get timeAgoMonth => 'há cerca de um mês';
+
+  @override
+  String timeAgoMonths(int count) {
+    return 'há $count meses';
+  }
+
+  @override
+  String get timeAgoYear => 'há cerca de um ano';
+
+  @override
+  String timeAgoYears(int count) {
+    return 'há $count anos';
   }
 }

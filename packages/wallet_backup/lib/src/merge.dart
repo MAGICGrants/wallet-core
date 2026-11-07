@@ -8,12 +8,14 @@ import 'records.dart';
 ///   differing copies of one txid are both kept and reported.
 /// - Contacts: the version with the highest `(lamport, device_id)` wins,
 ///   deletions included.
+/// - Address labels: the same, per `(coin, address)`.
 /// - Unknown record types: kept, deduplicated by their bytes.
 ///
 /// Adding the same file twice, or files in any order, gives the same state.
 class BackupState {
   final Map<String, List<OutgoingPaymentRecord>> _payments = {};
   final Map<String, ContactRecord> _contacts = {};
+  final Map<String, AddressLabelRecord> _labels = {};
   final Map<String, BackupRecord> _unknown = {};
 
   /// Plain names already merged, so a file is counted once.
@@ -69,6 +71,10 @@ class BackupState {
         if (c.lamport > _maxLamport) _maxLamport = c.lamport;
         final current = _contacts[c.id];
         if (current == null || c.beats(current)) _contacts[c.id] = c;
+      case final AddressLabelRecord l:
+        if (l.lamport > _maxLamport) _maxLamport = l.lamport;
+        final current = _labels[l.key];
+        if (current == null || l.beats(current)) _labels[l.key] = l;
       case final UnknownRecord u:
         _unknown.putIfAbsent(toHex(u.raw), () => u);
     }
@@ -105,6 +111,13 @@ class BackupState {
 
   /// Live contacts: winners that are not deletions.
   Iterable<ContactRecord> get contacts => _contacts.values.where((c) => !c.deleted);
+
+  /// The winning version of every address label, by `COIN:address`, deletions
+  /// included.
+  Map<String, AddressLabelRecord> get labelVersions => Map.unmodifiable(_labels);
+
+  /// Live address labels: winners that are not deletions.
+  Iterable<AddressLabelRecord> get labels => _labels.values.where((l) => !l.deleted);
 
   int get unknownRecordCount => _unknown.length;
 

@@ -89,17 +89,29 @@ class TxDetailsSheetLabels {
 /// status banner is shown at the top for failed/reverted/unknown txs.
 ///
 /// Presentational: the app injects its translated [labels]; no app l10n here.
+///
+/// [addressLabel] names the wallet's own addresses an incoming transaction
+/// arrived at, from the user's address labels; [onOpenAddress], when given,
+/// makes a label tappable: the sheet closes and the app opens that address.
 void showTxDetailsSheet({
   required BuildContext context,
   required CryptoWallet wallet,
   required TxDetails tx,
   required TxDetailsSheetLabels labels,
+  String? Function(String address)? addressLabel,
+  void Function(String address)? onOpenAddress,
 }) {
   showBrandSheet<void>(
     context: context,
     isScrollControlled: true,
     maxWidth: 460,
-    builder: (context) => _TxDetailsSheet(wallet: wallet, tx: tx, labels: labels),
+    builder: (context) => _TxDetailsSheet(
+      wallet: wallet,
+      tx: tx,
+      labels: labels,
+      addressLabel: addressLabel,
+      onOpenAddress: onOpenAddress,
+    ),
   );
 }
 
@@ -107,8 +119,16 @@ class _TxDetailsSheet extends StatelessWidget {
   final CryptoWallet wallet;
   final TxDetails tx;
   final TxDetailsSheetLabels labels;
+  final String? Function(String address)? addressLabel;
+  final void Function(String address)? onOpenAddress;
 
-  const _TxDetailsSheet({required this.wallet, required this.tx, required this.labels});
+  const _TxDetailsSheet({
+    required this.wallet,
+    required this.tx,
+    required this.labels,
+    this.addressLabel,
+    this.onOpenAddress,
+  });
 
   static TextStyle get _labelStyle =>
       TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: BrandColors.ink);
@@ -197,6 +217,7 @@ class _TxDetailsSheet extends StatelessWidget {
                       context,
                       incoming ? (labels.receivedAt ?? labels.recipients) : labels.recipients,
                       recipients,
+                      ownAddresses: incoming,
                     ),
                   if (change.isNotEmpty) _addressList(context, labels.changeRecipient, change),
                 ]),
@@ -366,7 +387,15 @@ class _TxDetailsSheet extends StatelessWidget {
   );
 
   /// gets the same line, rather than an address-only row with no amount.
-  Widget _addressList(BuildContext context, String label, List<TxRecipient> entries) {
+  ///
+  /// [ownAddresses]: the entries are the wallet's own (an incoming
+  /// transaction's), so a label the user gave one is shown above it.
+  Widget _addressList(
+    BuildContext context,
+    String label,
+    List<TxRecipient> entries, {
+    bool ownAddresses = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
@@ -379,7 +408,12 @@ class _TxDetailsSheet extends StatelessWidget {
               Text('${entries.length}', style: _mutedMono),
             ],
           ),
-          for (final r in entries)
+          for (final r in entries) ...[
+            if (ownAddresses ? addressLabel?.call(r.address) : null case final name?)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: _addressLabelChip(context, name, r.address),
+              ),
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Row(
@@ -406,7 +440,51 @@ class _TxDetailsSheet extends StatelessWidget {
                 ],
               ),
             ),
+          ],
         ],
+      ),
+    );
+  }
+
+  /// The label of one of the wallet's own addresses, as a tag chip; tappable
+  /// when the app can open the address.
+  Widget _addressLabelChip(BuildContext context, String name, String address) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(color: BrandColors.surfaceAccent, borderRadius: BrandRadii.rPill),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.sell_outlined, size: 13, color: BrandColors.primaryDeep),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: BrandColors.ink),
+            ),
+          ),
+          if (onOpenAddress != null) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 15, color: BrandColors.inkMuted),
+          ],
+        ],
+      ),
+    );
+    final open = onOpenAddress;
+    if (open == null) return Align(alignment: Alignment.centerLeft, child: chip);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Semantics(
+        button: true,
+        child: Tappable(
+          onTap: () {
+            Navigator.pop(context);
+            open(address);
+          },
+          child: chip,
+        ),
       ),
     );
   }

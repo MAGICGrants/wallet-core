@@ -89,6 +89,11 @@ class ReceiveView extends StatelessWidget {
   /// keeps the QR at its normal size and hides the hint.
   final VoidCallback? onToggleQr;
 
+  /// What the selected tab shows instead of the QR card, the warning and the
+  /// Copy button: the Labeled tab's list of used addresses. It has no single
+  /// address, so the share button goes too.
+  final Widget? tabBody;
+
   const ReceiveView({
     super.key,
     required this.labels,
@@ -110,6 +115,7 @@ class ReceiveView extends StatelessWidget {
     this.onSelectAsset,
     this.qrEnlarged = false,
     this.onToggleQr,
+    this.tabBody,
   });
 
   @override
@@ -151,7 +157,7 @@ class ReceiveView extends StatelessWidget {
                     // Builder so the rect handed to [onShare] is the share
                     // button's own, not the whole screen's: it is what the iOS
                     // share popover points at.
-                    action: onShare != null
+                    action: onShare != null && tabBody == null
                         ? Builder(
                             builder: (context) => IconCircleButton(
                               icon: Icons.ios_share,
@@ -187,26 +193,31 @@ class ReceiveView extends StatelessWidget {
                                   onSelect: onSelectTab ?? (_) {},
                                 ),
                               ],
-                              const SizedBox(height: 14),
-                              _QrCard(
-                                address: address,
-                                heading: qrHeading,
-                                onCopy: onCopy,
-                                enlarged: qrEnlarged,
-                                onToggle: onToggleQr,
-                                hint: qrEnlarged ? labels.shrinkQr : labels.enlargeQr,
-                                viewportHeight: viewport.maxHeight,
-                              ),
-                              if (warning != null) ...[
+                              if (tabBody case final body?) ...[
                                 const SizedBox(height: 14),
-                                WarningCard.text(warning!),
+                                body,
+                              ] else ...[
+                                const SizedBox(height: 14),
+                                ReceiveQrCard(
+                                  address: address,
+                                  heading: qrHeading,
+                                  onCopy: onCopy,
+                                  enlarged: qrEnlarged,
+                                  onToggle: onToggleQr,
+                                  hint: qrEnlarged ? labels.shrinkQr : labels.enlargeQr,
+                                  viewportHeight: viewport.maxHeight,
+                                ),
+                                if (warning != null) ...[
+                                  const SizedBox(height: 14),
+                                  WarningCard.text(warning!),
+                                ],
+                                const SizedBox(height: 14),
+                                BrandButton(
+                                  label: labels.copyAddress,
+                                  icon: Icons.copy_outlined,
+                                  onPressed: onCopy,
+                                ),
                               ],
-                              const SizedBox(height: 14),
-                              BrandButton(
-                                label: labels.copyAddress,
-                                icon: Icons.copy_outlined,
-                                onPressed: onCopy,
-                              ),
                             ],
                           ),
                         ),
@@ -452,7 +463,12 @@ class ReceiveAssetSelectorCardState extends State<ReceiveAssetSelectorCard> {
   }
 }
 
-class _QrCard extends StatelessWidget {
+/// The white QR panel with its enlarge hint, the heading and the tappable mono
+/// address: Receive's, and an address's own screen's.
+///
+/// [viewportHeight] caps how far an enlarged QR grows, so the whole code stays
+/// on screen; [onToggle] null keeps it at its normal size and hides [hint].
+class ReceiveQrCard extends StatelessWidget {
   final String address;
   final String heading;
   final VoidCallback onCopy;
@@ -461,7 +477,8 @@ class _QrCard extends StatelessWidget {
   final String? hint;
   final double viewportHeight;
 
-  const _QrCard({
+  const ReceiveQrCard({
+    super.key,
     required this.address,
     required this.heading,
     required this.onCopy,

@@ -2,7 +2,7 @@
   "@@locale": "en",
   "backupTitle": "Backup",
   "backupSeedWarningBold": "This does NOT back up your recovery phrase, which you still need to do separately or you could lose your funds.",
-  "backupSeedWarning": "This backs up additional data not stored on the blockchain, like certain transaction data and your address book.",
+  "backupSeedWarning": "This backs up additional data not stored on the blockchain, like certain transaction data, your address book and your address labels.",
   "backupSecurityNote": "The backup files are secure with quantum resistant encryption. They are encrypted with keys derived from your recovery phrase, so you can restore any backups with it. If you store your backups on a cloud service, they cannot see the contents of the backups, but they can see certain metadata which you may consider sensitive.",
   "backupLegacySeed": "Encrypted backups aren't available for 25-word recovery phrases.",
   "backupLegacyStepsIntro": "Please follow these steps to migrate to a modern wallet, which we recommend doing with two devices:",
@@ -16,13 +16,16 @@
   "backupUnsupportedPassphrase": "Backup isn't available yet for recovery phrases with an offset passphrase.",
   "backupLocked": "Unlock your wallet to see its backup.",
   "backupOpening": "Opening your backup…",
-  "backupSummary": "{payments, plural, =1{1 payment} other{{payments} payments}} and {contacts, plural, =1{1 contact} other{{contacts} contacts}} backed up",
+  "backupSummary": "{payments, plural, =1{1 payment} other{{payments} payments}}, {contacts, plural, =1{1 contact} other{{contacts} contacts}} and {labels, plural, =1{1 address label} other{{labels} address labels}} backed up",
   "@backupSummary": {
     "placeholders": {
       "payments": {
         "type": "int"
       },
       "contacts": {
+        "type": "int"
+      },
+      "labels": {
         "type": "int"
       }
     }
@@ -92,13 +95,16 @@
     }
   },
   "backupRestoreTitle": "Last Restore",
-  "backupRestoreSummary": "{payments, plural, =1{Found 1 payment} other{Found {payments} payments}}; {contacts, plural, =1{restored 1 contact} other{restored {contacts} contacts}}.",
+  "backupRestoreSummary": "{payments, plural, =1{Found 1 payment} other{Found {payments} payments}}; {contacts, plural, =1{restored 1 contact} other{restored {contacts} contacts}} and {labels, plural, =1{1 address label} other{{labels} address labels}}.",
   "@backupRestoreSummary": {
     "placeholders": {
       "payments": {
         "type": "int"
       },
       "contacts": {
+        "type": "int"
+      },
+      "labels": {
         "type": "int"
       }
     }
@@ -128,13 +134,16 @@
   "backupDeleteConfirm": "Delete",
   "backupCancel": "Cancel",
   "backupDeleted": "iCloud copy deleted",
-  "backupRestoreFound": "Restored {payments, plural, =1{1 payment} other{{payments} payments}} and {contacts, plural, =1{1 contact} other{{contacts} contacts}} from your backup",
+  "backupRestoreFound": "Restored {payments, plural, =1{1 payment} other{{payments} payments}}, {contacts, plural, =1{1 contact} other{{contacts} contacts}} and {labels, plural, =1{1 address label} other{{labels} address labels}} from your backup",
   "@backupRestoreFound": {
     "placeholders": {
       "payments": {
         "type": "int"
       },
       "contacts": {
+        "type": "int"
+      },
+      "labels": {
         "type": "int"
       }
     }

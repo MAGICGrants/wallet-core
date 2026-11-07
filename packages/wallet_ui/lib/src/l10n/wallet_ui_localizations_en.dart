@@ -483,7 +483,7 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
   String get receiveSubaddressTab => 'Subaddress';
 
   @override
-  String get receivePrimaryTab => 'Primary Address';
+  String get receivePrimaryTab => 'Primary';
 
   @override
   String get receiveCopyAddress => 'Copy Address';
@@ -651,6 +651,19 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
 
   @override
   String get settingsAddressBookDeleted => 'Address book deleted';
+
+  @override
+  String get settingsDeleteAddressLabelsButton => 'Delete Address Labels';
+
+  @override
+  String get settingsDeleteAddressLabelsDialogText =>
+      'Are you sure you want to delete your address labels? If automatic backup is turned on, it will also delete the address labels in these automatic backups.';
+
+  @override
+  String get settingsDeleteAddressLabelsDialogDeleteButton => 'Delete';
+
+  @override
+  String get settingsAddressLabelsDeleted => 'Address labels deleted';
 
   @override
   String get txDetailsTitle => 'Transaction Details';
@@ -989,5 +1002,155 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
   @override
   String generateSeedPasswordNote(String appName) {
     return '$appName Wallet asks for your password before showing these words again.';
+  }
+
+  @override
+  String get receiveAddressTab => 'Address';
+
+  @override
+  String get receiveLabeledTab => 'Labeled';
+
+  @override
+  String get labeledCaption =>
+      'Optionally label addresses if you want to easily search for transactions involving them.';
+
+  @override
+  String labeledUsedHeader(String kind, int count) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Used Subaddresses',
+      'other': 'Used Addresses',
+    });
+    return '$_temp0 · $count';
+  }
+
+  @override
+  String labeledOnlyHeader(String kind, int count) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Labeled Subaddresses',
+      'other': 'Labeled Addresses',
+    });
+    return '$_temp0 · $count';
+  }
+
+  @override
+  String get labeledHideUnlabeled => 'Hide Unlabeled';
+
+  @override
+  String labeledAddressTitle(String kind, int index) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Subaddress #$index',
+      'other': 'Address #$index',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String labeledTransactionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transactions',
+      one: '1 transaction',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String labeledLastUsed(String time) {
+    return 'Last used $time';
+  }
+
+  @override
+  String get labeledLabelButton => 'Label';
+
+  @override
+  String labeledEmptyTitle(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'No used subaddresses yet',
+      'other': 'No used addresses yet',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String labeledEmptyBody(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'A subaddress shows up here after its first transaction.',
+      'other': 'An address shows up here after its first transaction.',
+    });
+    return 'Optionally label addresses if you want to easily search for transactions involving them. $_temp0';
+  }
+
+  @override
+  String labelSheetTitle(String kind, int index) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Label Subaddress #$index',
+      'other': 'Label Address #$index',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get labelSheetField => 'Label';
+
+  @override
+  String get labelSheetSave => 'Save Label';
+
+  @override
+  String get addressDetailTransactions => 'Transactions';
+
+  @override
+  String get addressDetailLastTransaction => 'Last Transaction';
+
+  @override
+  String get addressDetailEditLabel => 'Edit Label';
+
+  @override
+  String get addressDetailAddLabel => 'Add Label';
+
+  @override
+  String get historyFilterLabeledAddresses => 'Your Labeled Addresses';
+
+  @override
+  String get timeAgoMoment => 'a moment ago';
+
+  @override
+  String get timeAgoMinute => 'a minute ago';
+
+  @override
+  String timeAgoMinutes(int count) {
+    return '$count minutes ago';
+  }
+
+  @override
+  String get timeAgoHour => 'about an hour ago';
+
+  @override
+  String timeAgoHours(int count) {
+    return '$count hours ago';
+  }
+
+  @override
+  String get timeAgoDay => 'a day ago';
+
+  @override
+  String timeAgoDays(int count) {
+    return '$count days ago';
+  }
+
+  @override
+  String get timeAgoMonth => 'about a month ago';
+
+  @override
+  String timeAgoMonths(int count) {
+    return '$count months ago';
+  }
+
+  @override
+  String get timeAgoYear => 'about a year ago';
+
+  @override
+  String timeAgoYears(int count) {
+    return '$count years ago';
   }
 }

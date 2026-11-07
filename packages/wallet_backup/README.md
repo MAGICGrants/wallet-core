@@ -1,9 +1,9 @@
 # wallet_backup
 
 The seed-keyed metadata backup: who each Monero payment went to, its
-transaction key, and the address book, saved as many small sealed files in
-every location the user chooses. Pure Dart; the platform locations (iCloud)
-and the screens are in `wallet_backup_platform`.
+transaction key, the address book and the address labels, saved as many small
+sealed files in every location the user chooses. Pure Dart; the platform
+locations (iCloud) and the screens are in `wallet_backup_platform`.
 
 ## Keys
 
@@ -54,6 +54,7 @@ Records written by this version (registry in `lib/src/records.dart`):
 |---|---|---|
 | 1 outgoing payment | txid, account, fee, and per destination: address kind, public keys, amount, tx key (`r` and any additional keys for a legacy transaction), payment ID | union on txid |
 | 3 contact | id, name, coin → address, lamport, device id, deleted | last writer wins on (lamport, device id) |
+| 4 address label | coin, address, label, lamport, device id, deleted | last writer wins on (lamport, device id), per (coin, address) |
 
 Names: `c-<device>-<seq>` locally; elsewhere `b32(H_16[k_name]("file name" ‖ plain))`
 inside a folder named `b32(H_16[k_name]("folder name"))`.
@@ -141,6 +142,28 @@ installs it (through `wallet_backup_platform`) on the UI isolate.
   own and a Lamport clock kept in the preferences (`exportLamportPrefKey`), so a
   newer file's contacts win over an older one's; importing a file applies it as
   a join applies the backup.
+- **Address labels: the address book's rules, per address.** A label is what
+  the user called one of their own used receive addresses (a Monero
+  subaddress, a Bitcoin receive address) on Receive's Labeled tab. Each is
+  record type 4, identified by `(coin, address)` rather than an id, so two
+  devices that label the same address converge on one label, and removing a
+  label writes a deletion. They sync exactly as contacts do, with a base of
+  their own in the device state (`labels`, `labelsJoined`): three-way while
+  syncing, a join after a restore or with a location turned back on, nothing
+  recorded with no location on, and a saved file carrying them as they are
+  then. A device state written before labels existed has no label base, so
+  that device joins: the backup's labels win, and it adds only ones the backup
+  never saw. Applied labels go through `AddressLabelsSync` (an open
+  `AddressLabelModel` takes them in memory); one longer than the app saves
+  (`maxAddressLabelLength`) is cut to that, and a blank one is not applied, so
+  the next sync records the removal. Labels are every coin's, as contacts are:
+  they name addresses, not payments, and carry no key material.
+
+  They are a new record type, not a field on another, so a wallet that
+  predates them keeps every label record byte for byte and passes it on: a
+  field it did not know on a record it did would be dropped the first time it
+  wrote that record. The device state stays `v: 1`: its new keys default when
+  missing, and an older wallet reading a newer state ignores them.
 - **Reading.** On open, on resume, every 5 minutes, after every change, and a
   few seconds after a location that watches its folder (the sync folder)
   reports one: list each location, open anything new, merge, apply, upload
@@ -291,5 +314,6 @@ location holding the same files is the remedy.
 
 - **Compaction.** The backups can be periodically compacted to reduce storage use.
 - **Backup to LWS.** The intent is to support using a LWS as a backup location.
-- **Other coins' labels and notes, incoming annotations, settings.**
-- **Testnet and stagenet.** Only mainnet Monero is backed up.
+- **Transaction notes, incoming annotations, settings.**
+- **Testnet and stagenet payments.** Only mainnet Monero payments are backed
+  up; contacts and address labels are kept for every coin.

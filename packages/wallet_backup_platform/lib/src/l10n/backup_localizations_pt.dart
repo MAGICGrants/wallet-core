@@ -18,7 +18,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
 
   @override
   String get backupSeedWarning =>
-      'Isto faz backup de dados adicionais que não ficam na blockchain, como certos dados de transações e sua agenda de endereços.';
+      'Isto faz backup de dados adicionais que não ficam na blockchain, como certos dados de transações, sua agenda de endereços e seus rótulos de endereço.';
 
   @override
   String get backupSecurityNote =>
@@ -45,20 +45,16 @@ class BackupLocalizationsPt extends BackupLocalizations {
       'Exporte os dados desta carteira antiga em um CSV não criptografado. Guarde-o em um local seguro junto com a sua frase de recuperação antiga.';
 
   @override
-  String get backupLegacyStep4 =>
-      'Restaure a carteira moderna neste dispositivo.';
+  String get backupLegacyStep4 => 'Restaure a carteira moderna neste dispositivo.';
 
   @override
-  String get backupExportCsv =>
-      'Exportar CSV Não Criptografado';
+  String get backupExportCsv => 'Exportar CSV Não Criptografado';
 
   @override
-  String get backupCsvExported =>
-      'Histórico exportado';
+  String get backupCsvExported => 'Histórico exportado';
 
   @override
-  String get backupCsvExportFailed =>
-      'Não foi possível exportar o histórico';
+  String get backupCsvExportFailed => 'Não foi possível exportar o histórico';
 
   @override
   String get backupUnsupportedPassphrase =>
@@ -71,7 +67,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
   String get backupOpening => 'Abrindo o backup…';
 
   @override
-  String backupSummary(int payments, int contacts) {
+  String backupSummary(int payments, int contacts, int labels) {
     String _temp0 = intl.Intl.pluralLogic(
       payments,
       locale: localeName,
@@ -84,7 +80,13 @@ class BackupLocalizationsPt extends BackupLocalizations {
       other: '$contacts contatos',
       one: '1 contato',
     );
-    return '$_temp0 e $_temp1 no backup';
+    String _temp2 = intl.Intl.pluralLogic(
+      labels,
+      locale: localeName,
+      other: '$labels rótulos de endereço',
+      one: '1 rótulo de endereço',
+    );
+    return '$_temp0, $_temp1 e $_temp2 no backup';
   }
 
   @override
@@ -212,7 +214,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
   String get backupRestoreTitle => 'Última Restauração';
 
   @override
-  String backupRestoreSummary(int payments, int contacts) {
+  String backupRestoreSummary(int payments, int contacts, int labels) {
     String _temp0 = intl.Intl.pluralLogic(
       payments,
       locale: localeName,
@@ -225,7 +227,13 @@ class BackupLocalizationsPt extends BackupLocalizations {
       other: '$contacts contatos restaurados',
       one: '1 contato restaurado',
     );
-    return '$_temp0; $_temp1.';
+    String _temp2 = intl.Intl.pluralLogic(
+      labels,
+      locale: localeName,
+      other: '$labels rótulos de endereço restaurados',
+      one: '1 rótulo de endereço restaurado',
+    );
+    return '$_temp0; $_temp1 e $_temp2.';
   }
 
   @override
@@ -281,7 +289,7 @@ class BackupLocalizationsPt extends BackupLocalizations {
   String get backupDeleted => 'Cópia do iCloud apagada';
 
   @override
-  String backupRestoreFound(int payments, int contacts) {
+  String backupRestoreFound(int payments, int contacts, int labels) {
     String _temp0 = intl.Intl.pluralLogic(
       payments,
       locale: localeName,
@@ -294,7 +302,13 @@ class BackupLocalizationsPt extends BackupLocalizations {
       other: '$contacts contatos',
       one: '1 contato',
     );
-    return '$_temp0 e $_temp1 restaurados do backup';
+    String _temp2 = intl.Intl.pluralLogic(
+      labels,
+      locale: localeName,
+      other: '$labels rótulos de endereço',
+      one: '1 rótulo de endereço',
+    );
+    return '$_temp0, $_temp1 e $_temp2 restaurados do backup';
   }
 
   @override

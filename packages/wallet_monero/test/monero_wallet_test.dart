@@ -1559,6 +1559,9 @@ class _RecordingBackup implements MetadataBackup {
   void contactsChanged() {}
 
   @override
+  void addressLabelsChanged() {}
+
+  @override
   Future<void> open(
     SeedSource seed, {
     required List<CryptoWallet> wallets,

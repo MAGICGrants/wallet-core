@@ -1421,6 +1421,7 @@ class MoneroWallet extends CryptoWallet {
     _unusedSubaddressIndexIsSupported = null;
     _primaryAddress = '';
     _subaddressCache = null;
+    _usedSubaddresses.clear();
   }
 
   @override
@@ -2247,6 +2248,59 @@ class MoneroWallet extends CryptoWallet {
   /// Unlike [getReceiveAddress] there is no primary-address fallback; the
   /// receive screen toggles between this and the primary itself.
   String? getUnusedSubaddress() => unusedSubaddress?.address;
+
+  @override
+  RotatingAddressKind get rotatingAddressKind => RotatingAddressKind.subaddress;
+
+  /// Subaddresses of account 0 derived for [loadUsedReceiveAddresses], by
+  /// index: each is a native call, and an index's address never changes.
+  final Map<int, String> _usedSubaddresses = {};
+
+  /// Every subaddress of account 0 that has received a transaction. Spends from
+  /// a subaddress also carry its index ([TxDetails.subaddrIndexList] on an
+  /// outgoing entry names the subaddresses spent from), so only incoming
+  /// entries count, and index 0, the primary address, is left out.
+  ///
+  /// wallet2 (node mode) lists a transaction that paid two subaddresses as two
+  /// entries, each with its own index and amount.
+  ///
+  /// **Known limitation, LWS mode:** lwsf lists such a transaction once, with
+  /// every index and only the total. The whole amount, and the transaction, are
+  /// credited to the first index, as [_recipientsFor] attributes it in the
+  /// transaction's details, rather than split by a guess; the other
+  /// subaddresses it paid show no receipt from it, and one that only ever
+  /// received that way is missing from the list.
+  @override
+  Future<List<UsedReceiveAddress>> loadUsedReceiveAddresses() async {
+    final receipts = <AddressReceipt>[];
+    for (final tx in txHistory) {
+      if (tx.direction != txDirectionIncoming || tx.accountIndex != 0) continue;
+      final index = tx.subaddrIndexList.isEmpty ? null : tx.subaddrIndexList.first;
+      if (index == null || index < 1) continue;
+      final address =
+          tx.recipients.where((r) => !r.isChange).firstOrNull?.address ??
+          await _subaddressAt(index);
+      if (address == null || address.isEmpty) continue;
+      receipts.add((
+        address: address,
+        index: index,
+        amountBaseUnits: tx.amountBaseUnits,
+        txHash: tx.hash,
+        timestamp: tx.timestamp,
+      ));
+    }
+    return summarizeReceipts(receipts);
+  }
+
+  Future<String?> _subaddressAt(int index) async {
+    final known = _usedSubaddresses[index];
+    if (known != null) return known;
+    final wallet = _wallet;
+    if (wallet == null) return null;
+    final address = await _backend.address(wallet, accountIndex: 0, addressIndex: index);
+    if (address.isNotEmpty) _usedSubaddresses[index] = address;
+    return address;
+  }
 
   /// The network this wallet's addresses belong to.
   ///
