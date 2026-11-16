@@ -84,6 +84,22 @@ Future<bool> confirmOwnerToLockLater(
 Future<BiometricAuthResult> _confirmOwner(String reason) =>
     BiometricAuth.confirmOwner(reason: reason);
 
+/// The shared screen-reader strings; null where the app has not registered
+/// them (a bare widget test), which leaves the control unnamed.
+WalletUiLocalizations? _uiStrings(BuildContext context) =>
+    Localizations.of<WalletUiLocalizations>(context, WalletUiLocalizations);
+
+/// A sheet's title: its heading, and the name of the sheet.
+Widget _sheetTitle(String text) =>
+    Semantics(header: true, namesRoute: true, child: Text(text, style: BrandText.sheetTitle));
+
+/// An inline error, spoken as it appears or changes.
+Widget _errorLine(String text) => Semantics(
+  container: true,
+  liveRegion: true,
+  child: Text(text, style: BrandText.caption.copyWith(color: BrandColors.error)),
+);
+
 /// The wallet password, checked without changing what is unlocked
 /// ([WalletManager.checkTypedPassword]). Pops true once it is right.
 class _PasswordSheet extends StatefulWidget {
@@ -150,12 +166,14 @@ class _PasswordSheetState extends State<_PasswordSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SheetHandle(),
-            Text(i18n.advancedSecurityPasswordTitle, style: BrandText.sheetTitle),
+            _sheetTitle(i18n.advancedSecurityPasswordTitle),
             const SizedBox(height: BrandSpacing.xs),
-            Text(widget.body, style: BrandText.bodyMuted),
+            // Its own node, so the sheet's heading stays the title alone.
+            Semantics(container: true, child: Text(widget.body, style: BrandText.bodyMuted)),
             const SizedBox(height: BrandSpacing.lg),
             BrandTextField(
               controller: _password,
+              autofocus: isDesktopLayout,
               label: i18n.advancedSecurityPasswordLabel,
               obscureText: _obscure,
               keyboardType: TextInputType.visiblePassword,
@@ -165,14 +183,15 @@ class _PasswordSheetState extends State<_PasswordSheet> {
                 icon: Icon(
                   _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                   color: BrandColors.inkMuted,
+                  // Says what pressing does, never the password.
+                  semanticLabel: _obscure
+                      ? _uiStrings(context)?.a11yShowPassword
+                      : _uiStrings(context)?.a11yHidePassword,
                 ),
                 onPressed: () => setState(() => _obscure = !_obscure),
               ),
             ),
-            if (_error != null) ...[
-              const SizedBox(height: BrandSpacing.sm),
-              Text(_error!, style: BrandText.caption.copyWith(color: BrandColors.error)),
-            ],
+            if (_error != null) ...[const SizedBox(height: BrandSpacing.sm), _errorLine(_error!)],
             const SizedBox(height: BrandSpacing.lg),
             BrandButton(
               label: i18n.advancedSecurityContinue,
@@ -253,29 +272,42 @@ class _AppLockTileState extends State<AppLockTile> {
                     color: BrandColors.primaryDeep,
                   ),
                   const SizedBox(width: 11),
-                  Expanded(child: Text(i18n.appLockLabel, style: BrandText.sheetTitle)),
+                  Expanded(child: _sheetTitle(i18n.appLockLabel)),
                 ],
               ),
               const SizedBox(height: 7),
-              Text(
-                _description(i18n),
-                style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+              // Its own node, so the sheet's heading stays the title alone.
+              Semantics(
+                container: true,
+                child: Text(
+                  _description(i18n),
+                  style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+                ),
               ),
               const SizedBox(height: BrandSpacing.lg),
               SettingsGroup(
                 tiles: [
                   for (final minutes in AppLockPreferences.minuteOptions)
-                    InkWell(
-                      onTap: () => Navigator.pop(sheetContext, minutes),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(appLockLabel(i18n, minutes), style: BrandText.listTitle),
-                            ),
-                            RadioDot(selected: minutes == current),
-                          ],
+                    // One radio button per time, the current one checked.
+                    Semantics(
+                      container: true,
+                      checked: minutes == current,
+                      inMutuallyExclusiveGroup: true,
+                      child: InkWell(
+                        onTap: () => Navigator.pop(sheetContext, minutes),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  appLockLabel(i18n, minutes),
+                                  style: BrandText.listTitle,
+                                ),
+                              ),
+                              RadioDot(selected: minutes == current),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -431,23 +463,24 @@ class _RecoveryPhraseSheetState extends State<_RecoveryPhraseSheet>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SheetHandle(),
-            Text(i18n.securityKeyUseRecoveryPhrase, style: BrandText.sheetTitle),
+            _sheetTitle(i18n.securityKeyUseRecoveryPhrase),
             if (widget.body != null) ...[
               const SizedBox(height: BrandSpacing.xs),
-              Text(widget.body!, style: BrandText.bodyMuted),
+              // Its own node, so the sheet's heading stays the title alone.
+              Semantics(container: true, child: Text(widget.body!, style: BrandText.bodyMuted)),
             ],
             const SizedBox(height: BrandSpacing.lg),
             BrandTextField(
               controller: _phrase,
+              autofocus: isDesktopLayout,
+              // Named for the field, never its value; the hint goes once typed in.
+              semanticLabel: _uiStrings(context)?.a11yRecoveryPhrase,
               hint: i18n.securityKeyRecoveryPhraseHint,
               maxLines: 4,
               keyboardType: TextInputType.visiblePassword,
               sensitive: true,
             ),
-            if (_error != null) ...[
-              const SizedBox(height: BrandSpacing.sm),
-              Text(_error!, style: BrandText.caption.copyWith(color: BrandColors.error)),
-            ],
+            if (_error != null) ...[const SizedBox(height: BrandSpacing.sm), _errorLine(_error!)],
             const SizedBox(height: BrandSpacing.lg),
             BrandButton(
               label: i18n.securityKeyUnlockButton,

@@ -281,6 +281,9 @@ class _LanguageRow extends StatelessWidget {
     return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      checked: selected,
+      inMutuallyExclusiveGroup: true,
+      focusRadius: BrandRadii.rTile,
       child: Container(
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: BrandColors.surfaceTinted)),
@@ -360,7 +363,16 @@ class _PickerSheet extends StatelessWidget {
                           color: iconColor ?? BrandColors.primary,
                         ),
                         const SizedBox(width: 11),
-                        Expanded(child: Text(labels.title, style: BrandText.sheetTitle)),
+                        // The sheet's heading, and the name screen readers
+                        // give it.
+                        Expanded(
+                          child: Semantics(
+                            container: true,
+                            header: true,
+                            namesRoute: true,
+                            child: Text(labels.title, style: BrandText.sheetTitle),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 7),

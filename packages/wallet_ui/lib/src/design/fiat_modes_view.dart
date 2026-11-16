@@ -64,7 +64,9 @@ class FiatModesView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (modeLabel != null) ...[
-          SectionHeader(label: modeLabel!),
+          // Its own node: in a list, a heading that is not one takes in the
+          // text around it.
+          Semantics(container: true, child: SectionHeader(label: modeLabel!)),
           const SizedBox(height: BrandSpacing.md),
         ],
         if (offerTorOnly) ...[
@@ -91,7 +93,7 @@ class FiatModesView extends StatelessWidget {
         ),
         if (modeIndex != _disabled) ...[
           const SizedBox(height: BrandSpacing.xl),
-          SectionHeader(label: currencyLabel),
+          Semantics(container: true, child: SectionHeader(label: currencyLabel)),
           const SizedBox(height: BrandSpacing.md),
           Wrap(
             spacing: BrandSpacing.sm,

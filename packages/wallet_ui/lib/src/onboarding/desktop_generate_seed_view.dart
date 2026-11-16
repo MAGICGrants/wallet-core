@@ -61,9 +61,14 @@ class _DesktopGenerateSeedViewState extends State<DesktopGenerateSeedView> {
   bool _revealed = false;
   bool _confirmed = false;
 
+  /// Blurred, and out of the semantics tree, until revealed: the blur alone
+  /// hides it only from the eye, not from a screen reader or any
+  /// accessibility service.
   Widget _blurUntilRevealed(Widget child) => _revealed
       ? child
-      : ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8), child: child);
+      : ExcludeSemantics(
+          child: ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8), child: child),
+        );
 
   @override
   Widget build(BuildContext context) {
@@ -104,32 +109,37 @@ class _DesktopGenerateSeedViewState extends State<DesktopGenerateSeedView> {
           ],
           if (_revealed) ...[
             const SizedBox(height: 18),
-            InkWell(
-              mouseCursor: WidgetStateMouseCursor.clickable,
-              onTap: () => setState(() => _confirmed = !_confirmed),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Checkbox(
-                    value: _confirmed,
-                    onChanged: (v) => setState(() => _confirmed = v ?? false),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 11),
-                      child: Text(
-                        widget.confirmLabel,
-                        style: TextStyle(
-                          fontFamily: 'Ubuntu',
-                          fontSize: 13,
-                          height: 1.5,
-                          color: BrandColors.inkMuted,
+            // One control: the checkbox, named by its text, and one tab stop
+            // (the row's ink takes clicks, not focus).
+            MergeSemantics(
+              child: InkWell(
+                mouseCursor: WidgetStateMouseCursor.clickable,
+                canRequestFocus: false,
+                onTap: () => setState(() => _confirmed = !_confirmed),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(
+                      value: _confirmed,
+                      onChanged: (v) => setState(() => _confirmed = v ?? false),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 11),
+                        child: Text(
+                          widget.confirmLabel,
+                          style: TextStyle(
+                            fontFamily: 'Ubuntu',
+                            fontSize: 13,
+                            height: 1.5,
+                            color: BrandColors.inkMuted,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -160,10 +170,18 @@ class _SeedGate extends StatelessWidget {
     return Stack(
       alignment: Alignment.center,
       children: [
-        ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8), child: grid),
+        // The blur hides the words only from the eye: kept out of the
+        // semantics tree, no screen reader or accessibility service can read
+        // them until the user reveals them.
+        ExcludeSemantics(
+          child: ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8), child: grid),
+        ),
+        // Keyboard: Tab reaches it and Enter reveals (Tappable), so wallet
+        // creation no longer needs a mouse.
         Tappable(
           onTap: onReveal,
           behavior: HitTestBehavior.opaque,
+          focusRadius: BrandRadii.rCard,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

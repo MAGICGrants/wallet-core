@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:wallet_infra/wallet_infra.dart' show BoundToAnotherPcException;
+import 'package:wallet_infra/wallet_infra.dart' show BoundToAnotherPcException, SecureScreenMixin;
 import 'package:wallet_ui/wallet_ui.dart';
 
 import '../fhse_vault.dart'
@@ -129,7 +129,10 @@ class SecurityKeyFlow extends StatefulWidget {
   State<SecurityKeyFlow> createState() => _SecurityKeyFlowState();
 }
 
-class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
+// The key's PIN is typed here, and shown in full by the eye button: no
+// screenshots or recordings, and on Android 14+ only accessibility tools can
+// read the flow (SecureScreenMixin), for every step while it is open.
+class _SecurityKeyFlowState extends State<SecurityKeyFlow> with SecureScreenMixin {
   final _service = SecurityKeyService.instance;
   late final StreamSubscription<SecurityKeyStatus> _statusSub;
 
@@ -501,12 +504,15 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
           child: StepDots(count: _dotCount, index: _dotIndex),
         ),
         SizedBox(height: widget.large ? BrandSpacing.xxl : BrandSpacing.xl),
+        // A picture of the prompt below it, which says the same in words.
         Center(
-          child: _KeyGlyph(
-            icon: _glyph,
-            pulsing: _waitingForUser,
-            done: _step == _Step.name,
-            size: widget.large ? 104 : 84,
+          child: ExcludeSemantics(
+            child: _KeyGlyph(
+              icon: _glyph,
+              pulsing: _waitingForUser,
+              done: _step == _Step.name,
+              size: widget.large ? 104 : 84,
+            ),
           ),
         ),
         SizedBox(height: widget.large ? BrandSpacing.xl : BrandSpacing.lg),
@@ -516,10 +522,17 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
             key: ValueKey(copy.title),
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                copy.title,
-                textAlign: TextAlign.center,
-                style: widget.large ? BrandText.title : BrandText.sheetTitle,
+              // The step's prompt ("Touch your key"): a heading, spoken as it
+              // changes, since the user is looking at the key, not the screen.
+              Semantics(
+                container: true,
+                header: true,
+                liveRegion: true,
+                child: Text(
+                  copy.title,
+                  textAlign: TextAlign.center,
+                  style: widget.large ? BrandText.title : BrandText.sheetTitle,
+                ),
               ),
               if (copy.body.isNotEmpty) ...[
                 const SizedBox(height: BrandSpacing.sm),
@@ -532,10 +545,15 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
         ..._stepBody(i18n),
         if (_error != null) ...[
           const SizedBox(height: BrandSpacing.md),
-          Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: BrandText.caption.copyWith(color: BrandColors.error, height: 1.4),
+          // Spoken as it appears: a wrong PIN, a key that cannot be used.
+          Semantics(
+            container: true,
+            liveRegion: true,
+            child: Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: BrandText.caption.copyWith(color: BrandColors.error, height: 1.4),
+            ),
           ),
         ],
         const SizedBox(height: BrandSpacing.lg),
@@ -549,19 +567,24 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
       case _Step.pin:
         final retries = _info?.pinRetries;
         return [
-          _pinField(_pin, i18n.securityKeysPinLabel, onSubmitted: _submitPin),
+          _pinField(_pin, i18n.securityKeysPinLabel, onSubmitted: _submitPin, autofocus: true),
           if (retries != null && retries <= 3 && _error == null) ...[
             const SizedBox(height: BrandSpacing.sm),
-            Text(
-              i18n.securityKeyPinAttemptsLeft(retries),
-              textAlign: TextAlign.center,
-              style: BrandText.caption.copyWith(color: BrandColors.warning),
+            // Spoken as it appears: few tries are left before the key locks.
+            Semantics(
+              container: true,
+              liveRegion: true,
+              child: Text(
+                i18n.securityKeyPinAttemptsLeft(retries),
+                textAlign: TextAlign.center,
+                style: BrandText.caption.copyWith(color: BrandColors.warning),
+              ),
             ),
           ],
         ];
       case _Step.newPin:
         return [
-          _pinField(_newPin, i18n.securityKeysNewPinLabel),
+          _pinField(_newPin, i18n.securityKeysNewPinLabel, autofocus: true),
           const SizedBox(height: BrandSpacing.md),
           _pinField(_confirmPin, i18n.securityKeysConfirmPinLabel, onSubmitted: _setPin),
           if (_busy) ...[const SizedBox(height: BrandSpacing.md), _statusLine(i18n)],
@@ -591,10 +614,13 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (!waitingForUser) ...[
+          // The line beside it says what is under way.
           SizedBox(
             width: 14,
             height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: BrandColors.primaryDeep),
+            child: ExcludeSemantics(
+              child: CircularProgressIndicator(strokeWidth: 2, color: BrandColors.primaryDeep),
+            ),
           ),
           const SizedBox(width: BrandSpacing.sm),
         ],
@@ -665,22 +691,33 @@ class _SecurityKeyFlowState extends State<SecurityKeyFlow> {
     }
   }
 
-  Widget _pinField(TextEditingController controller, String label, {VoidCallback? onSubmitted}) =>
-      BrandTextField(
-        controller: controller,
-        label: label,
-        obscureText: _obscure,
-        keyboardType: TextInputType.visiblePassword,
-        sensitive: true,
-        onSubmitted: onSubmitted == null ? null : (_) => onSubmitted(),
-        suffix: IconButton(
-          icon: Icon(
-            _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-            color: BrandColors.inkMuted,
-          ),
-          onPressed: () => setState(() => _obscure = !_obscure),
-        ),
-      );
+  /// [autofocus]: the step's first PIN field takes focus as the step opens, on
+  /// desktop, where the keyboard is already there to type it.
+  Widget _pinField(
+    TextEditingController controller,
+    String label, {
+    VoidCallback? onSubmitted,
+    bool autofocus = false,
+  }) => BrandTextField(
+    controller: controller,
+    autofocus: autofocus && isDesktopLayout,
+    label: label,
+    obscureText: _obscure,
+    keyboardType: TextInputType.visiblePassword,
+    sensitive: true,
+    onSubmitted: onSubmitted == null ? null : (_) => onSubmitted(),
+    suffix: IconButton(
+      icon: Icon(
+        _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+        color: BrandColors.inkMuted,
+        // Says what pressing does, never the PIN.
+        semanticLabel: _obscure
+            ? FhseLocalizations.of(context).showPin
+            : FhseLocalizations.of(context).hidePin,
+      ),
+      onPressed: () => setState(() => _obscure = !_obscure),
+    ),
+  );
 }
 
 /// The key, drawn large: a tinted disc with the step's glyph, and a ring that
@@ -816,10 +853,19 @@ Future<bool> showAddSecurityKeySheet(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SheetHandle(),
-              Text(
-                i18n.securityKeysAddButton.toUpperCase(),
-                textAlign: TextAlign.center,
-                style: BrandText.section,
+              // The sheet's name, read in its own case: capitals can be
+              // spelled out letter by letter.
+              Semantics(
+                header: true,
+                namesRoute: true,
+                label: i18n.securityKeysAddButton,
+                child: ExcludeSemantics(
+                  child: Text(
+                    i18n.securityKeysAddButton.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    style: BrandText.section,
+                  ),
+                ),
               ),
               const SizedBox(height: BrandSpacing.md),
               SecurityKeyFlow(

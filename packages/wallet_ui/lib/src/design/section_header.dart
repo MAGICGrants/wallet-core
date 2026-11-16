@@ -17,7 +17,16 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: padding,
-      child: Text(label.toUpperCase(), style: BrandText.section),
+      // A heading for screen readers, read as written: shown upper-cased, a
+      // short word can be spelled out letter by letter.
+      // Its own node, so a header inside a card does not take in the text
+      // around it.
+      child: Semantics(
+        container: true,
+        header: true,
+        label: label,
+        child: ExcludeSemantics(child: Text(label.toUpperCase(), style: BrandText.section)),
+      ),
     );
   }
 }

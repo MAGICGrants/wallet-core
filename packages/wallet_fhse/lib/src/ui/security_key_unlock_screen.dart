@@ -35,7 +35,8 @@ class SecurityKeyUnlockScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Center(child: SecurityKeysUi.config.logo(context)),
+                    // The app's mark: decoration above the prompt.
+                    Center(child: ExcludeSemantics(child: SecurityKeysUi.config.logo(context))),
                     const SizedBox(height: BrandSpacing.xl),
                     SecurityKeyFlow(
                       enrolling: false,

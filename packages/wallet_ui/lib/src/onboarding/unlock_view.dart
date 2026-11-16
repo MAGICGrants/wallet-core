@@ -6,6 +6,7 @@ import 'package:wallet_infra/wallet_infra.dart' show TorService, TorConnectionSt
 import '../design/brand.dart';
 import '../design/brand_button.dart';
 import '../design/brand_text_field.dart';
+import '../l10n/ui_strings.dart';
 
 /// Translated strings for [UnlockView]. Injected so the view stays
 /// localization-agnostic — each app passes its own generated l10n.
@@ -78,7 +79,7 @@ class UnlockView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = isDesktop ? _desktopContent() : _mobileContent();
+    final content = isDesktop ? _desktopContent(context) : _mobileContent();
 
     return PopScope(
       canPop: false,
@@ -97,7 +98,16 @@ class UnlockView extends StatelessWidget {
   }
 
   // Desktop: logo, title, field and button as one vertically-centred group.
-  Widget _desktopContent() {
+  /// The screen's title: its heading, and the name screen readers give it.
+  Widget _title() => Semantics(
+    container: true,
+    header: true,
+    namesRoute: true,
+    child: Text(labels.title, textAlign: TextAlign.center, style: BrandText.title),
+  );
+
+  Widget _desktopContent(BuildContext context) {
+    final strings = uiStringsOf(context);
     return SafeArea(
       child: Center(
         child: ConstrainedBox(
@@ -110,15 +120,23 @@ class UnlockView extends StatelessWidget {
               children: [
                 Center(child: logo),
                 const SizedBox(height: BrandSpacing.lg),
-                Text(labels.title, textAlign: TextAlign.center, style: BrandText.title),
+                _title(),
                 const SizedBox(height: BrandSpacing.xl),
                 if (labels.passwordLabel != null) ...[
-                  Text(labels.passwordLabel!.toUpperCase(), style: BrandText.section),
+                  // Names the field below, read as written rather than
+                  // upper-cased, so it is not also read on its own.
+                  ExcludeSemantics(
+                    child: Text(labels.passwordLabel!.toUpperCase(), style: BrandText.section),
+                  ),
                   const SizedBox(height: BrandSpacing.sm),
                 ],
                 BrandTextField(
                   controller: passwordController,
+                  // Desktop only (this layout): the screen is for typing it.
+                  autofocus: true,
                   hint: labels.passwordHint,
+                  // The hint goes once the field holds text; this stays.
+                  semanticLabel: labels.passwordLabel ?? labels.passwordHint,
                   obscureText: obscure,
                   sensitive: true,
                   onSubmitted: (_) => onUnlockPassword(),
@@ -126,13 +144,25 @@ class UnlockView extends StatelessWidget {
                     icon: Icon(
                       obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                       color: BrandColors.inkMuted,
+                      // Says what pressing it does.
+                      semanticLabel: obscure
+                          ? strings?.a11yShowPassword
+                          : strings?.a11yHidePassword,
                     ),
                     onPressed: onToggleObscure,
                   ),
                 ),
                 if (error != null) ...[
                   const SizedBox(height: BrandSpacing.sm),
-                  Text(error!, style: BrandText.caption.copyWith(color: BrandColors.error)),
+                  // Spoken as it appears or changes.
+                  Semantics(
+                    container: true,
+                    liveRegion: true,
+                    child: Text(
+                      error!,
+                      style: BrandText.caption.copyWith(color: BrandColors.error),
+                    ),
+                  ),
                 ],
                 const SizedBox(height: BrandSpacing.lg),
                 ValueListenableBuilder(
@@ -165,7 +195,7 @@ class UnlockView extends StatelessWidget {
                 const Spacer(flex: 3),
                 Center(child: logo),
                 const SizedBox(height: BrandSpacing.xl),
-                Text(labels.title, textAlign: TextAlign.center, style: BrandText.title),
+                _title(),
                 const Spacer(flex: 4),
                 BrandButton(
                   label: biometricLabel ?? labels.unlockButton,
@@ -247,24 +277,29 @@ class _TorStatusLineState extends State<_TorStatusLine> {
       TorConnectionStatus.connecting => (BrandColors.warning, 'Tor · connecting'),
       TorConnectionStatus.disconnected => (BrandColors.inkFaint, 'Tor · off'),
     };
-    return Row(
-      children: [
-        Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 9),
-        Text(
-          text,
-          style: TextStyle(
-            fontFamily: 'Ubuntu',
-            fontSize: 12,
-            height: 1,
-            color: BrandColors.inkMuted,
+    // A change of state (connecting to connected) is spoken.
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-        ),
-      ],
+          const SizedBox(width: 9),
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'Ubuntu',
+              fontSize: 12,
+              height: 1,
+              color: BrandColors.inkMuted,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

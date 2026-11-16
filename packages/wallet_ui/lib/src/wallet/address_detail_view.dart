@@ -8,6 +8,7 @@ import '../design/brand_card.dart';
 import '../design/brand_screen_header.dart';
 import '../design/icon_circle_button.dart';
 import '../design/share_anchor.dart';
+import '../l10n/ui_strings.dart';
 import '../l10n/wallet_ui_localizations.dart';
 import 'labeled_addresses.dart';
 import 'receive_view.dart';
@@ -62,6 +63,7 @@ class AddressDetailView extends StatelessWidget {
                             builder: (context) => IconCircleButton(
                               icon: Icons.ios_share,
                               onPressed: () => onShare!(shareAnchorRect(context)),
+                              semanticLabel: uiStringsOf(context)?.a11yShare,
                             ),
                           ),
                   ),
@@ -124,6 +126,7 @@ class AddressDetailContent extends StatelessWidget {
       address: used.address,
       heading: labeledAddressName(strings, coin.kind, used.index),
       onCopy: onCopy,
+      copyLabel: strings.receiveCopyAddress,
       enlarged: qrEnlarged,
       onToggle: onToggleQr,
       hint: onToggleQr == null

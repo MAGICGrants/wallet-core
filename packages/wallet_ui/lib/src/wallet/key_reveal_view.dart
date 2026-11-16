@@ -9,6 +9,7 @@ import '../design/brand_screen_header.dart';
 import '../design/section_header.dart';
 import '../design/sheet.dart' show isDesktopModal;
 import '../design/warning_callout.dart';
+import '../l10n/ui_strings.dart';
 
 /// One labelled value in a [KeyRevealView] — an address, key, seed phrase or
 /// height. [revealable] blurs the value behind a tap-to-reveal overlay (used
@@ -133,7 +134,13 @@ class _KeyRevealViewState extends State<KeyRevealView> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (widget.headerIcon != null) ...[widget.headerIcon!, const SizedBox(width: 8)],
-                Expanded(child: Text(widget.title, style: BrandText.title)),
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    namesRoute: true,
+                    child: Text(widget.title, style: BrandText.title),
+                  ),
+                ),
               ],
             ),
           ),
@@ -183,7 +190,11 @@ class _KeyRevealViewState extends State<KeyRevealView> {
                         if (widget.largeTitle)
                           Padding(
                             padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
-                            child: Text(widget.title, style: BrandText.title),
+                            child: Semantics(
+                              header: true,
+                              namesRoute: true,
+                              child: Text(widget.title, style: BrandText.title),
+                            ),
                           ),
                         ...scrollChildren,
                       ],
@@ -248,15 +259,20 @@ class _KeyField extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
+                      // The blur hides a secret only from the eye: kept out of
+                      // the semantics tree, no screen reader or accessibility
+                      // service can read it until the user reveals it.
                       child: hidden
-                          ? ImageFiltered(
-                              imageFilter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                              child: valueText,
+                          ? ExcludeSemantics(
+                              child: ImageFiltered(
+                                imageFilter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                                child: valueText,
+                              ),
                             )
                           : valueText,
                     ),
                     const SizedBox(width: 11),
-                    _CopyChip(onTap: onCopy),
+                    _CopyChip(onTap: onCopy, label: label),
                   ],
                 ),
                 if (hidden && onReveal != null)
@@ -264,6 +280,10 @@ class _KeyField extends StatelessWidget {
                     child: Tappable(
                       behavior: HitTestBehavior.opaque,
                       onTap: onReveal,
+                      // Named for the value it reveals; the pill's own text
+                      // ("Tap to reveal") does not say which.
+                      semanticLabel: revealLabel == null ? null : '$revealLabel, $label',
+                      excludeSemantics: true,
                       child: Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
@@ -292,17 +312,21 @@ class _KeyField extends StatelessWidget {
   }
 }
 
-/// The 34×34 tan copy button used inside a key card.
+/// The 34×34 tan copy button used inside a key card. Named to screen readers
+/// by the field's [label] ("Copy Secret View Key"), never by its value.
 class _CopyChip extends StatelessWidget {
   final VoidCallback onTap;
+  final String label;
 
-  const _CopyChip({required this.onTap});
+  const _CopyChip({required this.onTap, required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      semanticLabel: uiStringsOf(context)?.a11yCopyValue(label),
+      focusRadius: BorderRadius.circular(11),
       child: Container(
         width: 34,
         height: 34,

@@ -5,6 +5,7 @@ import 'package:wallet_fiat/wallet_fiat.dart' show FiatRateModel;
 
 import '../design/brand.dart';
 import '../design/click_cursor.dart';
+import '../l10n/ui_strings.dart';
 import 'coin_mark.dart';
 import 'format.dart';
 
@@ -63,6 +64,15 @@ class TxActivityRow extends StatelessWidget {
       TxStatus.unknown => (Icons.warning_rounded, BrandColors.warning),
       TxStatus.ok => confirmed ? null : (Icons.hourglass_top_rounded, BrandColors.warning),
     };
+    // The cue in words, read with the row: the icon alone says nothing to a
+    // screen reader, and a failed send must not sound like a sent one.
+    final strings = uiStringsOf(context);
+    final String? statusWords = switch (tx.status) {
+      TxStatus.failed => strings?.a11yTxFailed,
+      TxStatus.unknown => strings?.a11yTxUnknown,
+      TxStatus.ok => confirmed ? null : strings?.pending,
+    };
+    final time = DateFormat('HH:mm').format(date);
 
     return Tappable(
       behavior: HitTestBehavior.opaque,
@@ -95,16 +105,21 @@ class TxActivityRow extends StatelessWidget {
                   Row(
                     children: [
                       if (statusCue != null) ...[
-                        Icon(statusCue.$1, size: 12, color: statusCue.$2),
+                        Icon(
+                          statusCue.$1,
+                          size: 12,
+                          color: statusCue.$2,
+                          semanticLabel: statusWords,
+                        ),
                         const SizedBox(width: 4),
                       ],
                       Text(
                         // Default (en) symbols: initializeDateFormatting isn't wired, so a
                         // locale arg would throw for pt. Single-coin apps
                         // (showCoinIcon false) drop the redundant coin name.
-                        showCoinIcon
-                            ? '${DateFormat('HH:mm').format(date)} · ${asset.assetName}'
-                            : DateFormat('HH:mm').format(date),
+                        showCoinIcon ? '$time · ${asset.assetName}' : time,
+                        // Read without the dot between time and coin.
+                        semanticsLabel: showCoinIcon ? '$time, ${asset.assetName}' : null,
                         style: TextStyle(fontSize: 11, height: 1.3, color: BrandColors.inkMuted),
                       ),
                     ],

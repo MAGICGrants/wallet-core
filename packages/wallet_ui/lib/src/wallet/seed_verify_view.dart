@@ -8,6 +8,7 @@ import '../design/brand_button.dart';
 import '../design/brand_screen_header.dart';
 import '../design/notice_sheet.dart';
 import '../design/seed_grid.dart';
+import '../l10n/ui_strings.dart';
 import '../onboarding/seed_word_slot.dart';
 
 /// The outcome of one try at [SeedVerifier.check]. [unavailable] means the
@@ -50,6 +51,9 @@ class SeedVerifier {
 
   /// Wrong tries left before the app locks.
   int get triesLeft => maxFailures - _failures;
+
+  /// The seed's word count, once [start] has read it; 0 before.
+  int get wordCount => _wordCount;
 
   /// Reads the seed's length and the wrong tries so far, and picks the first
   /// positions. False when the seed cannot be read.
@@ -271,16 +275,32 @@ class _SeedVerifyViewState extends State<SeedVerifyView> {
     final List<Widget> content;
     if (_ready == null) {
       content = [
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 40),
-          child: Center(child: CircularProgressIndicator()),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: CircularProgressIndicator(semanticsLabel: uiStringsOf(context)?.a11yLoading),
+          ),
         ),
       ];
     } else if (_ready == false) {
-      content = [Text(labels.unavailable, style: BrandText.bodyMuted)];
+      // Spoken when a check finds the seed unreadable.
+      content = [
+        Semantics(
+          container: true,
+          liveRegion: true,
+          child: Text(labels.unavailable, style: BrandText.bodyMuted),
+        ),
+      ];
     } else {
       content = [
-        Text(labels.subtitle([for (final p in positions) p + 1]), style: BrandText.bodyMuted),
+        // Its own node: in the desktop modal it would otherwise join the title.
+        Semantics(
+          container: true,
+          child: Text(
+            labels.subtitle([for (final p in positions) p + 1]),
+            style: BrandText.bodyMuted,
+          ),
+        ),
         const SizedBox(height: BrandSpacing.lg),
         for (var r = 0; r * cols < positions.length; r++) ...[
           if (r > 0) const SizedBox(height: 9),
@@ -317,7 +337,11 @@ class _SeedVerifyViewState extends State<SeedVerifyView> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(labels.title, style: BrandText.sheetTitle),
+          Semantics(
+            header: true,
+            namesRoute: true,
+            child: Text(labels.title, style: BrandText.sheetTitle),
+          ),
           const SizedBox(height: BrandSpacing.md),
           ...content,
           if (button != null) ...[const SizedBox(height: BrandSpacing.xl), button],
@@ -366,6 +390,8 @@ class _SeedVerifyViewState extends State<SeedVerifyView> {
       // Keyed on the position so a new set of words gets fresh slots.
       key: ValueKey('$i-$position'),
       index: position + 1,
+      // Named "Word 7 of 25" to screen readers: the position only.
+      count: widget.verifier.wordCount > 0 ? widget.verifier.wordCount : null,
       controller: _controllers[i],
       focusNode: _nodes[i],
       validate: (_) => true,

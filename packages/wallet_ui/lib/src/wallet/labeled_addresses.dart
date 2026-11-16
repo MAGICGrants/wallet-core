@@ -140,42 +140,39 @@ class _LabeledAddressListState extends State<LabeledAddressList> {
     final total = labeledAddressTotal(used.receivedBaseUnits, widget.coin);
     final count = strings.labeledTransactionCount(used.txCount);
     if (label != null) {
-      return Semantics(
-        button: true,
-        child: Tappable(
-          onTap: () => widget.onOpen(entry),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-            child: Row(
-              children: [
-                const AddressLabelTile(),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: BrandText.listTitle,
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '#${used.index} · ${shortenMiddle(used.address, head: 6, tail: 6)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: BrandText.mono.copyWith(fontSize: 12, color: BrandColors.inkMuted),
-                      ),
-                    ],
-                  ),
+      return Tappable(
+        onTap: () => widget.onOpen(entry),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          child: Row(
+            children: [
+              const AddressLabelTile(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: BrandText.listTitle,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '#${used.index} · ${shortenMiddle(used.address, head: 6, tail: 6)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: BrandText.mono.copyWith(fontSize: 12, color: BrandColors.inkMuted),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                _Total(total: total, count: count),
-                const SizedBox(width: 6),
-                Icon(Icons.chevron_right, size: 18, color: BrandColors.inkFaint),
-              ],
-            ),
+              ),
+              const SizedBox(width: 10),
+              _Total(total: total, count: count),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right, size: 18, color: BrandColors.inkFaint),
+            ],
           ),
         ),
       );
@@ -188,31 +185,28 @@ class _LabeledAddressListState extends State<LabeledAddressList> {
       child: Row(
         children: [
           Expanded(
-            child: Semantics(
-              button: true,
-              child: Tappable(
-                onTap: () => widget.onOpen(entry),
-                child: Row(
-                  children: [
-                    AddressIndexTile(index: used.index),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            labeledAddressName(strings, widget.coin.kind, used.index),
-                            style: BrandText.listTitle,
-                          ),
-                          const SizedBox(height: 3),
-                          _AmountLine(total: total, count: count),
-                          const SizedBox(height: 2),
-                          Text(lastUsed, style: BrandText.caption),
-                        ],
-                      ),
+            child: Tappable(
+              onTap: () => widget.onOpen(entry),
+              child: Row(
+                children: [
+                  AddressIndexTile(index: used.index),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          labeledAddressName(strings, widget.coin.kind, used.index),
+                          style: BrandText.listTitle,
+                        ),
+                        const SizedBox(height: 3),
+                        _AmountLine(total: total, count: count),
+                        const SizedBox(height: 2),
+                        Text(lastUsed, style: BrandText.caption),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -324,37 +318,34 @@ class _HideUnlabeledToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
+    return Tappable(
       toggled: on,
-      child: Tappable(
-        onTap: onTap,
-        child: Container(
-          height: 32,
-          padding: const EdgeInsets.fromLTRB(10, 0, 12, 0),
-          decoration: BoxDecoration(
-            color: BrandColors.card,
-            borderRadius: BrandRadii.rPill,
-            border: Border.all(color: BrandColors.borderStrong),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 16,
-                height: 16,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: on ? BrandColors.primaryDeep : null,
-                  borderRadius: BorderRadius.circular(5),
-                  border: on ? null : Border.all(color: BrandColors.inputBorder, width: 1.5),
-                ),
-                child: on ? const Icon(Icons.check, size: 11, color: BrandColors.onPrimary) : null,
+      onTap: onTap,
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.fromLTRB(10, 0, 12, 0),
+        decoration: BoxDecoration(
+          color: BrandColors.card,
+          borderRadius: BrandRadii.rPill,
+          border: Border.all(color: BrandColors.borderStrong),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 16,
+              height: 16,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: on ? BrandColors.primaryDeep : null,
+                borderRadius: BorderRadius.circular(5),
+                border: on ? null : Border.all(color: BrandColors.inputBorder, width: 1.5),
               ),
-              const SizedBox(width: 7),
-              Text(label, style: TextStyle(fontSize: 12.5, color: BrandColors.ink)),
-            ],
-          ),
+              child: on ? const Icon(Icons.check, size: 11, color: BrandColors.onPrimary) : null,
+            ),
+            const SizedBox(width: 7),
+            Text(label, style: TextStyle(fontSize: 12.5, color: BrandColors.ink)),
+          ],
         ),
       ),
     );
@@ -621,39 +612,36 @@ class LabeledAddressPicker extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 2),
         ),
         for (var i = 0; i < entries.length; i++)
-          Semantics(
-            button: true,
+          Tappable(
             selected: entries[i].address == selected,
-            child: Tappable(
-              onTap: () => onSelect(entries[i].coinSymbol, entries[i].address),
-              child: Container(
-                decoration: i == entries.length - 1
-                    ? null
-                    : BoxDecoration(
-                        border: Border(bottom: BorderSide(color: BrandColors.surfaceTinted)),
-                      ),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Row(
-                  children: [
-                    RadioDot(selected: entries[i].address == selected, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        entries[i].label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 14, color: BrandColors.ink),
-                      ),
+            onTap: () => onSelect(entries[i].coinSymbol, entries[i].address),
+            child: Container(
+              decoration: i == entries.length - 1
+                  ? null
+                  : BoxDecoration(
+                      border: Border(bottom: BorderSide(color: BrandColors.surfaceTinted)),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      coins.length > 1
-                          ? '${entries[i].coinSymbol} #${entries[i].index}'
-                          : '#${entries[i].index}',
-                      style: BrandText.mono.copyWith(fontSize: 12, color: BrandColors.inkMuted),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  RadioDot(selected: entries[i].address == selected, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      entries[i].label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 14, color: BrandColors.ink),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    coins.length > 1
+                        ? '${entries[i].coinSymbol} #${entries[i].index}'
+                        : '#${entries[i].index}',
+                    style: BrandText.mono.copyWith(fontSize: 12, color: BrandColors.inkMuted),
+                  ),
+                ],
               ),
             ),
           ),

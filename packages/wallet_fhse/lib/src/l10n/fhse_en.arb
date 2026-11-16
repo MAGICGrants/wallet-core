@@ -352,5 +352,13 @@
   "appLockUseRecoveryPhraseBody": "You can access your wallet with your recovery phrase. This is only recommended as a recovery mechanism. It is not supposed to be the normal way to access your wallet.",
   "@appLockUseRecoveryPhraseBody": {
     "description": "App Lock's recovery phrase sheet, under its title: the phrase opens the wallet, but only as a fallback."
+  },
+  "showPin": "Show PIN",
+  "@showPin": {
+    "description": "Name of the eye button on a security-key PIN field while the PIN is hidden; read by screen readers. Title Case."
+  },
+  "hidePin": "Hide PIN",
+  "@hidePin": {
+    "description": "Name of the eye button on a security-key PIN field while the PIN shows; read by screen readers. Title Case."
   }
 }

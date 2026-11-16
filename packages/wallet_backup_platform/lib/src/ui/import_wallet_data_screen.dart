@@ -327,33 +327,48 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
       ),
       if (_error != null) ...[
         const SizedBox(height: BrandSpacing.md),
-        Text(_error!, style: BrandText.body.copyWith(color: BrandColors.error)),
+        // Spoken as it appears.
+        Semantics(
+          container: true,
+          liveRegion: true,
+          child: Text(_error!, style: BrandText.body.copyWith(color: BrandColors.error)),
+        ),
       ],
     ];
   }
 
   List<Widget> _working(String text) => [
     const SizedBox(height: BrandSpacing.xl),
-    const Center(child: CircularProgressIndicator()),
+    // The line under it says what is happening, and is spoken as it changes.
+    const Center(child: ExcludeSemantics(child: CircularProgressIndicator())),
     const SizedBox(height: BrandSpacing.lg),
-    Text(text, style: BrandText.body, textAlign: TextAlign.center),
+    Semantics(
+      container: true,
+      liveRegion: true,
+      child: Text(text, style: BrandText.body, textAlign: TextAlign.center),
+    ),
   ];
 
   List<Widget> _done(BackupLocalizations i18n) => [
-    BrandCard(
-      padding: const EdgeInsets.all(BrandSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(i18n.importDoneTitle, style: BrandText.listTitle),
-          const SizedBox(height: BrandSpacing.xs),
-          Text(
-            _fromFile && _nothingNew
-                ? i18n.backupImportNothingNew
-                : i18n.backupRestoreFound(_payments, _contacts, _labels),
-            style: BrandText.body,
-          ),
-        ],
+    // The result, spoken as it appears.
+    Semantics(
+      container: true,
+      liveRegion: true,
+      child: BrandCard(
+        padding: const EdgeInsets.all(BrandSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(i18n.importDoneTitle, style: BrandText.listTitle),
+            const SizedBox(height: BrandSpacing.xs),
+            Text(
+              _fromFile && _nothingNew
+                  ? i18n.backupImportNothingNew
+                  : i18n.backupRestoreFound(_payments, _contacts, _labels),
+              style: BrandText.body,
+            ),
+          ],
+        ),
       ),
     ),
     _note(i18n.importScanNote),
@@ -399,7 +414,11 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(i18n.importTitle, style: BrandText.title),
+                          Semantics(
+                            header: true,
+                            namesRoute: true,
+                            child: Text(i18n.importTitle, style: BrandText.title),
+                          ),
                           const SizedBox(height: BrandSpacing.sm),
                           ...content,
                         ],

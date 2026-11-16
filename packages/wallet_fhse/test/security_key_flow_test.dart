@@ -7,6 +7,7 @@ import 'package:wallet_fhse/security_keys_ui.dart';
 import 'package:wallet_fhse/src/key_reply.dart';
 import 'package:wallet_fhse/src/security_key_backend.dart';
 import 'package:wallet_fhse/wallet_fhse.dart';
+import 'package:wallet_infra/wallet_infra.dart' show SecureScreenMixin;
 
 /// The key-first flow against a simulated native side: what `inspect` reports
 /// decides the steps, and the status events the key sends while it waits
@@ -184,6 +185,16 @@ void main() {
     );
     await tester.pump();
   }
+
+  testWidgets('the flow, where a PIN is typed, is a protected screen while open', (tester) async {
+    // No screenshots or recordings, and on Android 14+ only accessibility
+    // tools can read it (SecureScreenMixin).
+    SecureScreenMixin.resetForTesting();
+    await pumpFlow(tester, enrolling: true, useKey: (_, _) async => null);
+    expect(SecureScreenMixin.mountedProtectedScreens, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(SecureScreenMixin.mountedProtectedScreens, 0);
+  });
 
   testWidgets('adding a key: touch, PIN, two touches, then a name', (tester) async {
     final result = Completer<SecurityKeyRecord?>();

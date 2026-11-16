@@ -6,6 +6,7 @@ import '../design/brand_button.dart';
 import '../design/brand_screen_header.dart';
 import '../design/mode_select_card.dart';
 import '../design/step_dots.dart';
+import '../l10n/ui_strings.dart';
 
 /// Translated strings for [TorChoiceView]. Injected so the view stays
 /// localization-agnostic — each app passes its own generated l10n.
@@ -147,7 +148,13 @@ class _TorChoiceViewState extends State<TorChoiceView> {
           center: StepDots(count: widget.stepCount, index: widget.stepIndex),
         ),
         const SizedBox(height: BrandSpacing.lg),
-        Text(labels.title, style: BrandText.title),
+        // The step dots name only the step: this is the screen's title.
+        Semantics(
+          container: true,
+          header: true,
+          namesRoute: true,
+          child: Text(labels.title, style: BrandText.title),
+        ),
         const SizedBox(height: BrandSpacing.sm),
         Text(labels.subtitle, style: BrandText.bodyMuted),
         const SizedBox(height: BrandSpacing.xl),
@@ -253,39 +260,55 @@ class _TorChoiceViewState extends State<TorChoiceView> {
         child: SizedBox(
           width: 16,
           height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2, color: BrandColors.primary),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: BrandColors.primary,
+            semanticsLabel: uiStringsOf(context)?.a11yLoading,
+          ),
         ),
       );
     }
     if (!_tested) return const SizedBox.shrink();
+    // The result is spoken as it appears.
     if (_testOk) {
-      return Row(
+      return Semantics(
+        container: true,
+        liveRegion: true,
+        child: Row(
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(color: BrandColors.success, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: BrandSpacing.sm),
+            Text(
+              labels.connected,
+              style: BrandText.caption.copyWith(
+                color: BrandColors.success,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Row(
         children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(color: BrandColors.success, shape: BoxShape.circle),
-          ),
+          Icon(Icons.error_outline, color: BrandColors.error, size: 18),
           const SizedBox(width: BrandSpacing.sm),
           Text(
-            labels.connected,
+            labels.testFailed,
             style: BrandText.caption.copyWith(
-              color: BrandColors.success,
+              color: BrandColors.error,
               fontWeight: FontWeight.w500,
             ),
           ),
         ],
-      );
-    }
-    return Row(
-      children: [
-        Icon(Icons.error_outline, color: BrandColors.error, size: 18),
-        const SizedBox(width: BrandSpacing.sm),
-        Text(
-          labels.testFailed,
-          style: BrandText.caption.copyWith(color: BrandColors.error, fontWeight: FontWeight.w500),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -317,26 +340,33 @@ class _PortField extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              fontFamily: 'Ubuntu Mono',
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.4,
-              color: BrandColors.inkFaint,
+          // The label names the field to screen readers, read as written
+          // rather than upper-cased, so it is not also read on its own.
+          ExcludeSemantics(
+            child: Text(
+              label.toUpperCase(),
+              style: TextStyle(
+                fontFamily: 'Ubuntu Mono',
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.4,
+                color: BrandColors.inkFaint,
+              ),
             ),
           ),
           const SizedBox(height: 6),
-          TextField(
-            controller: controller,
-            enabled: enabled,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: TextStyle(fontFamily: 'Ubuntu Mono', fontSize: 14, color: BrandColors.ink),
-            cursorColor: BrandColors.primary,
-            decoration: const InputDecoration.collapsed(hintText: '9050'),
-            onChanged: (_) => onChanged(),
+          Semantics(
+            label: label,
+            child: TextField(
+              controller: controller,
+              enabled: enabled,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: TextStyle(fontFamily: 'Ubuntu Mono', fontSize: 14, color: BrandColors.ink),
+              cursorColor: BrandColors.primary,
+              decoration: const InputDecoration.collapsed(hintText: '9050'),
+              onChanged: (_) => onChanged(),
+            ),
           ),
         ],
       ),
@@ -357,23 +387,28 @@ class _TestChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       side: BorderSide(color: BrandColors.border),
     );
-    return Opacity(
-      opacity: onTap == null ? 0.5 : 1,
-      child: Material(
-        color: BrandColors.surfaceSunken,
-        shape: shape,
-        child: InkWell(
-          mouseCursor: WidgetStateMouseCursor.clickable,
-          onTap: onTap,
-          customBorder: shape,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w500,
-                color: BrandColors.primaryDeep,
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: onTap != null,
+      child: Opacity(
+        opacity: onTap == null ? 0.5 : 1,
+        child: Material(
+          color: BrandColors.surfaceSunken,
+          shape: shape,
+          child: InkWell(
+            mouseCursor: WidgetStateMouseCursor.clickable,
+            onTap: onTap,
+            customBorder: shape,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: BrandColors.primaryDeep,
+                ),
               ),
             ),
           ),
@@ -392,21 +427,26 @@ class _OrbotCheck extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      mouseCursor: WidgetStateMouseCursor.clickable,
-      onTap: () => onChanged(!value),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: BrandSpacing.md),
-        child: Row(
-          children: [
-            Icon(
-              value ? Icons.check_box : Icons.check_box_outline_blank,
-              color: value ? BrandColors.primary : BrandColors.inkFaint,
-              size: 22,
-            ),
-            const SizedBox(width: BrandSpacing.sm),
-            Expanded(child: Text(label, style: BrandText.caption)),
-          ],
+    // The row is the checkbox: one node named by its text, and one tab stop.
+    return Semantics(
+      container: true,
+      checked: value,
+      child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
+        onTap: () => onChanged(!value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: BrandSpacing.md),
+          child: Row(
+            children: [
+              Icon(
+                value ? Icons.check_box : Icons.check_box_outline_blank,
+                color: value ? BrandColors.primary : BrandColors.inkFaint,
+                size: 22,
+              ),
+              const SizedBox(width: BrandSpacing.sm),
+              Expanded(child: Text(label, style: BrandText.caption)),
+            ],
+          ),
         ),
       ),
     );

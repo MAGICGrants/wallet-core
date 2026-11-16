@@ -7,6 +7,7 @@ import 'brand.dart';
 import 'desktop_layout.dart';
 
 const _defaultDuration = Duration(seconds: 3);
+const _screenReaderDuration = Duration(seconds: 6);
 
 /// Shows [message] as a brand toast.
 ///
@@ -109,9 +110,16 @@ class _BrandToastCardState extends State<_BrandToastCard> with SingleTickerProvi
   Timer? _timer;
 
   @override
-  void initState() {
-    super.initState();
-    _timer = Timer(widget.duration, _dismiss);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // With a screen reader on, leave time to find the toast and hear it again
+    // after the announcement; nothing changes for anyone else.
+    _timer ??= Timer(
+      MediaQuery.accessibleNavigationOf(context) && widget.duration < _screenReaderDuration
+          ? _screenReaderDuration
+          : widget.duration,
+      _dismiss,
+    );
   }
 
   Future<void> _dismiss() async {
@@ -152,25 +160,31 @@ class _BrandToastCardState extends State<_BrandToastCard> with SingleTickerProvi
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 480),
-                child: GestureDetector(
-                  onTap: _dismiss,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                      decoration: BoxDecoration(
-                        color: BrandColors.inverseSurface,
-                        borderRadius: BrandRadii.rPill,
-                        boxShadow: BrandShadows.sheet,
-                      ),
-                      child: Text(
-                        widget.message,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontFamily: 'Ubuntu',
-                          fontSize: 13,
-                          height: 1.35,
-                          color: BrandColors.onPrimary,
+                // A live region: screen readers speak the message as it
+                // appears, without moving focus to it.
+                child: Semantics(
+                  container: true,
+                  liveRegion: true,
+                  child: GestureDetector(
+                    onTap: _dismiss,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: BrandColors.inverseSurface,
+                          borderRadius: BrandRadii.rPill,
+                          boxShadow: BrandShadows.sheet,
+                        ),
+                        child: Text(
+                          widget.message,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontFamily: 'Ubuntu',
+                            fontSize: 13,
+                            height: 1.35,
+                            color: BrandColors.onPrimary,
+                          ),
                         ),
                       ),
                     ),

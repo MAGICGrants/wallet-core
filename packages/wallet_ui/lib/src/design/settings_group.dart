@@ -60,38 +60,42 @@ class SettingsNavTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      mouseCursor: WidgetStateMouseCursor.clickable,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
-        child: Row(
-          children: [
-            // Title takes its intrinsic width; the value fills the rest and
-            // right-aligns so it (and the chevron) sit flush at the edge.
-            // Without a value the title fills the row, wrapping if it is long.
-            if (value != null) ...[
-              Text(title, style: _titleStyle),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: Text(
-                    value!,
-                    textAlign: TextAlign.end,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: valueMono ? 'Ubuntu Mono' : 'Ubuntu',
-                      fontSize: 13.5,
-                      color: BrandColors.inkMuted,
+    return Semantics(
+      container: true,
+      button: true,
+      child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+          child: Row(
+            children: [
+              // Title takes its intrinsic width; the value fills the rest and
+              // right-aligns so it (and the chevron) sit flush at the edge.
+              // Without a value the title fills the row, wrapping if it is long.
+              if (value != null) ...[
+                Text(title, style: _titleStyle),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Text(
+                      value!,
+                      textAlign: TextAlign.end,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: valueMono ? 'Ubuntu Mono' : 'Ubuntu',
+                        fontSize: 13.5,
+                        color: BrandColors.inkMuted,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ] else
-              Expanded(child: Text(title, style: _titleStyle)),
-            const SizedBox(width: 6),
-            Icon(Icons.chevron_right, size: 18, color: BrandColors.inkMuted),
-          ],
+              ] else
+                Expanded(child: Text(title, style: _titleStyle)),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right, size: 18, color: BrandColors.inkMuted),
+            ],
+          ),
         ),
       ),
     );
@@ -120,37 +124,41 @@ class SettingsLinkTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      mouseCursor: WidgetStateMouseCursor.clickable,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: _titleStyle.copyWith(color: titleColor)),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 3),
-                    Text(subtitle!, style: _descStyle),
+    return Semantics(
+      container: true,
+      button: true,
+      child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: _titleStyle.copyWith(color: titleColor)),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 3),
+                      Text(subtitle!, style: _descStyle),
+                    ],
                   ],
-                ],
-              ),
-            ),
-            if (linkLabel != null) ...[
-              const SizedBox(width: 12),
-              Text(
-                linkLabel!,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w500,
-                  color: color ?? BrandColors.primary,
                 ),
               ),
+              if (linkLabel != null) ...[
+                const SizedBox(width: 12),
+                Text(
+                  linkLabel!,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: color ?? BrandColors.primary,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -179,29 +187,40 @@ class SettingsToggleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      mouseCursor: WidgetStateMouseCursor.clickable,
-      onTap: () => onChanged(!value),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: _titleStyle),
-                  if (description != null) ...[
-                    const SizedBox(height: 4),
-                    Text(description!, style: _descStyle),
+    // The row is the switch: one node that says its title and on/off, and one
+    // tab stop.
+    return Semantics(
+      container: true,
+      toggled: value,
+      child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
+        onTap: () => onChanged(!value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: _titleStyle),
+                    if (description != null) ...[
+                      const SizedBox(height: 4),
+                      Text(description!, style: _descStyle),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            BrandSwitch(value: value, onChanged: onChanged, animate: animate),
-          ],
+              const SizedBox(width: 12),
+              BrandSwitch(
+                value: value,
+                onChanged: onChanged,
+                animate: animate,
+                excludeFromSemantics: true,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -214,13 +233,32 @@ class BrandSwitch extends StatelessWidget {
   final ValueChanged<bool> onChanged;
   final bool animate;
 
-  const BrandSwitch({super.key, required this.value, required this.onChanged, this.animate = true});
+  /// What a screen reader calls the switch, when no text beside it is part of
+  /// it.
+  final String? semanticLabel;
+
+  /// True where a surrounding row already is the switch to screen readers and
+  /// the keyboard ([SettingsToggleTile]), so this adds no second one.
+  final bool excludeFromSemantics;
+
+  const BrandSwitch({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.animate = true,
+    this.semanticLabel,
+    this.excludeFromSemantics = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: () => onChanged(!value),
+      toggled: value,
+      semanticLabel: semanticLabel,
+      control: !excludeFromSemantics,
+      focusRadius: BorderRadius.circular(100),
       child: AnimatedContainer(
         duration: animate ? BrandMotion.transition : Duration.zero,
         width: 46,

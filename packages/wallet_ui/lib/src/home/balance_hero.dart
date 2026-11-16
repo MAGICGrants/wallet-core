@@ -4,6 +4,7 @@ import 'package:wallet_fiat/wallet_fiat.dart' show FiatRateModel;
 import '../design/balance_text.dart';
 import '../design/brand.dart';
 import '../design/section_header.dart';
+import '../l10n/ui_strings.dart';
 import '../wallet/format.dart';
 
 /// One asset's share of the total, for the [AllocationBar].
@@ -89,25 +90,33 @@ class HomeBalanceHero extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label != null && number != null) ...[
-          SectionHeader(label: label!, padding: EdgeInsets.zero),
+          // Its own node: in a list, a heading that is not one takes in the
+          // text around it.
+          Semantics(
+            container: true,
+            child: SectionHeader(label: label!, padding: EdgeInsets.zero),
+          ),
           const SizedBox(height: 10),
         ],
         if (number != null)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Flexible(child: number),
-              if (failed) ...[
-                const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Tooltip(
-                    message: fiatErrorTooltip,
-                    child: Icon(Icons.warning_rounded, size: 18, color: BrandColors.warning),
+          // The number and, when the price failed, its warning read as one.
+          MergeSemantics(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Flexible(child: number),
+                if (failed) ...[
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Tooltip(
+                      message: fiatErrorTooltip,
+                      child: Icon(Icons.warning_rounded, size: 18, color: BrandColors.warning),
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         // The coin amount under a fiat headline; it is the headline itself
         // when there is no fiat.
@@ -126,10 +135,14 @@ class _NumberPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 190,
-      height: 40,
-      decoration: BoxDecoration(color: BrandColors.surfaceMuted, borderRadius: BrandRadii.rTile),
+    // Holds the balance's place while it loads, and says so.
+    return Semantics(
+      label: uiStringsOf(context)?.a11yLoading,
+      child: Container(
+        width: 190,
+        height: 40,
+        decoration: BoxDecoration(color: BrandColors.surfaceMuted, borderRadius: BrandRadii.rTile),
+      ),
     );
   }
 }
@@ -175,19 +188,22 @@ class AllocationBar extends StatelessWidget {
           runSpacing: 6,
           children: [
             for (var i = 0; i < shown.length; i++)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(color: shown[i].color, shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(shown[i].label, style: BrandText.caption.copyWith(fontSize: 13)),
-                  const SizedBox(width: 4),
-                  Text('${percents[i]}%', style: BrandText.mono.copyWith(color: BrandColors.ink)),
-                ],
+              // Each coin and its share read as one.
+              MergeSemantics(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(color: shown[i].color, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(shown[i].label, style: BrandText.caption.copyWith(fontSize: 13)),
+                    const SizedBox(width: 4),
+                    Text('${percents[i]}%', style: BrandText.mono.copyWith(color: BrandColors.ink)),
+                  ],
+                ),
               ),
           ],
         ),

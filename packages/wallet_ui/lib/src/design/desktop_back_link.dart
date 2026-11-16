@@ -25,28 +25,32 @@ class DesktopBackLink extends StatelessWidget {
     // full parent width; a little right padding keeps the ripple off the label.
     return Align(
       alignment: Alignment.centerLeft,
-      child: InkWell(
-        mouseCursor: WidgetStateMouseCursor.clickable,
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, 4, 4, 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.chevron_left, size: 18, color: BrandColors.primary),
-              const SizedBox(width: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Ubuntu',
-                  fontSize: 12.5,
-                  height: 1,
-                  fontWeight: FontWeight.w500,
-                  color: BrandColors.primary,
+      child: Semantics(
+        container: true,
+        button: true,
+        child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0, 4, 4, 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.chevron_left, size: 18, color: BrandColors.primary),
+                const SizedBox(width: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Ubuntu',
+                    fontSize: 12.5,
+                    height: 1,
+                    fontWeight: FontWeight.w500,
+                    color: BrandColors.primary,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

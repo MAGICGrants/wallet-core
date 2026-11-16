@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import '../design/brand.dart';
 import '../design/settings_group.dart';
 import '../design/sub_page.dart';
+import '../l10n/ui_strings.dart';
 
 /// One package's entries in [LicenseRegistry]; a package can carry several
 /// (the Flutter engine carries dozens).
@@ -119,7 +120,11 @@ class _LicenseTextViewState extends State<LicenseTextView> {
             child: Center(
               child: SizedBox.square(
                 dimension: 22,
-                child: CircularProgressIndicator(strokeWidth: 2, color: BrandColors.primary),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: BrandColors.primary,
+                  semanticsLabel: uiStringsOf(context)?.a11yLoading,
+                ),
               ),
             ),
           );
@@ -154,7 +159,12 @@ class _OpenSourceLicensesScreenState extends State<OpenSourceLicensesScreen> {
       builder: (context, snapshot) {
         final packages = snapshot.data;
         if (packages == null) {
-          return Center(child: CircularProgressIndicator(color: BrandColors.primary));
+          return Center(
+            child: CircularProgressIndicator(
+              color: BrandColors.primary,
+              semanticsLabel: uiStringsOf(context)?.a11yLoading,
+            ),
+          );
         }
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),

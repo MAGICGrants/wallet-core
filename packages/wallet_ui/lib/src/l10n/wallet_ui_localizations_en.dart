@@ -1153,4 +1153,81 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
   String timeAgoYears(int count) {
     return '$count years ago';
   }
+
+  @override
+  String get a11yShare => 'Share';
+
+  @override
+  String get a11yScanQrCode => 'Scan QR Code';
+
+  @override
+  String get a11yFlashlight => 'Flashlight';
+
+  @override
+  String get a11ySwitchCamera => 'Switch Camera';
+
+  @override
+  String get a11yShowPassword => 'Show Password';
+
+  @override
+  String get a11yHidePassword => 'Hide Password';
+
+  @override
+  String get a11yClear => 'Clear';
+
+  @override
+  String get a11yRemove => 'Remove';
+
+  @override
+  String get a11yHide => 'Hide';
+
+  @override
+  String a11yCopyValue(String label) {
+    return 'Copy $label';
+  }
+
+  @override
+  String a11yWordOfCount(int index, int count) {
+    return 'Word $index of $count';
+  }
+
+  @override
+  String a11yStepOfCount(int step, int count) {
+    return 'Step $step of $count';
+  }
+
+  @override
+  String get a11yLoading => 'Loading';
+
+  @override
+  String get a11yRecoveryPhrase => 'Recovery Phrase';
+
+  @override
+  String get a11ySearch => 'Search';
+
+  @override
+  String get a11yMonth => 'Month';
+
+  @override
+  String get a11yYear => 'Year';
+
+  @override
+  String get a11yTxFailed => 'Failed';
+
+  @override
+  String get a11yTxUnknown => 'Not confirmed as sent';
+
+  @override
+  String a11yAddressEnds(String start, String end) {
+    return '$start, ending $end';
+  }
+
+  @override
+  String get a11yAddressQr => 'QR code of this address';
+
+  @override
+  String get a11yOverTor => 'Over Tor';
+
+  @override
+  String get a11yOverHttps => 'Over HTTPS';
 }

@@ -5,6 +5,7 @@ import 'package:flutter_zxing/flutter_zxing.dart';
 import '../design/brand.dart';
 import '../design/brand_screen_header.dart';
 import '../design/toast.dart';
+import '../l10n/ui_strings.dart';
 
 /// Full-bleed QR camera scanner with a floating brand header and a reliable
 /// torch toggle. Presentational only — it owns the camera/torch UI and calls
@@ -112,6 +113,7 @@ class _ScanQrViewState extends State<ScanQrView> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = uiStringsOf(context);
     // ReaderWidget centres its scan square using the full screen size, so it
     // must be full-bleed; the brand header floats over its dimmed top band.
     return Scaffold(
@@ -135,6 +137,8 @@ class _ScanQrViewState extends State<ScanQrView> {
               // symbology, and the default (every format) also runs zxing's
               // PDF417 and other decoders over attacker-chosen frames.
               codeFormat: Format.qrCode,
+              // The package's own icon, named for screen readers.
+              toggleCameraIcon: Icon(Icons.switch_camera, semanticLabel: strings?.a11ySwitchCamera),
               tryHarder: true,
               scanDelay: const Duration(milliseconds: 200),
             ),
@@ -149,10 +153,19 @@ class _ScanQrViewState extends State<ScanQrView> {
                     borderRadius: BorderRadius.circular(10),
                     child: ColoredBox(
                       color: Colors.black,
-                      child: IconButton(
-                        onPressed: _toggleTorch,
-                        color: Colors.white,
-                        icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
+                      // One node: a switch named Flashlight, on or off.
+                      child: MergeSemantics(
+                        child: Semantics(
+                          toggled: _torchOn,
+                          child: IconButton(
+                            onPressed: _toggleTorch,
+                            color: Colors.white,
+                            icon: Icon(
+                              _torchOn ? Icons.flash_on : Icons.flash_off,
+                              semanticLabel: strings?.a11yFlashlight,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),

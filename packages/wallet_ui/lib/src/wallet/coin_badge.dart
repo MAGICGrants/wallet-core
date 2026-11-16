@@ -21,6 +21,9 @@ class CoinBadge extends StatelessWidget {
   /// Status-dot diameter as a fraction of the icon size.
   final double statusDotFactor;
 
+  /// What the status dot means, read by screen readers ([CoinMark.statusLabel]).
+  final String? statusLabel;
+
   const CoinBadge({
     super.key,
     required this.wallet,
@@ -30,11 +33,13 @@ class CoinBadge extends StatelessWidget {
     this.statusColor,
     this.statusRingColor,
     this.statusDotFactor = 0.32,
+    this.statusLabel,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final name = label ?? wallet?.assetName ?? fallback;
+    final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (wallet != null)
@@ -47,11 +52,12 @@ class CoinBadge extends StatelessWidget {
             statusDotFactor: statusDotFactor,
           ),
         const SizedBox(width: 8),
-        Text(
-          label ?? wallet?.assetName ?? fallback,
-          style: BrandText.appBar.copyWith(fontSize: 16),
-        ),
+        Text(name, style: BrandText.appBar.copyWith(fontSize: 16)),
       ],
     );
+    // The name first, then what the dot means.
+    final status = statusLabel;
+    if (status == null) return row;
+    return Semantics(label: '$name, $status', excludeSemantics: true, child: row);
   }
 }

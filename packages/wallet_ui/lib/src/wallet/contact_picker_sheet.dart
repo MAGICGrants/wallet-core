@@ -7,6 +7,7 @@ import '../design/click_cursor.dart';
 import '../design/brand_button.dart';
 import '../design/brand_card.dart';
 import '../design/sheet.dart';
+import '../l10n/ui_strings.dart';
 import 'coin_mark.dart';
 
 /// Translated strings for the contact picker sheet. Injected so the sheet stays
@@ -144,16 +145,27 @@ class _ContactPickerSheetState<T> extends State<_ContactPickerSheet<T>> {
                   children: [
                     Row(
                       children: [
-                        widget.headerIcon,
+                        // Decoration beside the title.
+                        ExcludeSemantics(child: widget.headerIcon),
                         const SizedBox(width: 11),
-                        Expanded(child: Text(labels.title, style: BrandText.sheetTitle)),
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            namesRoute: true,
+                            child: Text(labels.title, style: BrandText.sheetTitle),
+                          ),
+                        ),
                       ],
                     ),
                     if (labels.subtitle != null) ...[
                       const SizedBox(height: 7),
-                      Text(
-                        labels.subtitle!,
-                        style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+                      // Its own node, so the sheet's heading stays the title alone.
+                      Semantics(
+                        container: true,
+                        child: Text(
+                          labels.subtitle!,
+                          style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+                        ),
                       ),
                     ],
                   ],
@@ -168,17 +180,21 @@ class _ContactPickerSheetState<T> extends State<_ContactPickerSheet<T>> {
                       Icon(Icons.search, size: 18, color: BrandColors.inkFaint),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (q) => setState(() => _query = q),
-                          textInputAction: TextInputAction.search,
-                          style: TextStyle(fontSize: 13.5, color: BrandColors.ink),
-                          decoration: InputDecoration(
-                            isCollapsed: true,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                            border: InputBorder.none,
-                            hintText: labels.searchHint,
-                            hintStyle: TextStyle(fontSize: 13.5, color: BrandColors.inkFaint),
+                        // Named, so it keeps a name once the placeholder goes.
+                        child: Semantics(
+                          label: uiStringsOf(context)?.a11ySearch,
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (q) => setState(() => _query = q),
+                            textInputAction: TextInputAction.search,
+                            style: TextStyle(fontSize: 13.5, color: BrandColors.ink),
+                            decoration: InputDecoration(
+                              isCollapsed: true,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                              border: InputBorder.none,
+                              hintText: labels.searchHint,
+                              hintStyle: TextStyle(fontSize: 13.5, color: BrandColors.inkFaint),
+                            ),
                           ),
                         ),
                       ),
@@ -191,10 +207,15 @@ class _ContactPickerSheetState<T> extends State<_ContactPickerSheet<T>> {
                     ? Center(
                         child: Padding(
                           padding: EdgeInsets.fromLTRB(hpad, 8, hpad, 24),
-                          child: Text(
-                            _query.isEmpty ? labels.noContacts : labels.noResults,
-                            style: BrandText.bodyMuted.copyWith(fontSize: 13),
-                            textAlign: TextAlign.center,
+                          // Spoken when a search finds nothing.
+                          child: Semantics(
+                            container: true,
+                            liveRegion: true,
+                            child: Text(
+                              _query.isEmpty ? labels.noContacts : labels.noResults,
+                              style: BrandText.bodyMuted.copyWith(fontSize: 13),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
                       )
@@ -245,20 +266,23 @@ class _ContactPickRow<T> extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 13),
       child: Row(
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: enabled ? BrandColors.primaryDeep : BrandColors.inkDisabled,
-            ),
-            child: Text(
-              initial,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: BrandColors.onPrimary,
+          // The initial only repeats the name beside it.
+          ExcludeSemantics(
+            child: Container(
+              width: 38,
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: enabled ? BrandColors.primaryDeep : BrandColors.inkDisabled,
+              ),
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: BrandColors.onPrimary,
+                ),
               ),
             ),
           ),
@@ -311,7 +335,14 @@ class _ContactPickRow<T> extends StatelessWidget {
       ),
     );
 
-    if (!enabled) return Opacity(opacity: 0.45, child: row);
+    // One button per contact; a contact with no address here reads as a
+    // dimmed one, with the reason in place of the address.
+    if (!enabled) {
+      return Opacity(
+        opacity: 0.45,
+        child: Tappable(enabled: false, behavior: HitTestBehavior.deferToChild, child: row),
+      );
+    }
     return Tappable(behavior: HitTestBehavior.opaque, onTap: onTap, child: row);
   }
 }

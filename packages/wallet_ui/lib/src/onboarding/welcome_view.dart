@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../design/brand.dart';
 import '../design/brand_button.dart';
 import '../design/icon_circle_button.dart';
+import '../l10n/ui_strings.dart';
 
 /// Translated strings for [WelcomeView]. Injected so the view stays
 /// localization-agnostic — each app passes its own generated l10n.
@@ -59,6 +60,15 @@ class WelcomeView extends StatelessWidget {
     this.onLanguage,
   });
 
+  /// The language button's name: "Language" in the app's language, plus the
+  /// English word when that is another language, so someone who cannot read
+  /// the current one can still find the way out of it ("Idioma, Language").
+  static String _languageLabel(BuildContext context) {
+    final local = uiStringsOf(context)?.settingsLanguageLabel ?? 'Language';
+    final english = Localizations.maybeLocaleOf(context)?.languageCode == 'en';
+    return english || local == 'Language' ? local : '$local, Language';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -75,18 +85,31 @@ class WelcomeView extends StatelessWidget {
                   if (onLanguage != null)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
-                      children: [IconCircleButton(icon: Icons.language, onPressed: onLanguage!)],
+                      children: [
+                        IconCircleButton(
+                          icon: Icons.language,
+                          onPressed: onLanguage!,
+                          semanticLabel: _languageLabel(context),
+                        ),
+                      ],
                     ),
                   const Spacer(flex: 3),
                   logo,
                   SizedBox(height: logoBottomGap ?? BrandSpacing.xl),
-                  Text(
-                    appName,
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
-                      color: appNameColor ?? BrandColors.primaryDeep,
+                  // The screen's title: its heading, and the name screen
+                  // readers give it.
+                  Semantics(
+                    container: true,
+                    header: true,
+                    namesRoute: true,
+                    child: Text(
+                      appName,
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                        color: appNameColor ?? BrandColors.primaryDeep,
+                      ),
                     ),
                   ),
                   const SizedBox(height: BrandSpacing.md),

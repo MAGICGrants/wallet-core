@@ -63,13 +63,19 @@ class SeedGrid extends StatelessWidget {
     return Stack(
       alignment: Alignment.center,
       children: [
-        ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8), child: grid),
+        // The blur hides the words only from the eye: kept out of the
+        // semantics tree, no screen reader or accessibility service can read
+        // them until the user reveals them.
+        ExcludeSemantics(
+          child: ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8), child: grid),
+        ),
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Tappable(
               onTap: onReveal,
               behavior: HitTestBehavior.opaque,
+              focusRadius: BrandRadii.rCard,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

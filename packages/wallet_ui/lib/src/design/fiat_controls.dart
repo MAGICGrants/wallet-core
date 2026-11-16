@@ -24,39 +24,44 @@ class FiatCurrencyChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(11),
       side: selected ? BorderSide.none : BorderSide(color: BrandColors.border),
     );
-    return Material(
-      color: selected ? BrandColors.primary : BrandColors.surfaceSunken,
-      shape: shape,
-      child: InkWell(
-        mouseCursor: WidgetStateMouseCursor.clickable,
-        onTap: onTap,
-        customBorder: shape,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                code,
-                style: TextStyle(
-                  fontFamily: 'Ubuntu Mono',
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                  color: fg,
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected ? BrandColors.primary : BrandColors.surfaceSunken,
+        shape: shape,
+        child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
+          onTap: onTap,
+          customBorder: shape,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  code,
+                  style: TextStyle(
+                    fontFamily: 'Ubuntu Mono',
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: fg,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                symbol,
-                style: TextStyle(
-                  fontFamily: 'Ubuntu Mono',
-                  fontSize: 11.5,
-                  color: selected
-                      ? BrandColors.onPrimary.withValues(alpha: 0.7)
-                      : BrandColors.inkFaint,
+                const SizedBox(width: 5),
+                Text(
+                  symbol,
+                  style: TextStyle(
+                    fontFamily: 'Ubuntu Mono',
+                    fontSize: 11.5,
+                    color: selected
+                        ? BrandColors.onPrimary.withValues(alpha: 0.7)
+                        : BrandColors.inkFaint,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../design/brand.dart';
 import '../design/brand_button.dart';
 import '../design/click_cursor.dart';
+import '../l10n/ui_strings.dart';
 
 /// A footnote row in the dark left pane: small accent icon + muted line.
 class OnboardingNote {
@@ -105,7 +106,7 @@ class DesktopOnboardingScaffold extends StatelessWidget {
             },
             child: _leftPane(),
           ),
-          Expanded(child: _rightPane()),
+          Expanded(child: _rightPane(context)),
         ],
       ),
     );
@@ -126,15 +127,22 @@ class DesktopOnboardingScaffold extends StatelessWidget {
           children: [
             logo,
             const SizedBox(height: 30),
-            Text(
-              title,
-              style: TextStyle(
-                fontFamily: 'Ubuntu',
-                fontSize: 30,
-                height: 1.18,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.36,
-                color: Colors.white,
+            // The step's title: its heading, and the name screen readers give
+            // the screen.
+            Semantics(
+              container: true,
+              header: true,
+              namesRoute: true,
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontFamily: 'Ubuntu',
+                  fontSize: 30,
+                  height: 1.18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.36,
+                  color: Colors.white,
+                ),
               ),
             ),
             const SizedBox(height: 14),
@@ -186,7 +194,7 @@ class DesktopOnboardingScaffold extends StatelessWidget {
   /// below the content.
   static const _contentMaxHeight = 860.0;
 
-  Widget _rightPane() {
+  Widget _rightPane(BuildContext context) {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
@@ -196,7 +204,7 @@ class DesktopOnboardingScaffold extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (showSteps) ...[_stepRow(), const SizedBox(height: 30)],
+              if (showSteps) ...[_stepRow(context), const SizedBox(height: 30)],
               Expanded(child: content),
               const SizedBox(height: 20),
               Row(
@@ -227,11 +235,13 @@ class DesktopOnboardingScaffold extends StatelessWidget {
     );
   }
 
-  Widget _stepRow() {
+  Widget _stepRow(BuildContext context) {
     return Row(
       children: [
         Text(
-          'Step $step of $totalSteps',
+          // Translated; the English fallback reads the same where no app
+          // registered the shared strings.
+          uiStringsOf(context)?.a11yStepOfCount(step, totalSteps) ?? 'Step $step of $totalSteps',
           style: TextStyle(
             fontFamily: 'Ubuntu Mono',
             fontSize: 10,
@@ -290,6 +300,9 @@ class OnboardingRadioCard extends StatelessWidget {
     return Tappable(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
+      checked: selected,
+      inMutuallyExclusiveGroup: true,
+      focusRadius: BorderRadius.circular(18),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
@@ -339,7 +352,11 @@ class OnboardingRadioCard extends StatelessWidget {
                       color: BrandColors.inkMuted,
                     ),
                   ),
-                  if (trailing != null) ...[const SizedBox(height: 14), trailing!],
+                  // Its own controls, not part of the card's name.
+                  if (trailing != null) ...[
+                    const SizedBox(height: 14),
+                    Semantics(container: true, explicitChildNodes: true, child: trailing!),
+                  ],
                 ],
               ),
             ),

@@ -1156,4 +1156,81 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
   String timeAgoYears(int count) {
     return 'há $count anos';
   }
+
+  @override
+  String get a11yShare => 'Compartilhar';
+
+  @override
+  String get a11yScanQrCode => 'Escanear Código QR';
+
+  @override
+  String get a11yFlashlight => 'Lanterna';
+
+  @override
+  String get a11ySwitchCamera => 'Trocar Câmera';
+
+  @override
+  String get a11yShowPassword => 'Mostrar Senha';
+
+  @override
+  String get a11yHidePassword => 'Ocultar Senha';
+
+  @override
+  String get a11yClear => 'Limpar';
+
+  @override
+  String get a11yRemove => 'Remover';
+
+  @override
+  String get a11yHide => 'Ocultar';
+
+  @override
+  String a11yCopyValue(String label) {
+    return 'Copiar $label';
+  }
+
+  @override
+  String a11yWordOfCount(int index, int count) {
+    return 'Palavra $index de $count';
+  }
+
+  @override
+  String a11yStepOfCount(int step, int count) {
+    return 'Etapa $step de $count';
+  }
+
+  @override
+  String get a11yLoading => 'Carregando';
+
+  @override
+  String get a11yRecoveryPhrase => 'Frase de Recuperação';
+
+  @override
+  String get a11ySearch => 'Pesquisar';
+
+  @override
+  String get a11yMonth => 'Mês';
+
+  @override
+  String get a11yYear => 'Ano';
+
+  @override
+  String get a11yTxFailed => 'Falhou';
+
+  @override
+  String get a11yTxUnknown => 'Não confirmada como enviada';
+
+  @override
+  String a11yAddressEnds(String start, String end) {
+    return '$start, terminando em $end';
+  }
+
+  @override
+  String get a11yAddressQr => 'Código QR deste endereço';
+
+  @override
+  String get a11yOverTor => 'Via Tor';
+
+  @override
+  String get a11yOverHttps => 'Via HTTPS';
 }

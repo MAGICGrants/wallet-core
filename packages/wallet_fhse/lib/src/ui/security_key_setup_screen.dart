@@ -110,12 +110,24 @@ class _SecurityKeySetupScreenState extends State<SecurityKeySetupScreen> {
 
     Widget body;
     if (_startError != null) {
-      body = Text(
-        securityKeyErrorMessage(i18n, _startError!) ?? '',
-        style: BrandText.body.copyWith(color: BrandColors.error),
+      // Spoken when setting up cannot start.
+      body = Semantics(
+        container: true,
+        liveRegion: true,
+        child: Text(
+          securityKeyErrorMessage(i18n, _startError!) ?? '',
+          style: BrandText.body.copyWith(color: BrandColors.error),
+        ),
       );
     } else if (setup == null) {
-      body = const Center(child: CircularProgressIndicator());
+      body = Center(
+        child: CircularProgressIndicator(
+          semanticsLabel: Localizations.of<WalletUiLocalizations>(
+            context,
+            WalletUiLocalizations,
+          )?.a11yLoading,
+        ),
+      );
     } else {
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -218,29 +230,36 @@ class SecurityKeyTile extends StatelessWidget {
       if (record.serial != null) i18n.securityKeysSerial('${record.serial}'),
       if (record.addedAt.year > 1 && !justAdded)
         i18n.securityKeysAdded(DateFormat.yMMMd(locale).format(record.addedAt)),
-    ].join(' · ');
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
-      child: Row(
-        children: [
-          IconBadge(
-            icon: justAdded ? Icons.check : Icons.key_outlined,
-            color: justAdded ? BrandColors.success : BrandColors.primaryDeep,
-          ),
-          const SizedBox(width: BrandSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(record.name, style: BrandText.listTitle),
-                if (details.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(details, style: BrandText.caption.copyWith(color: BrandColors.inkMuted)),
-                ],
-              ],
+    ];
+    // One item: the name with its details, read without the dots between them.
+    return MergeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
+        child: Row(
+          children: [
+            IconBadge(
+              icon: justAdded ? Icons.check : Icons.key_outlined,
+              color: justAdded ? BrandColors.success : BrandColors.primaryDeep,
             ),
-          ),
-        ],
+            const SizedBox(width: BrandSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(record.name, style: BrandText.listTitle),
+                  if (details.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      details.join(' · '),
+                      semanticsLabel: details.join(', '),
+                      style: BrandText.caption.copyWith(color: BrandColors.inkMuted),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

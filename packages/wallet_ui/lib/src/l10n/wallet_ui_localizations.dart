@@ -2062,6 +2062,144 @@ abstract class WalletUiLocalizations {
   /// In en, this message translates to:
   /// **'{count} years ago'**
   String timeAgoYears(int count);
+
+  /// Name of an icon-only button that opens the share sheet; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get a11yShare;
+
+  /// Name of an icon-only button that opens the QR scanner; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan QR Code'**
+  String get a11yScanQrCode;
+
+  /// Name of the scanner's flashlight toggle; screen readers add its on/off state. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Flashlight'**
+  String get a11yFlashlight;
+
+  /// Name of the scanner's front/back camera button; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Camera'**
+  String get a11ySwitchCamera;
+
+  /// Name of the eye button on a password field while the password is hidden; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Password'**
+  String get a11yShowPassword;
+
+  /// Name of the eye button on a password field while the password shows; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Password'**
+  String get a11yHidePassword;
+
+  /// Name of a small x button that empties a field or removes a picked contact; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get a11yClear;
+
+  /// Name of an icon-only button that removes an item from a list; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get a11yRemove;
+
+  /// Name of an icon-only button that covers the recovery phrase again; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide'**
+  String get a11yHide;
+
+  /// Name of an icon-only copy button next to a labelled value; read by screen readers. label is that value's own label, never the value. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy {label}'**
+  String a11yCopyValue(String label);
+
+  /// Name of one recovery-phrase entry field; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Word {index} of {count}'**
+  String a11yWordOfCount(int index, int count);
+
+  /// Onboarding progress, shown on desktop and read by screen readers on mobile. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {step} of {count}'**
+  String a11yStepOfCount(int step, int count);
+
+  /// Read by screen readers in place of a value that is still loading. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading'**
+  String get a11yLoading;
+
+  /// Name of the field a whole recovery phrase is typed into; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery Phrase'**
+  String get a11yRecoveryPhrase;
+
+  /// Name of a search field; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get a11ySearch;
+
+  /// Name of a month picker; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Month'**
+  String get a11yMonth;
+
+  /// Name of a year picker; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Year'**
+  String get a11yYear;
+
+  /// Status of a transaction row whose send failed; read by screen readers. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get a11yTxFailed;
+
+  /// Status of a transaction row whose send was not confirmed; read by screen readers. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Not confirmed as sent'**
+  String get a11yTxUnknown;
+
+  /// An address shown shortened, read by screen readers as its first and last characters. start and end are those characters. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'{start}, ending {end}'**
+  String a11yAddressEnds(String start, String end);
+
+  /// Name of the receive QR image; read by screen readers. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'QR code of this address'**
+  String get a11yAddressQr;
+
+  /// What a TOR pill on a connection means; read by screen readers. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Over Tor'**
+  String get a11yOverTor;
+
+  /// What an HTTPS pill on a connection means; read by screen readers. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Over HTTPS'**
+  String get a11yOverHttps;
 }
 
 class _WalletUiLocalizationsDelegate extends LocalizationsDelegate<WalletUiLocalizations> {

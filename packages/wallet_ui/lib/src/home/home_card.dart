@@ -50,9 +50,14 @@ class HomeCardTitle extends StatelessWidget {
         Icon(icon, size: 18, color: iconColor ?? BrandColors.primaryDeep),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            title,
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: BrandColors.ink),
+          // The card's heading, so a screen reader can jump between cards.
+          child: Semantics(
+            container: true,
+            header: true,
+            child: Text(
+              title,
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: BrandColors.ink),
+            ),
           ),
         ),
         ?trailing,

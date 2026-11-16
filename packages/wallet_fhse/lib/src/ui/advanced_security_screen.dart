@@ -61,26 +61,45 @@ Future<int?> pickFullLockMinutes(
                   color: BrandColors.primaryDeep,
                 ),
                 const SizedBox(width: 11),
-                Expanded(child: Text(title, style: BrandText.sheetTitle)),
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    namesRoute: true,
+                    child: Text(title, style: BrandText.sheetTitle),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 7),
-            Text(description, style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5)),
+            // Its own node, so the sheet's heading stays the title alone.
+            Semantics(
+              container: true,
+              child: Text(
+                description,
+                style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+              ),
+            ),
             const SizedBox(height: BrandSpacing.lg),
             SettingsGroup(
               tiles: [
                 for (final minutes in SecurityKeysPreferences.fullLockMinuteOptions)
-                  InkWell(
-                    onTap: () => Navigator.pop(sheetContext, minutes),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(fullLockLabel(i18n, minutes), style: BrandText.listTitle),
-                          ),
-                          RadioDot(selected: minutes == current),
-                        ],
+                  // One radio button per time, the current one checked.
+                  Semantics(
+                    container: true,
+                    checked: minutes == current,
+                    inMutuallyExclusiveGroup: true,
+                    child: InkWell(
+                      onTap: () => Navigator.pop(sheetContext, minutes),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(fullLockLabel(i18n, minutes), style: BrandText.listTitle),
+                            ),
+                            RadioDot(selected: minutes == current),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -282,19 +301,36 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
     final List<Widget> content;
     if (_loadFailed) {
       content = [
-        WarningCard.text(i18n.securityKeysLoadFailed),
+        // Spoken when loading fails.
+        Semantics(
+          container: true,
+          liveRegion: true,
+          child: WarningCard.text(i18n.securityKeysLoadFailed),
+        ),
         const SizedBox(height: BrandSpacing.xl),
         BrandButton(label: i18n.securityKeyTryAgain, onPressed: _retry),
       ];
     } else if (state == null) {
-      content = [const Center(child: CircularProgressIndicator())];
+      content = [
+        Center(
+          child: CircularProgressIndicator(
+            semanticsLabel: Localizations.of<WalletUiLocalizations>(
+              context,
+              WalletUiLocalizations,
+            )?.a11yLoading,
+          ),
+        ),
+      ];
     } else if (state.engaged && state.unreadable) {
       content = [
         WarningCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(i18n.securityKeysUnreadableTitle, style: BrandText.listTitle),
+              Semantics(
+                header: true,
+                child: Text(i18n.securityKeysUnreadableTitle, style: BrandText.listTitle),
+              ),
               const SizedBox(height: BrandSpacing.sm),
               Text(i18n.securityKeysUnreadableBody, style: BrandText.body),
             ],
@@ -331,7 +367,10 @@ class _AdvancedSecurityScreenState extends State<AdvancedSecurityScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(i18n.securityKeysIntroTitle, style: BrandText.listTitle),
+              Semantics(
+                header: true,
+                child: Text(i18n.securityKeysIntroTitle, style: BrandText.listTitle),
+              ),
               const SizedBox(height: BrandSpacing.sm),
               Text(i18n.securityKeysIntroBody, style: BrandText.body),
               const SizedBox(height: BrandSpacing.md),

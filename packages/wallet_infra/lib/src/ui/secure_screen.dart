@@ -10,7 +10,10 @@ import 'host_platform.dart';
 /// Blocks screenshots and screen recording for as long as the screen is
 /// mounted: Android `FLAG_SECURE`; on iOS the window is drawn inside a secure
 /// text field's canvas, which iOS leaves out of screenshots, recordings and
-/// mirroring.
+/// mirroring. On Android 14+ the app's handler also marks the window
+/// accessibility data sensitive, so only accessibility tools (TalkBack, Switch
+/// Access, Voice Access) can read the screen or act on it; any other
+/// accessibility service gets nothing from it.
 ///
 /// Use on anything that displays a secret: seed, private keys, LWS view key.
 /// The display-side counterpart to `Redact`; the same value

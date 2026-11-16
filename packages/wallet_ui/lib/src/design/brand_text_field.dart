@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'brand.dart';
+import 'desktop_layout.dart';
 
 /// Inset text field on a sunken warm ground.
 ///
@@ -26,13 +27,21 @@ class BrandTextField extends StatelessWidget {
   /// it off.
   final bool sensitive;
 
+  /// Takes focus when it appears. For the one field a desktop screen is for
+  /// (an unlock password, a PIN); on a phone it would raise the keyboard
+  /// unasked, so pass `isDesktopLayout` there.
   final bool autofocus;
+  final FocusNode? focusNode;
 
   /// Characters the field takes, enforced as they are typed; no counter is
   /// shown.
   final int? maxLength;
   final TextCapitalization textCapitalization;
   final TextInputAction? textInputAction;
+
+  /// The field's name to screen readers where neither [label] nor [caption]
+  /// gives one; [caption] already names it.
+  final String? semanticLabel;
 
   const BrandTextField({
     super.key,
@@ -48,9 +57,11 @@ class BrandTextField extends StatelessWidget {
     this.maxLines = 1,
     this.sensitive = false,
     this.autofocus = false,
+    this.focusNode,
     this.maxLength,
     this.textCapitalization = TextCapitalization.none,
     this.textInputAction,
+    this.semanticLabel,
   });
 
   @override
@@ -61,7 +72,16 @@ class BrandTextField extends StatelessWidget {
       keyboardType: keyboardType,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
+      // Desktop: Enter submits and the field keeps focus, so a wrong password
+      // or PIN is typed again straight away. A phone keeps closing its
+      // keyboard on Enter, and a field whose action moves on (next) still
+      // moves on.
+      onEditingComplete:
+          isDesktopLayout && (textInputAction == null || textInputAction == TextInputAction.done)
+          ? () {}
+          : null,
       autofocus: autofocus,
+      focusNode: focusNode,
       textCapitalization: textCapitalization,
       textInputAction: textInputAction,
       inputFormatters: maxLength == null ? null : [LengthLimitingTextInputFormatter(maxLength)],
@@ -91,15 +111,22 @@ class BrandTextField extends StatelessWidget {
       ),
     );
 
-    if (caption == null) return field;
+    // The caption names the field to screen readers, read as written rather
+    // than upper-cased, so it is not also read on its own.
+    // A name the hint already gives is not added again ("Password, Password").
+    final name = caption ?? semanticLabel;
+    final named = name == null || name == hint ? field : Semantics(label: name, child: field);
+    if (caption == null) return named;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 2, bottom: BrandSpacing.sm),
-          child: Text(caption!.toUpperCase(), style: BrandText.section.copyWith(height: 1)),
+          child: ExcludeSemantics(
+            child: Text(caption!.toUpperCase(), style: BrandText.section.copyWith(height: 1)),
+          ),
         ),
-        field,
+        named,
       ],
     );
   }

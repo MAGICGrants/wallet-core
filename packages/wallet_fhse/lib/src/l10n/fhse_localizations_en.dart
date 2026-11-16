@@ -590,4 +590,10 @@ class FhseLocalizationsEn extends FhseLocalizations {
   @override
   String get appLockUseRecoveryPhraseBody =>
       'You can access your wallet with your recovery phrase. This is only recommended as a recovery mechanism. It is not supposed to be the normal way to access your wallet.';
+
+  @override
+  String get showPin => 'Show PIN';
+
+  @override
+  String get hidePin => 'Hide PIN';
 }

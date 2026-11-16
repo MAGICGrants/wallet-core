@@ -37,11 +37,25 @@ Future<void> showNoticeSheet({
                   color: iconColor ?? BrandColors.primary,
                 ),
                 const SizedBox(width: 11),
-                Expanded(child: Text(title, style: BrandText.sheetTitle)),
+                // The sheet's heading, and the name screen readers give it.
+                Expanded(
+                  child: Semantics(
+                    container: true,
+                    header: true,
+                    namesRoute: true,
+                    child: Text(title, style: BrandText.sheetTitle),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 7),
-            Text(body, style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5)),
+            // What happened, spoken as the sheet opens: a sheet's title alone is
+            // not read until the user moves to it.
+            Semantics(
+              container: true,
+              liveRegion: true,
+              child: Text(body, style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5)),
+            ),
             const SizedBox(height: 18),
             BrandButton(label: closeLabel, onPressed: () => Navigator.pop(sheetContext)),
           ],
