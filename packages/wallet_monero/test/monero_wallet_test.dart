@@ -809,6 +809,39 @@ void main() {
       );
     });
 
+    // The strings below are LWSF's (MAGICGrants/lwsf, pending_transaction.cpp).
+    // monero-lws answers a daemon rejection with HTTP 422 and the reason, which
+    // LWSF words like wallet2's node-mode "... rejected by daemon ...".
+    test('an LWS daemon rejection keeps its reason, like node mode', () async {
+      final tx = await pending();
+      backend.commitResult = false;
+      backend.pendingError = 'Transaction was rejected by daemon. Reason: invalid input';
+      await expectLater(
+        wallet.commitTx(tx, '4${'A' * 94}'),
+        throwsA(
+          isA<FormatException>().having((e) => e.message, 'message', contains('invalid input')),
+        ),
+      );
+    });
+
+    for (final lwsfError in [
+      'HTTP error code 500', // monero-lws before the 422 reply: no reason given
+      'HTTP error code 422', // a 422 without the expected body
+      'Sent 1 of 2 transactions before an error', // part of the send went out
+    ]) {
+      test('LWSF "$lwsfError" stays unknown', () async {
+        final tx = await pending();
+        backend.commitResult = false;
+        backend.pendingError = lwsfError;
+        await expectLater(
+          wallet.commitTx(tx, '4${'A' * 94}'),
+          throwsA(
+            isA<BroadcastFailure>().having((e) => e.outcome, 'outcome', BroadcastOutcome.unknown),
+          ),
+        );
+      });
+    }
+
     test('a clean commit succeeds and persists', () async {
       final tx = await pending();
       await wallet.commitTx(tx, '4${'A' * 94}');

@@ -14,12 +14,20 @@ for lib in "$@"; do
     echo "$lib: OpenSSL's default paths point into the build tree:" >&2
     grep -aoE '/[A-Za-z0-9_./-]*contrib/depends/[A-Za-z0-9_.-]+/etc/openssl[A-Za-z0-9_./-]*' "$lib" | sort -u | sed 's/^/  /' >&2
     status=1
-  elif ! grep -aqF '/etc/ssl/cert.pem' "$lib"; then
+  elif grep -aqF '/etc/ssl/cert.pem' "$lib"; then
     # OpenSSL compiles OPENSSLDIR/cert.pem in as its default CA file.
+    echo "$lib: OpenSSL defaults to /etc/ssl"
+  elif [ "$(head -c 2 "$lib")" = MZ ] &&
+       LC_ALL=C grep -qxF '/etc/ssl' < <(tr '\0' '\n' < "$lib") &&
+       LC_ALL=C grep -qxF '\cert.pem' < <(tr '\0' '\n' < "$lib"); then
+    # Since OpenSSL 3.4, Windows builds join OPENSSLDIR and "\cert.pem" at run
+    # time, so only the two halves are in the DLL, each as its own string.
+    # (Process substitution, not a pipe: grep -q exits on the first match and
+    # pipefail would count tr's SIGPIPE as a failure.)
+    echo "$lib: OpenSSL defaults to /etc/ssl"
+  else
     echo "$lib: OPENSSLDIR is not /etc/ssl (see monero_c contrib/depends/packages/openssl.mk)" >&2
     status=1
-  else
-    echo "$lib: OpenSSL defaults to /etc/ssl"
   fi
 done
 exit $status
