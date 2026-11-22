@@ -298,6 +298,38 @@ void main() {
       // Regressing to 1 would hand out an already-used address until restart.
       expect(wallet.unusedSubaddressIndex, 6);
     });
+
+    test('a deleted wallet\'s history does not carry into the next wallet', () async {
+      // The app keeps one MoneroWallet for its whole run, so creating or
+      // restoring after a delete reuses it. In node mode load() derives the
+      // index before the new wallet has synced, so before its history is first
+      // read. The deleted wallet's transactions were still cached, the new
+      // wallet took that wallet's next index, and the never-regress rule above
+      // then kept it through any rescan.
+      await openWallet(type: 'node');
+      backend.transactions = [for (var i = 1; i <= 5; i++) _received(hash: 'old$i', index: i)];
+      await wallet.refreshTxHistory();
+      await wallet.loadUnusedSubaddressIndex();
+      expect(wallet.unusedSubaddressIndex, 6);
+
+      await wallet.delete();
+
+      // A different wallet, restored in node mode and not yet synced.
+      backend.transactions = [];
+      backend.synchronizedValue = false;
+      connect(type: 'node');
+      await wallet.restoreFromSeed(
+        seed: const Bip39Seed(
+          'abandon abandon abandon abandon abandon abandon '
+          'abandon abandon abandon abandon abandon about',
+        ),
+        from: const RestorePoint.height(2800000),
+        password: 'pw',
+      );
+      await wallet.load();
+
+      expect(wallet.unusedSubaddressIndex, 1);
+    });
   });
 
   group('the receive address', () {

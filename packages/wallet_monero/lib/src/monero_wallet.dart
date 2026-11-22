@@ -1422,6 +1422,7 @@ class MoneroWallet extends CryptoWallet {
     _primaryAddress = '';
     _subaddressCache = null;
     _usedSubaddresses.clear();
+    _cachedHistory = const [];
   }
 
   @override
