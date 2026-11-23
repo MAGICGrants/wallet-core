@@ -1964,6 +1964,14 @@ class MoneroWallet extends CryptoWallet {
       withTxKeys: !_isBackgroundWallet && !_inBackgroundMode,
     );
 
+    // The time each transaction was shown at before: the last read, or the
+    // history saved with the wallet when nothing has been read since it opened.
+    final shownBefore = <String, int>{
+      for (final tx in txHistory) tx.hash: tx.timestamp,
+      for (final tx in _cachedHistory) tx.hash: tx.timestamp,
+    };
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
     final out = <TxDetails>[];
     for (var i = 0; i < infos.length; i++) {
       final info = infos[i];
@@ -1982,7 +1990,7 @@ class MoneroWallet extends CryptoWallet {
               .map((s) => int.tryParse(s.trim()))
               .whereType<int>()
               .toList(),
-          timestamp: info.timestamp,
+          timestamp: shownTimestamp(info.timestamp, before: shownBefore[info.hash], now: now),
           height: info.blockHeight,
           confirmations: info.confirmations,
           // The transaction secret key, which is what both apps put here and
@@ -1996,6 +2004,31 @@ class MoneroWallet extends CryptoWallet {
     // Newest first, matching what the UI expects.
     out.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     _cachedHistory = out;
+  }
+
+  /// How far ahead of this device's clock a reported time may be and still be
+  /// taken as real. A block's time may run up to two hours ahead of the
+  /// network's; nothing real is a day ahead.
+  static const _maxReportedAhead = Duration.secondsPerDay;
+
+  /// The Unix seconds a transaction is shown and sorted at.
+  ///
+  /// A transaction not yet in a block has no block time. wallet2 gives it the
+  /// time it was sent or seen, but LWSF gives it a placeholder once the light
+  /// wallet server has synced it: the largest time it can hold (the smallest
+  /// for a failed one). Multiplied into milliseconds either one wraps around
+  /// to the edge of 1970, so the send sat under "31 December" in the history
+  /// until it was mined. 0 is no time either. In its place goes the time this
+  /// wallet
+  /// showed the transaction at [before] (the send time LWSF recorded before
+  /// the server's sync replaced it, or when it was first seen), or [now] the
+  /// first time.
+  @visibleForTesting
+  static int shownTimestamp(int reported, {int? before, required int now}) {
+    bool real(int t) => t > 0 && t <= now + _maxReportedAhead;
+    if (real(reported)) return reported;
+    if (before != null && real(before)) return before;
+    return now;
   }
 
   /// Caches [info]'s transaction key, including the *absence* of one, but not

@@ -1049,6 +1049,82 @@ void main() {
       expect(wallet.readTxHistory().single.subaddrIndexList, [1, 2, 3]);
     });
 
+    group('a transaction not yet in a block', () {
+      // LWSF's TransactionInfo::timestamp() when it has no block time:
+      // time_t's largest value, or its smallest for a failed transaction.
+      const noTime = 9223372036854775807;
+      const noTimeFailed = -9223372036854775808;
+      int nowSec() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      NativeTxInfo send({required int timestamp, int confirmations = 0, int height = 0}) =>
+          NativeTxInfo(
+            direction: txDirectionOutgoing,
+            hash: 'pending-send',
+            amount: BigInt.from(500000000000),
+            fee: BigInt.from(30000000),
+            timestamp: timestamp,
+            blockHeight: height,
+            confirmations: confirmations,
+            subaddrAccount: 0,
+            subaddrIndex: '0',
+            isPending: height == 0,
+            isFailed: false,
+            paymentId: '',
+            txKey: '',
+          );
+
+      test('is shown now, not at the 1970 the placeholder wraps to', () async {
+        backend.transactions = [info(hash: 'old', timestamp: 1000), send(timestamp: noTime)];
+        await openWallet();
+        final before = nowSec();
+        await wallet.refreshTxHistory();
+        final after = nowSec();
+
+        final history = wallet.readTxHistory();
+        expect(history.first.hash, 'pending-send', reason: 'the newest sorts first');
+        expect(history.first.timestamp, inInclusiveRange(before, after));
+        expect(
+          DateTime.fromMillisecondsSinceEpoch(history.first.timestamp * 1000).year,
+          DateTime.now().year,
+        );
+      });
+
+      test('keeps its time until mined, then takes the block time', () async {
+        // LWSF records the send time when it builds the transaction; the
+        // server's first sync replaces it with the placeholder.
+        final sentAt = nowSec() - 90;
+        backend.transactions = [send(timestamp: sentAt)];
+        await openWallet();
+        await wallet.refreshTxHistory();
+        expect(wallet.readTxHistory().single.timestamp, sentAt);
+
+        backend.transactions = [send(timestamp: noTime)];
+        await wallet.refreshTxHistory();
+        expect(wallet.readTxHistory().single.timestamp, sentAt);
+        await wallet.refreshTxHistory();
+        expect(wallet.readTxHistory().single.timestamp, sentAt);
+
+        final minedAt = nowSec() - 30;
+        backend.transactions = [send(timestamp: minedAt, confirmations: 1, height: 3000000)];
+        await wallet.refreshTxHistory();
+        expect(wallet.readTxHistory().single.timestamp, minedAt);
+      });
+
+      test('shownTimestamp takes only a real time', () {
+        const now = 1800000000;
+        int shown(int reported, {int? before}) =>
+            MoneroWallet.shownTimestamp(reported, before: before, now: now);
+
+        expect(shown(1700000000, before: 1600000000), 1700000000);
+        expect(shown(now + 2 * 3600), now + 2 * 3600, reason: 'a block may run ahead of the clock');
+        expect(shown(noTime, before: 1700000000), 1700000000);
+        expect(shown(noTimeFailed), now);
+        expect(shown(0), now);
+        expect(shown(noTime, before: noTime), now);
+        expect(shown(now + 2 * 86400), now, reason: 'nothing real is days ahead');
+      });
+    });
+
     test('an outgoing send reports where it paid', () async {
       backend.transactions = [
         NativeTxInfo(
