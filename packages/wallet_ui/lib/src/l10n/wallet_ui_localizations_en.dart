@@ -913,6 +913,17 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
   }
 
   @override
+  String homeIncomingChange(int sends) {
+    String _temp0 = intl.Intl.pluralLogic(
+      sends,
+      locale: localeName,
+      other: 'Change From Your Sends',
+      one: 'Change From Your Send',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get homeChartTitle => 'Balance · 90 days';
 
   @override

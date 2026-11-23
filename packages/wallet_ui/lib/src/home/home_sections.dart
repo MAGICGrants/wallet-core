@@ -25,6 +25,10 @@ class HomeLabels {
   /// "{done} of {needed} confirmations".
   final String Function(int done, int needed) confirmations;
 
+  /// The title of change coming back from the wallet's own [sends], in place
+  /// of the coin's name: "Change From Your Send".
+  final String Function(int sends) change;
+
   /// "Balance · 90 days".
   final String chartTitle;
 
@@ -45,6 +49,7 @@ class HomeLabels {
     required this.incomingMore,
     required this.unlocksIn,
     required this.confirmations,
+    required this.change,
     required this.chartTitle,
     required this.chartToday,
     required this.chartEachCoin,
@@ -69,15 +74,27 @@ class HomeSections {
 
   const HomeSections({required this.activity, required this.labels});
 
-  /// Incoming payments not spendable yet across [coins], newest first, at
-  /// most [incomingShown] of them; null when there are none, so the home
-  /// leaves the card out.
+  /// Incoming payments not spendable yet across [coins], and change from a
+  /// send still locked, newest first, at most [incomingShown] of them; null
+  /// when there are none, so the home leaves the card out.
   IncomingCard? incoming(List<HomeCoin> coins, {DateTime? now}) {
     final rows = <({int when, IncomingItem item})>[];
     for (final coin in coins) {
       final w = coin.wallet;
-      for (final tx in activity.of(w, tokens: coin.tokens, now: now).pendingIncoming) {
-        rows.add((when: tx.broadcastAt ?? tx.timestamp, item: _incomingItem(w, tx)));
+      final a = activity.of(w, tokens: coin.tokens, now: now);
+      for (final tx in a.pendingIncoming) {
+        rows.add((
+          when: tx.broadcastAt ?? tx.timestamp,
+          item: _item(w, tx, title: w.assetName, amount: tx.amountBaseUnits),
+        ));
+      }
+      // A send is one outgoing transaction, so the change it leaves locked is
+      // not among the payments above; it gets a row of its own, named as such.
+      if (a.lockedChange case final change?) {
+        rows.add((
+          when: change.send.broadcastAt ?? change.send.timestamp,
+          item: _item(w, change.send, title: labels.change(change.sends), amount: change.amount),
+        ));
       }
     }
     if (rows.isEmpty) return null;
@@ -89,7 +106,14 @@ class HomeSections {
     );
   }
 
-  IncomingItem _incomingItem(CryptoWallet w, TxDetails tx) {
+  /// A row for [amount] arriving with [tx]: how far along [tx] is, and when
+  /// that makes the amount spendable.
+  IncomingItem _item(
+    CryptoWallet w,
+    TxDetails tx, {
+    required String title,
+    required BigInt amount,
+  }) {
     final needed = w.requiredConfirmations;
     final done = math.min(math.max(tx.height == -1 ? 0 : tx.confirmations, 0), needed);
     final blockTime = w.averageBlockTime;
@@ -105,12 +129,12 @@ class HomeSections {
     } else {
       detail = labels.confirmations(done, needed);
     }
-    final amount = displayAmount(tx.amountBaseUnits, w.baseUnitDecimals);
+    final shown = displayAmount(amount, w.baseUnitDecimals);
     return IncomingItem(
       icon: CoinMark(coinSymbol: w.coinSymbol, iconAsset: w.iconAsset, size: 32),
-      title: w.assetName,
+      title: title,
       detail: detail,
-      amount: '+${formatAmount(amount, math.min(w.decimals, 5))} ${w.coinSymbol}',
+      amount: '+${formatAmount(shown, math.min(w.decimals, 5))} ${w.coinSymbol}',
       progress: needed == 0 ? 1 : done / needed,
     );
   }

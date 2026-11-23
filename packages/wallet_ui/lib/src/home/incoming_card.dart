@@ -26,8 +26,9 @@ class IncomingItem {
   });
 }
 
-/// Payments that have arrived but cannot be spent yet, each with a progress
-/// bar toward its unlock. The home leaves the card out when there are none.
+/// Payments that have arrived, and change from a send, that cannot be spent
+/// yet, each with a progress bar toward its unlock. The home leaves the card
+/// out when there are none.
 class IncomingCard extends StatelessWidget {
   final String title;
   final List<IncomingItem> items;

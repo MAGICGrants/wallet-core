@@ -308,6 +308,8 @@
   "@homeIncomingUnlocksIn": {"placeholders": {"minutes": {"type": "int"}, "done": {"type": "int"}, "needed": {"type": "int"}}},
   "homeIncomingConfirmations": "{done} of {needed} confirmations",
   "@homeIncomingConfirmations": {"placeholders": {"done": {"type": "int"}, "needed": {"type": "int"}}},
+  "homeIncomingChange": "{sends, plural, =1{Change From Your Send} other{Change From Your Sends}}",
+  "@homeIncomingChange": {"description": "Row title on the home's Incoming card, in place of the coin's name: change from the wallet's own sends (one, or several not yet confirmed) that cannot be spent until it unlocks. Title Case.", "placeholders": {"sends": {"type": "int"}}},
   "homeChartTitle": "Balance · 90 days",
   "homeChartToday": "Today",
   "homeChartEachCoin": "Each coin's balance",

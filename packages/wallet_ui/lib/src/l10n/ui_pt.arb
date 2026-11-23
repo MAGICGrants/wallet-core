@@ -274,6 +274,7 @@
   "homeIncomingTitle": "A receber",
   "homeIncomingUnlocksIn": "Desbloqueia em cerca de {minutes, plural, =1{1 minuto} other{{minutes} minutos}} · {done} de {needed}",
   "homeIncomingConfirmations": "{done} de {needed} confirmações",
+  "homeIncomingChange": "{sends, plural, =1{Troco do Seu Envio} other{Troco dos Seus Envios}}",
   "homeChartTitle": "Saldo · 90 dias",
   "homeChartToday": "Hoje",
   "homeChartEachCoin": "Saldo de cada moeda",

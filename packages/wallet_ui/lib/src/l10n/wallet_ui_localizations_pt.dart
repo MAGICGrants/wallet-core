@@ -915,6 +915,17 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
   }
 
   @override
+  String homeIncomingChange(int sends) {
+    String _temp0 = intl.Intl.pluralLogic(
+      sends,
+      locale: localeName,
+      other: 'Troco dos Seus Envios',
+      one: 'Troco do Seu Envio',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get homeChartTitle => 'Saldo · 90 dias';
 
   @override

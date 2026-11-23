@@ -4,10 +4,21 @@ import 'package:wallet_domain/wallet_domain.dart';
 /// the chart's window, 0 at its start and 1 now.
 typedef BalanceStep = ({double at, BigInt balance});
 
+/// Change from the wallet's own sends that cannot be spent yet: [amount] in
+/// base units, across [sends] sends not yet confirmed, of which [send] is the
+/// one that unlocks last.
+typedef LockedChange = ({TxDetails send, int sends, BigInt amount});
+
 /// What the home screen shows about one coin, worked out from its history.
 class CoinActivity {
   /// Incoming payments not spendable yet, newest first.
   final List<TxDetails> pendingIncoming;
+
+  /// Change from a send that is held back until it unlocks (Monero's ten
+  /// blocks), or null when there is none. A send records one outgoing
+  /// transaction, so its change is never among [pendingIncoming]; this is what
+  /// the balance still holds back beyond those payments.
+  final LockedChange? lockedChange;
 
   /// The balance in base units across the window, oldest first: what it was
   /// when the window opens, then what it became at each transaction since.
@@ -19,6 +30,7 @@ class CoinActivity {
 
   const CoinActivity({
     required this.pendingIncoming,
+    this.lockedChange,
     required this.balanceSteps,
     required this.hasHistory,
   });
@@ -28,7 +40,7 @@ class CoinActivity {
 ///
 /// Reading a wallet's history copies the whole list, and the home rebuilds on
 /// every wallet notification (each sync tick). So the result is kept per
-/// wallet and recomputed only when the history, the balance or the day
+/// wallet and recomputed only when the history, either balance or the day
 /// changes. Nothing is persisted or logged: the history stays in memory, where
 /// the wallet already holds it.
 class HomeActivity {
@@ -50,13 +62,17 @@ class HomeActivity {
     final day = at.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay;
     final revision = [wallet.txHistoryRevision, for (final t in tokens) t.txHistoryRevision];
     final balance = wallet.totalBalanceBaseUnits ?? BigInt.zero;
+    // Change unlocking moves only the unlocked balance: no new transaction,
+    // the same total.
+    final unlocked = wallet.unlockedBalanceBaseUnits;
     final hit = _cache[wallet];
-    if (hit != null && hit.matches(revision, balance, day)) return hit.activity;
+    if (hit != null && hit.matches(revision, balance, unlocked, day)) return hit.activity;
     final activity = compute(
       wallet,
       wallet.txHistory,
       balance,
       at,
+      unlockedNow: unlocked,
       feesPaidFor: [
         for (final t in tokens)
           if (t.feeIsForeign && t.feeCoinSymbol == wallet.coinSymbol)
@@ -65,7 +81,7 @@ class HomeActivity {
       ],
       days: days,
     );
-    _cache[wallet] = _Cached(revision, balance, day, activity);
+    _cache[wallet] = _Cached(revision, balance, unlocked, day, activity);
     return activity;
   }
 
@@ -90,24 +106,54 @@ class HomeActivity {
     return tx == null ? null : _when(tx);
   }
 
-  /// The pure computation behind [of], exposed for tests.
+  /// The pure computation behind [of], exposed for tests. [unlockedNow] is
+  /// the spendable balance; without it no [CoinActivity.lockedChange] is
+  /// worked out.
   static CoinActivity compute(
     CryptoWallet wallet,
     List<TxDetails> history,
     BigInt balanceNow,
     DateTime now, {
+    BigInt? unlockedNow,
     List<TxDetails> feesPaidFor = const [],
     int days = 90,
   }) {
     final pending = <TxDetails>[];
+    final sends = <TxDetails>[];
     for (final tx in history) {
-      if (tx.direction == txDirectionIncoming &&
-          tx.status != TxStatus.failed &&
-          !wallet.isTxConfirmed(tx)) {
+      if (tx.status == TxStatus.failed || wallet.isTxConfirmed(tx)) continue;
+      if (tx.direction == txDirectionIncoming) {
         pending.add(tx);
+      } else if (tx.direction == txDirectionOutgoing) {
+        sends.add(tx);
       }
     }
     pending.sort((a, b) => _when(b).compareTo(_when(a)));
+
+    // What the balance holds back beyond the payments listed is change from a
+    // send. A mempool receipt is counted in the total by one Monero backend
+    // (light wallet) and not by the other (local node), so it is taken off
+    // either way: a receipt is never shown as change, and the change shows in
+    // full once the receipt is in a block. Coins that spend a pending balance
+    // hold nothing back, so they never get here.
+    LockedChange? lockedChange;
+    if (unlockedNow != null && sends.isNotEmpty && !wallet.canSpendPendingBalance) {
+      var held = balanceNow - unlockedNow;
+      for (final tx in pending) {
+        held -= tx.amountBaseUnits;
+      }
+      if (held > BigInt.zero) {
+        // All of it is spendable once the send with the fewest confirmations
+        // unlocks; among sends equally far along, the newest stands for them.
+        int done(TxDetails tx) => tx.height == -1 ? 0 : tx.confirmations;
+        final last = sends.reduce((a, b) {
+          final byDone = done(a).compareTo(done(b));
+          if (byDone != 0) return byDone < 0 ? a : b;
+          return _when(a) >= _when(b) ? a : b;
+        });
+        lockedChange = (send: last, sends: sends.length, amount: held);
+      }
+    }
 
     // Walk back from the balance now: before a transaction, the balance was
     // what it is after it minus what it changed.
@@ -148,6 +194,7 @@ class HomeActivity {
 
     return CoinActivity(
       pendingIncoming: pending,
+      lockedChange: lockedChange,
       balanceSteps: steps.reversed.toList(growable: false),
       hasHistory: history.isNotEmpty,
     );
@@ -174,13 +221,16 @@ class HomeActivity {
 class _Cached {
   final List<int> revision;
   final BigInt balance;
+  final BigInt? unlocked;
   final int day;
   final CoinActivity activity;
 
-  _Cached(this.revision, this.balance, this.day, this.activity);
+  _Cached(this.revision, this.balance, this.unlocked, this.day, this.activity);
 
-  bool matches(List<int> rev, BigInt bal, int d) {
-    if (bal != balance || d != day || rev.length != revision.length) return false;
+  bool matches(List<int> rev, BigInt bal, BigInt? unl, int d) {
+    if (bal != balance || unl != unlocked || d != day || rev.length != revision.length) {
+      return false;
+    }
     for (var i = 0; i < rev.length; i++) {
       if (rev[i] != revision[i]) return false;
     }
