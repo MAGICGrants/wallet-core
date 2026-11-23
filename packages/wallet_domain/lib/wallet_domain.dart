@@ -32,6 +32,7 @@ export 'src/stores/tx_notification_store.dart';
 export 'src/stores/wallet_cache_store.dart';
 export 'src/tx/broadcast_outcome.dart';
 export 'src/tx/fee_share.dart';
+export 'src/tx/tx_build_failure.dart';
 export 'src/tx/tx_details.dart';
 export 'src/tx/tx_notifications.dart';
 export 'src/wallet_isolate.dart';

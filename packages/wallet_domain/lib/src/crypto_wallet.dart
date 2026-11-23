@@ -708,6 +708,9 @@ abstract class CryptoWallet with ChangeNotifier {
   /// Server-supplied fee inputs reach the signed transaction as given. Show
   /// [PendingTransaction.feeBaseUnits] and warn on its ratio to the amount
   /// before calling [commitTx].
+  ///
+  /// A wallet that can tell why a build failed throws [TxBuildFailure] (Monero
+  /// does); other wallets throw whatever their backend raised.
   Future<PendingTransaction> createTx(
     String destinationAddress,
     BigInt amountBaseUnits,

@@ -2408,6 +2408,10 @@ class MoneroWallet extends CryptoWallet {
       '${Redact.amount(amountBaseUnits)} sweep=$isSweepAll',
     );
 
+    // Read before the build too: the build can wait on the server long enough
+    // for a connect to finish meanwhile.
+    final wasConnected = isConnected;
+
     // The fee is wallet2's, chosen inside monero_c from `priority` and the
     // daemon's own estimate. Nothing in Dart picks it and nothing here bounds
     // it. It comes back on the pending-tx handle and is reported as
@@ -2424,7 +2428,15 @@ class MoneroWallet extends CryptoWallet {
     final error = await _backend.pendingTxErrorString(handle);
     if (error.isNotEmpty) {
       walletLog(LogLevel.error, 'Failed to create transaction: $error');
-      throw Exception(error);
+      // Without a connection LWSF fails for want of fees, a login or decoys,
+      // worded "Tx construction: ..." or as a bare socket error, which tells
+      // the user nothing. An account awaiting the server's approval has its own
+      // state and screen, so it is not reported as a lost connection.
+      final notConnected = (!wasConnected || !isConnected) && lwsPendingApproval == null;
+      throw TxBuildFailure(
+        notConnected ? TxBuildProblem.notConnected : TxBuildProblem.other,
+        detail: error,
+      );
     }
 
     return MoneroPendingTransaction(

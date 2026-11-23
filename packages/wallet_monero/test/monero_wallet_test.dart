@@ -723,6 +723,61 @@ void main() {
     });
   });
 
+  group('a failed build says why it failed, where it can tell', () {
+    // A payment link can open the app straight onto a filled-in Send form, and
+    // Send pressed before the wallet reaches its server failed as "Unknown
+    // error." (Skylight issue 202). LWSF's own text for it says nothing to a user.
+    final theirs = '4${'A' * 94}';
+
+    Future<void> openWallet() async {
+      connect();
+      backend.existingWalletPaths.add(await pathFor('lws'));
+      await wallet.openExisting(password: 'pw');
+    }
+
+    test('before the wallet has connected: not connected', () async {
+      await openWallet();
+      expect(wallet.isConnected, isFalse);
+      backend.pendingError = 'Tx construction: Operation canceled';
+
+      await expectLater(
+        wallet.createTx(theirs, BigInt.from(1000), false),
+        throwsA(
+          isA<TxBuildFailure>()
+              .having((e) => e.problem, 'problem', TxBuildProblem.notConnected)
+              .having((e) => e.detail, 'detail', 'Tx construction: Operation canceled'),
+        ),
+      );
+    });
+
+    test('while connected: some other problem, with the reason kept', () async {
+      await openWallet();
+      await wallet.connectToDaemon();
+      expect(wallet.isConnected, isTrue);
+      backend.pendingError = 'Invalid destination address';
+
+      await expectLater(
+        wallet.createTx(theirs, BigInt.from(1000), false),
+        throwsA(
+          isA<TxBuildFailure>()
+              .having((e) => e.problem, 'problem', TxBuildProblem.other)
+              .having((e) => e.detail, 'detail', 'Invalid destination address'),
+        ),
+      );
+    });
+
+    test('the reason stays in the text the apps match low funds on', () async {
+      await openWallet();
+      await wallet.connectToDaemon();
+      backend.pendingError = 'Unlocked funds too low';
+
+      await expectLater(
+        wallet.createTx(theirs, BigInt.from(1000), false),
+        throwsA(predicate((e) => e.toString().contains('Unlocked funds too low'))),
+      );
+    });
+  });
+
   group('commit gates success on more than errorString', () {
     Future<MoneroPendingTransaction> pending() async {
       connect();
