@@ -70,6 +70,8 @@ class _FileWallet extends FakeWallet {
 
 /// The security-key upgrade: a wallet made before the guard moves onto it at
 /// its first unlock, and one cut short is kept or put back.
+const _labels = [AddressLabel(coin: 'XMR', address: '8a', label: 'Donations')];
+
 void main() {
   late Directory tmp;
   late _Guard guard;
@@ -85,9 +87,11 @@ void main() {
     WalletSecrets.holdsWalletPassword = true;
     guard = _Guard();
     WalletManager.passwordGuard = guard;
+    AddressLabelKey.resetForTesting();
   });
 
   tearDown(() {
+    AddressLabelKey.resetForTesting();
     WalletManager.passwordGuard = null;
     WalletAppConfig.resetForTesting();
     SharedPreferencesService.resetForTesting();
@@ -107,7 +111,11 @@ void main() {
         password: 'old',
       );
     }
+    await writeAddressLabels(_labels, password: 'old');
   }
+
+  Future<String?> labelUnder(String password) async =>
+      (await readAddressLabels(password: password))?.single.label;
 
   Future<String> fileUnder(_FileWallet w, String password) async =>
       WalletFileCrypto.decryptFromBase64(await (await w.file()).readAsString(), password);
@@ -128,6 +136,8 @@ void main() {
     expect(guard.kept, 'from-guard');
     expect(await SeedStore.load('from-guard'), isNotNull);
     expect(await fileUnder(w, 'from-guard'), 'keys');
+    expect(await labelUnder('from-guard'), 'Donations');
+    expect(await labelUnder('old'), isNull, reason: 'the labels moved with the other files');
     expect(await GuardUpgradeFiles.inProgress(), isFalse);
     expect(leftovers(), isEmpty, reason: 'no copy under the old password may outlast it');
     m.dispose();
@@ -144,6 +154,7 @@ void main() {
     expect(guard.kept, isNull);
     expect(await SeedStore.load('old'), isNotNull);
     expect(await fileUnder(w, 'old'), 'keys');
+    expect(await labelUnder('old'), 'Donations');
     expect(w.isLoaded, isTrue, reason: 'opened again under the old password');
     expect(await GuardUpgradeFiles.inProgress(), isFalse);
     expect(leftovers(), isEmpty);

@@ -64,7 +64,16 @@ class WalletManager with ChangeNotifier {
   /// keystore behaviour.
   static WalletPasswordGuard? passwordGuard;
 
-  String? _password;
+  String? _walletPassword;
+
+  /// The wallet password, while the wallet is unlocked. Every change reaches
+  /// the address labels, which are encrypted with it ([AddressLabelKey]): they
+  /// open when it arrives and close when it goes.
+  String? get _password => _walletPassword;
+  set _password(String? value) {
+    _walletPassword = value;
+    AddressLabelKey.password = value;
+  }
 
   /// Where [_password] came from.
   _PasswordSource _passwordSource = _PasswordSource.typed;
@@ -985,6 +994,10 @@ class WalletManager with ChangeNotifier {
     // A new wallet starts unverified: the keystore can outlive an uninstall
     // (iOS), so a record from a wallet that was here before must not carry over.
     await SeedCheckStore.delete();
+    // Address labels outlive an uninstall the same way. A new wallet starts
+    // with none; a restore gets its own back from the metadata backup, which
+    // opens below.
+    await clearAddressLabels();
 
     _setPassword(walletPassword, guarded ? _PasswordSource.guard : _passwordSource);
 
@@ -1049,6 +1062,7 @@ class WalletManager with ChangeNotifier {
     try {
       await GuardUpgradeFiles.backUp([
         await SeedStore.path(),
+        await addressLabelsPath(),
         for (final w in _wallets.values) ...await w.walletPasswordFilePaths(),
       ]);
       return true;
@@ -1091,6 +1105,7 @@ class WalletManager with ChangeNotifier {
         for (final w in _wallets.values) {
           await w.changeWalletPassword(from: from, to: to);
         }
+        await rekeyAddressLabels(from: from, to: to);
       }
       await SeedStore.save(seed: kept.seed, from: kept.from, password: to);
       await guard.keepForNewWallet(to);

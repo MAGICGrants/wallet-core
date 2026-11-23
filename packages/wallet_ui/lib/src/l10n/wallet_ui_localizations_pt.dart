@@ -906,7 +906,7 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
       other: '$minutes minutos',
       one: '1 minuto',
     );
-    return 'Desbloqueia em cerca de $_temp0 · $done de $needed';
+    return 'Desbloqueia em cerca de $_temp0\n$done de $needed';
   }
 
   @override
@@ -915,14 +915,8 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
   }
 
   @override
-  String homeIncomingChange(int sends) {
-    String _temp0 = intl.Intl.pluralLogic(
-      sends,
-      locale: localeName,
-      other: 'Troco dos Seus Envios',
-      one: 'Troco do Seu Envio',
-    );
-    return '$_temp0';
+  String homeIncomingChange(String asset) {
+    return 'Troco em $asset';
   }
 
   @override

@@ -10,13 +10,20 @@ import 'address_label_store.dart';
 /// The names the user gave their own receive addresses, as both apps present
 /// them: on Receive's Labeled tab, in History's address filter and in a
 /// received transaction's details.
+///
+/// The labels are encrypted with the wallet password ([AddressLabelKey]), so
+/// the model reads them when the wallet unlocks and lets go of them when it
+/// locks; meanwhile it holds none and saves none.
 class AddressLabelModel with ChangeNotifier {
   AddressLabelModel({
     Future<List<AddressLabel>?> Function()? read,
     Future<void> Function(List<AddressLabel>)? write,
-  }) : _read = read ?? readAddressLabels,
-       _write = write ?? writeAddressLabels {
-    AddressLabelsSync.attach(_applyRemote, onCleared: _cleared);
+    bool Function()? isLocked,
+  }) : _read = read ?? (() => readAddressLabels()),
+       _write = write ?? ((labels) => writeAddressLabels(labels)),
+       _isLocked =
+           isLocked ?? (read == null ? () => AddressLabelKey.password == null : () => false) {
+    AddressLabelsSync.attach(_applyRemote, onCleared: _cleared, onKeyChanged: _keyChanged);
     load();
   }
 
@@ -28,6 +35,7 @@ class AddressLabelModel with ChangeNotifier {
 
   final Future<List<AddressLabel>?> Function() _read;
   final Future<void> Function(List<AddressLabel>) _write;
+  final bool Function() _isLocked;
 
   /// By [AddressLabel.key].
   Map<String, AddressLabel> _labels = {};
@@ -53,6 +61,8 @@ class AddressLabelModel with ChangeNotifier {
 
   @visibleForTesting
   Future<void> load() async {
+    // Locked: nothing to read yet. The unlock calls this again.
+    if (_isLocked()) return;
     try {
       final stored = await _read();
       if (stored == null) {
@@ -146,6 +156,18 @@ class AddressLabelModel with ChangeNotifier {
     } catch (_) {
       // Logged by _store.
     }
+  }
+
+  /// The wallet unlocked ([available]) and the labels can be read, or it
+  /// locked and they go from memory, unsaveable until the next unlock.
+  void _keyChanged(bool available) {
+    if (available) {
+      unawaited(load());
+      return;
+    }
+    _labels = {};
+    _loaded = false;
+    notifyListeners();
   }
 
   /// The wallet was deleted ([clearAddressLabels]): what is in memory goes too,

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -62,9 +63,12 @@ void main() {
     SharedPreferencesService.store = prefs;
     secrets = MemorySecretStore();
     WalletSecrets.store = secrets;
+    // Every manager hands the label store its password; none may carry over.
+    AddressLabelKey.resetForTesting();
   });
 
   tearDown(() {
+    AddressLabelKey.resetForTesting();
     WalletAppConfig.resetForTesting();
     SharedPreferencesService.resetForTesting();
     WalletSecrets.resetForTesting();
@@ -426,6 +430,40 @@ void main() {
 
       expect(btc.restores, hasLength(1));
       expect(eth.restores, hasLength(1));
+      m.dispose();
+    });
+
+    test('labels an earlier install left in the keystore are cleared', () async {
+      // iOS keeps the keystore through an uninstall: without this, restoring
+      // the same seed after a reinstall shows the old labels again, from the
+      // device rather than the metadata backup.
+      installSpice();
+      // An earlier install's labels, as an older build kept them: in the
+      // keystore, which outlives an uninstall on iOS.
+      await secrets.write(
+        'addressLabels',
+        json.encode([
+          const AddressLabel(coin: 'BTC', address: 'bc1q', label: 'Donations').toJson(),
+        ]),
+      );
+      final labels = AddressLabelModel();
+      addTearDown(labels.dispose);
+      // Unlocked under some earlier password, which reads them.
+      AddressLabelKey.password = 'earlier';
+      for (var i = 0; i < 200 && labels.count == 0; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(labels.labelFor('BTC', 'bc1q'), 'Donations');
+      expect(await readAddressLabels(), hasLength(1));
+      final m = manager([FakeWallet('BTC')])..setWalletPassword('pw');
+
+      await m.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+      );
+
+      expect(await readAddressLabels(), isEmpty);
+      expect(labels.count, 0, reason: 'the open model would save them back');
       m.dispose();
     });
 

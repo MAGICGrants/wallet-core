@@ -904,7 +904,7 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
       other: '$minutes minutes',
       one: '1 minute',
     );
-    return 'Unlocks in about $_temp0 · $done of $needed';
+    return 'Unlocks in about $_temp0\n$done of $needed';
   }
 
   @override
@@ -913,14 +913,8 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
   }
 
   @override
-  String homeIncomingChange(int sends) {
-    String _temp0 = intl.Intl.pluralLogic(
-      sends,
-      locale: localeName,
-      other: 'Change From Your Sends',
-      one: 'Change From Your Send',
-    );
-    return '$_temp0';
+  String homeIncomingChange(String asset) {
+    return '$asset Change';
   }
 
   @override

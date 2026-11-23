@@ -126,7 +126,7 @@ const _labels = HomeLabels(
 String _incomingMore(int others) => 'Incoming (+$others)';
 String _unlocksIn(int minutes, int done, int needed) => 'unlocks $minutes min $done/$needed';
 String _confirmations(int done, int needed) => '$done/$needed confirmations';
-String _change(int sends) => 'Change from $sends';
+String _change(String asset) => '$asset Change';
 
 void main() {
   group('HomeActivity.compute', () {
@@ -537,7 +537,7 @@ void main() {
       expect(card.title, 'Incoming');
       expect(card.items, hasLength(1));
       final change = card.items.single;
-      expect(change.title, 'Change from 1');
+      expect(change.title, 'Monero Change');
       expect(change.detail, 'unlocks 12 min 4/10');
       expect(change.amount, '+1.50000 XMR');
       expect(change.progress, closeTo(0.4, 1e-9));
@@ -552,7 +552,7 @@ void main() {
           _tx(daysAgo: 30, amount: 3000000000000, hash: 'in'),
         ];
       final both = sections.incoming([(wallet: xmr, tokens: const <CryptoWallet>[])], now: _now)!;
-      expect([for (final i in both.items) i.title], ['Monero', 'Change from 1']);
+      expect([for (final i in both.items) i.title], ['Monero', 'Monero Change']);
       expect(both.items.last.amount, '+1.50000 XMR');
     });
 

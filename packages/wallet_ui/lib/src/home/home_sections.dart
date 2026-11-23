@@ -19,15 +19,16 @@ class HomeLabels {
   /// "Incoming (+2 Others)".
   final String Function(int others) incomingMore;
 
-  /// "Unlocks in about {minutes} minutes · {done} of {needed}".
+  /// "Unlocks in about {minutes} minutes", then "{done} of {needed}" on a line
+  /// of its own.
   final String Function(int minutes, int done, int needed) unlocksIn;
 
   /// "{done} of {needed} confirmations".
   final String Function(int done, int needed) confirmations;
 
-  /// The title of change coming back from the wallet's own [sends], in place
-  /// of the coin's name: "Change From Your Send".
-  final String Function(int sends) change;
+  /// The title of change coming back from the wallet's own sends, named for
+  /// the coin's [asset]: "Monero Change".
+  final String Function(String asset) change;
 
   /// "Balance · 90 days".
   final String chartTitle;
@@ -97,7 +98,7 @@ class HomeSections {
       if (a.lockedChange case final change?) {
         rows.add((
           when: change.send.broadcastAt ?? change.send.timestamp,
-          item: _item(w, change.send, title: labels.change(change.sends), amount: change.amount),
+          item: _item(w, change.send, title: labels.change(w.assetName), amount: change.amount),
         ));
       }
     }

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_domain/wallet_domain.dart';
 import 'package:wallet_infra/testing.dart';
@@ -122,21 +125,121 @@ void main() {
       expect(stored.map((l) => l.key), ['BTC:bc1q']);
       m.dispose();
     });
+  });
 
-    test('deleting the wallet empties the store and the open model', () async {
+  group('the labels file', () {
+    late Directory tmp;
+
+    setUpAll(() => WalletFileCrypto.kdf = const FastTestPbkdf2());
+    tearDownAll(() => WalletFileCrypto.kdf = const WebCryptoPbkdf2());
+
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync('address_labels');
+      WalletAppConfig.install(WalletAppConfig.spice, directories: FixedDirectories(tmp));
       WalletSecrets.store = MemorySecretStore();
+      AddressLabelKey.password = 'wallet password';
+    });
+
+    tearDown(() {
+      AddressLabelKey.resetForTesting();
+      WalletSecrets.resetForTesting();
+      WalletAppConfig.resetForTesting();
+      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    });
+
+    File file() => File('${tmp.path}/address_labels');
+
+    /// Waits for [done]: decryption runs in another isolate, past the
+    /// microtask queue.
+    Future<void> until(bool Function() done) async {
+      for (var i = 0; i < 200 && !done(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(done(), isTrue, reason: 'timed out');
+    }
+
+    test('is encrypted with the wallet password, beside the wallet files', () async {
+      await writeAddressLabels([
+        const AddressLabel(coin: 'XMR', address: '8a', label: 'Donations'),
+      ]);
+
+      expect(file().existsSync(), isTrue);
+      final blob = file().readAsStringSync();
+      expect(blob, isNot(contains('Donations')));
+      expect(utf8.decode(base64.decode(blob), allowMalformed: true), isNot(contains('Donations')));
+      expect((await readAddressLabels())!.single.label, 'Donations');
+      expect(await readAddressLabels(password: 'another password'), isNull);
+    });
+
+    test('cannot be read or written while the wallet is locked', () async {
+      await writeAddressLabels([const AddressLabel(coin: 'XMR', address: '8a', label: 'Rent')]);
+      AddressLabelKey.password = null;
+
+      expect(await readAddressLabels(), isNull);
+      expect(() => writeAddressLabels(const []), throwsStateError);
+    });
+
+    test('the model reads them at unlock and lets go of them at lock', () async {
+      await writeAddressLabels([const AddressLabel(coin: 'XMR', address: '8a', label: 'Rent')]);
+      AddressLabelKey.password = null;
       final m = AddressLabelModel();
-      await m.load();
+      addTearDown(m.dispose);
+      await pumpEventQueue();
+      expect(m.count, 0, reason: 'locked');
+
+      // Saving while locked writes nothing: the file still has only Rent.
+      await m.setLabel('XMR', '8b', 'Ignored');
+      AddressLabelKey.password = 'wallet password';
+      await until(() => m.labelFor('XMR', '8a') != null);
+      expect(m.labelFor('XMR', '8a'), 'Rent');
+      expect(m.labelFor('XMR', '8b'), isNull);
+
+      AddressLabelKey.password = null;
+      expect(m.count, 0, reason: 'the lock empties memory');
+      expect(file().existsSync(), isTrue, reason: 'and leaves the file alone');
+    });
+
+    test('labels an older build kept in the keystore move into the file', () async {
+      await WalletSecrets.store.write(
+        'addressLabels',
+        json.encode([const AddressLabel(coin: 'BTC', address: 'bc1q', label: 'Savings').toJson()]),
+      );
+
+      expect((await readAddressLabels())!.single.label, 'Savings');
+      expect(await WalletSecrets.store.read('addressLabels'), isNull);
+      expect(file().existsSync(), isTrue);
+      expect((await readAddressLabels())!.single.label, 'Savings');
+    });
+
+    test('re-keying moves them to the new password', () async {
+      await writeAddressLabels([const AddressLabel(coin: 'XMR', address: '8a', label: 'Tips')]);
+
+      await rekeyAddressLabels(from: 'wallet password', to: 'guarded password');
+
+      expect(await readAddressLabels(password: 'wallet password'), isNull);
+      expect((await readAddressLabels(password: 'guarded password'))!.single.label, 'Tips');
+    });
+
+    test('re-keying refuses a file the old password does not open', () async {
+      await writeAddressLabels(const [], password: 'some other password');
+      expect(rekeyAddressLabels(from: 'wallet password', to: 'guarded password'), throwsStateError);
+    });
+
+    test('deleting the wallet removes the file, any keystore copy and the open model', () async {
+      final m = AddressLabelModel();
+      addTearDown(m.dispose);
+      await pumpEventQueue();
       await m.setLabel('XMR', '8a', 'Donations');
-      expect(await readAddressLabels(), hasLength(1));
+      await WalletSecrets.store.write('addressLabels', '[]');
+      expect(file().existsSync(), isTrue);
 
       await clearAddressLabels();
       expect(m.count, 0);
-      expect(await readAddressLabels(), isEmpty);
+      expect(file().existsSync(), isFalse);
+      expect(await WalletSecrets.store.read('addressLabels'), isNull);
       // The next wallet's labels save normally.
       await m.setLabel('XMR', '8b', 'Next');
       expect((await readAddressLabels())!.single.label, 'Next');
-      m.dispose();
     });
   });
 

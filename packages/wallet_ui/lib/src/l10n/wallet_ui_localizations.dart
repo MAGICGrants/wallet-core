@@ -1727,10 +1727,10 @@ abstract class WalletUiLocalizations {
   /// **'Incoming'**
   String get homeIncomingTitle;
 
-  /// No description provided for @homeIncomingUnlocksIn.
+  /// Detail under a row on the home's Incoming card: when the funds unlock, then on its own line how many of the confirmations they need are done. Sentence case.
   ///
   /// In en, this message translates to:
-  /// **'Unlocks in about {minutes, plural, =1{1 minute} other{{minutes} minutes}} · {done} of {needed}'**
+  /// **'Unlocks in about {minutes, plural, =1{1 minute} other{{minutes} minutes}}\n{done} of {needed}'**
   String homeIncomingUnlocksIn(int minutes, int done, int needed);
 
   /// No description provided for @homeIncomingConfirmations.
@@ -1739,11 +1739,11 @@ abstract class WalletUiLocalizations {
   /// **'{done} of {needed} confirmations'**
   String homeIncomingConfirmations(int done, int needed);
 
-  /// Row title on the home's Incoming card, in place of the coin's name: change from the wallet's own sends (one, or several not yet confirmed) that cannot be spent until it unlocks. Title Case.
+  /// Row title on the home's Incoming card, in place of the coin's name: change from the wallet's own sends that cannot be spent until it unlocks. asset is the coin's name. Title Case.
   ///
   /// In en, this message translates to:
-  /// **'{sends, plural, =1{Change From Your Send} other{Change From Your Sends}}'**
-  String homeIncomingChange(int sends);
+  /// **'{asset} Change'**
+  String homeIncomingChange(String asset);
 
   /// No description provided for @homeChartTitle.
   ///
