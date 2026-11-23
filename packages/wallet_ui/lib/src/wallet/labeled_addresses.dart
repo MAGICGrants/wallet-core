@@ -16,19 +16,20 @@ import 'time_ago.dart';
 /// A used receive address and the label the user gave it, if any.
 typedef LabeledAddress = ({UsedReceiveAddress used, String? label});
 
-/// How the coin whose addresses these are writes amounts.
-typedef LabeledAddressCoin = ({String coinSymbol, int baseUnitDecimals, RotatingAddressKind kind});
+/// How the coin whose addresses these are writes amounts. [trimDecimals] is
+/// the coin's Trim Decimals digits (`FiatRateModel.trimDigitsOf`); null shows
+/// every digit.
+typedef LabeledAddressCoin = ({
+  String coinSymbol,
+  int baseUnitDecimals,
+  RotatingAddressKind kind,
+  int? trimDecimals,
+});
 
-/// Decimals of a received total: enough to tell two totals apart, few enough
-/// that 12 Monero decimals (or 8 Bitcoin ones) never crowd the label out.
-const _totalDecimals = 4;
-
-/// [units] of [coin] as a row's total ("4.2150 XMR").
-String labeledAddressTotal(BigInt units, LabeledAddressCoin coin) => formatAmount(
-  displayAmount(units, coin.baseUnitDecimals),
-  _totalDecimals,
-  symbol: coin.coinSymbol,
-);
+/// [units] of [coin] as a row's total ("4.21503 XMR"), trimmed like every
+/// other balance.
+String labeledAddressTotal(BigInt units, LabeledAddressCoin coin) =>
+    formatTrimmedAmount(units, coin.baseUnitDecimals, coin.trimDecimals, symbol: coin.coinSymbol);
 
 /// "Subaddress #12" or "Address #12": what an unlabeled address is called.
 String labeledAddressName(WalletUiLocalizations strings, RotatingAddressKind kind, int index) =>

@@ -1275,4 +1275,40 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
 
   @override
   String get a11yOverHttps => 'Over HTTPS';
+
+  @override
+  String get trimDecimalsLabel => 'Trim Decimals';
+
+  @override
+  String get trimDecimalsSheetSubtitle =>
+      'Hide the last digits of coin amounts when they are worth less than this. Send, confirm and transaction details always show every digit.';
+
+  @override
+  String get trimDecimalsOff => 'Off';
+
+  @override
+  String trimDecimalsBelow(String amount) {
+    return 'Below $amount';
+  }
+
+  @override
+  String get trimDecimalsEveryDigit => 'Every digit';
+
+  @override
+  String get trimDecimalsWaiting => 'Starts once prices load';
+
+  @override
+  String get trimDecimalsPreviewSection => 'At This Setting';
+
+  @override
+  String trimDecimalsRateNote(String coin, String price) {
+    return 'At 1 $coin ≈ $price. Digits follow the price.';
+  }
+
+  @override
+  String get trimDecimalsEachCoinNote => 'Each coin trims at its own price.';
+
+  @override
+  String get trimDecimalsLoadingNote =>
+      'Prices are still loading. Until they arrive, amounts use the digits saved from the last price, or show every digit.';
 }

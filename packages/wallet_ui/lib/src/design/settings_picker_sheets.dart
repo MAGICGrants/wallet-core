@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:wallet_fiat/wallet_fiat.dart' show FiatCurrency, FiatRateModel, TrimDecimals;
 
+import '../l10n/wallet_ui_localizations.dart';
+import '../wallet/format.dart';
 import 'brand.dart';
 import 'click_cursor.dart';
 import 'brand_button.dart';
 import 'mode_select_card.dart';
 import 'radio_dot.dart';
+import 'section_header.dart';
 import 'sheet.dart';
 
 /// Chrome strings for the theme/language picker sheets, injected so the views
@@ -120,6 +124,165 @@ Future<void> showLanguagePickerSheet(
       iconColor: iconColor,
     ),
   );
+}
+
+/// A coin the Trim Decimals sheet previews.
+typedef TrimPreviewCoin = ({String coinSymbol, int baseUnitDecimals});
+
+/// The Trim Decimals row's value: "Off", or "Below $0.01" in [currency].
+String trimDecimalsValue(
+  WalletUiLocalizations strings,
+  TrimDecimals level,
+  FiatCurrency currency,
+) => level == TrimDecimals.off
+    ? strings.trimDecimalsOff
+    : strings.trimDecimalsBelow(formatFiat(level.thresholdIn(currency), currency));
+
+/// Trim Decimals picker: Off and the three levels as [ModeSelectCard]s, each
+/// showing a sample amount of the first of [coins] at that level. With several
+/// coins, a preview lists each at the chosen level. Applies at once through
+/// [FiatRateModel.setTrimDecimals]; Done just closes.
+///
+/// [coins] are the priced coins the wallet holds. Only offered while fiat is
+/// on: the setting needs a price.
+Future<void> showTrimDecimalsSheet(
+  BuildContext context, {
+  required FiatRateModel fiatRate,
+  required WalletUiLocalizations strings,
+  required List<TrimPreviewCoin> coins,
+  Color? iconBg,
+  Color? iconColor,
+}) {
+  return showBrandSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => _TrimDecimalsSheet(
+      fiatRate: fiatRate,
+      strings: strings,
+      coins: coins,
+      iconBg: iconBg,
+      iconColor: iconColor,
+    ),
+  );
+}
+
+class _TrimDecimalsSheet extends StatefulWidget {
+  final FiatRateModel fiatRate;
+  final WalletUiLocalizations strings;
+  final List<TrimPreviewCoin> coins;
+  final Color? iconBg;
+  final Color? iconColor;
+
+  const _TrimDecimalsSheet({
+    required this.fiatRate,
+    required this.strings,
+    required this.coins,
+    this.iconBg,
+    this.iconColor,
+  });
+
+  @override
+  State<_TrimDecimalsSheet> createState() => _TrimDecimalsSheetState();
+}
+
+class _TrimDecimalsSheetState extends State<_TrimDecimalsSheet> {
+  /// 1.234567891234567891234, with 21 decimals: the amount every preview
+  /// shows, cut to each coin's base unit.
+  static final _sample = BigInt.parse('1234567891234567891234');
+  static const _sampleDecimals = 21;
+
+  @override
+  void initState() {
+    super.initState();
+    // Follows prices arriving while the sheet is open, and the level itself.
+    widget.fiatRate.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    widget.fiatRate.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  int? _digits(TrimPreviewCoin coin, TrimDecimals level) => widget.fiatRate.trimDigitsFor(
+    coin.coinSymbol,
+    baseUnitDecimals: coin.baseUnitDecimals,
+    level: level,
+  );
+
+  String _sampleOf(TrimPreviewCoin coin, int? digits) {
+    final decimals = coin.baseUnitDecimals.clamp(0, _sampleDecimals);
+    final units = _sample ~/ BigInt.from(10).pow(_sampleDecimals - decimals);
+    return formatTrimmedAmount(units, decimals, digits, symbol: coin.coinSymbol);
+  }
+
+  String _description(TrimDecimals level) {
+    final s = widget.strings;
+    if (level == TrimDecimals.off) return s.trimDecimalsEveryDigit;
+    if (widget.coins.isEmpty) return '';
+    final first = widget.coins.first;
+    final digits = _digits(first, level);
+    return digits == null ? s.trimDecimalsWaiting : _sampleOf(first, digits);
+  }
+
+  String? _note() {
+    final s = widget.strings;
+    if (widget.coins.isEmpty) return null;
+    final quotes = [for (final c in widget.coins) widget.fiatRate.quoteFor(c.coinSymbol)];
+    if (quotes.any((q) => q == null)) return s.trimDecimalsLoadingNote;
+    if (widget.coins.length > 1) return s.trimDecimalsEachCoinNote;
+    final quote = quotes.single!;
+    return s.trimDecimalsRateNote(
+      widget.coins.single.coinSymbol,
+      formatFiat(quote.rate, quote.currency),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.strings;
+    final fiatRate = widget.fiatRate;
+    final selected = fiatRate.trimDecimals;
+    final note = _note();
+    return _PickerSheet(
+      icon: Icons.tune_rounded,
+      labels: SettingsPickerLabels(
+        title: s.trimDecimalsLabel,
+        subtitle: s.trimDecimalsSheetSubtitle,
+        done: s.done,
+      ),
+      iconBg: widget.iconBg,
+      iconColor: widget.iconColor,
+      children: [
+        for (final level in TrimDecimals.values) ...[
+          ModeSelectCard(
+            title: trimDecimalsValue(s, level, fiatRate.fiatCurrency),
+            description: _description(level),
+            selected: selected == level,
+            onTap: () => fiatRate.setTrimDecimals(level),
+          ),
+          const SizedBox(height: 10),
+        ],
+        if (widget.coins.length > 1) ...[
+          const SizedBox(height: 8),
+          Semantics(container: true, child: SectionHeader(label: s.trimDecimalsPreviewSection)),
+          for (final coin in widget.coins)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                _sampleOf(coin, _digits(coin, selected)),
+                style: BrandText.mono.copyWith(fontSize: 13.5),
+              ),
+            ),
+        ],
+        if (note != null) ...[const SizedBox(height: 10), Text(note, style: BrandText.caption)],
+      ],
+    );
+  }
 }
 
 class _ThemePickerSheet extends StatefulWidget {

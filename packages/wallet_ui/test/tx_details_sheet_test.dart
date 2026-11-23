@@ -104,14 +104,37 @@ void main() {
     expect(find.text('Transaction'), findsOneWidget);
     expect(find.text('Amount'), findsOneWidget);
 
-    await tester.tap(find.text('1.5000 XMR'));
+    await tester.tap(find.text('1.5 XMR'));
     await tester.pump(); // surface the snackbar
 
-    expect(copied, '1.5000 XMR');
+    expect(copied, '1.5 XMR');
     expect(find.text('Copied!'), findsOneWidget);
 
     // Drain SecureClipboard's 60s auto-clear timer so no timer outlives the test.
     await tester.pump(const Duration(seconds: 61));
+  });
+
+  testWidgets('shows every digit of the amount and fee, never rounded', (tester) async {
+    await open(
+      tester,
+      TxDetails(
+        index: 0,
+        direction: 1,
+        hash: 'deadbeefcafe0123456789',
+        amountBaseUnits: BigInt.parse('1234567891234'),
+        feeBaseUnits: BigInt.from(30720000),
+        recipients: const [],
+        accountIndex: 0,
+        subaddrIndexList: const [],
+        timestamp: 1600000000,
+        height: 100,
+        confirmations: 5,
+        key: '',
+      ),
+    );
+    // The fake wallet shows 4 decimals elsewhere; details ignore that.
+    expect(find.text('1.234567891234 XMR'), findsWidgets);
+    expect(find.text('0.00003072 XMR'), findsOneWidget);
   });
 
   group('recipient lines', () {
@@ -161,8 +184,8 @@ void main() {
         matching: find.byIcon(Icons.copy_outlined),
       );
       expect(icons, findsAtLeast(4));
-      expect(find.text('1.0000 XMR'), findsOneWidget);
-      expect(find.text('0.5000 XMR'), findsOneWidget);
+      expect(find.text('1 XMR'), findsOneWidget);
+      expect(find.text('0.5 XMR'), findsOneWidget);
     });
 
     /// The two copy icons on the recipient line for [shortAddress], in order:
@@ -201,13 +224,13 @@ void main() {
       await tapIcon(tester, lineIcons('4AdUnd…F8Fh').at(1));
 
       // The same text the amount row above the list copies.
-      expect(copied(), '1.0000 XMR');
+      expect(copied(), '1 XMR');
       await tester.pump(const Duration(seconds: 61));
     });
 
     testWidgets('the amount and its icon line up with the values above', (tester) async {
       await open(tester, withRecipients([TxRecipient(addrA, BigInt.from(1000000000000))]));
-      await tester.ensureVisible(find.text('1.0000 XMR'));
+      await tester.ensureVisible(find.text('1 XMR'));
       await tester.pumpAndSettle();
 
       // The confirmations row ('5') sets the value column and the icon column.
@@ -216,7 +239,7 @@ void main() {
       final amountIcon = lineIcons('4AdUnd…F8Fh').at(1);
 
       expect(
-        tester.getRect(find.text('1.0000 XMR')).right,
+        tester.getRect(find.text('1 XMR')).right,
         moreOrLessEquals(tester.getRect(find.text('5')).right, epsilon: 0.01),
       );
       expect(
@@ -239,7 +262,7 @@ void main() {
       expect(copied(), addrB);
 
       await tapIcon(tester, lineIcons('86bNCY…hkGz').at(1));
-      expect(copied(), '0.5000 XMR');
+      expect(copied(), '0.5 XMR');
       await tester.pump(const Duration(seconds: 61));
     });
   });
@@ -272,7 +295,7 @@ void main() {
 
       expect(find.text('Change'), findsOneWidget);
       // The address-only row showed no amount at all for change.
-      expect(find.text('0.5000 XMR'), findsOneWidget);
+      expect(find.text('0.5 XMR'), findsOneWidget);
     });
 
     testWidgets('its address and amount each copy their own value', (tester) async {
@@ -298,7 +321,7 @@ void main() {
 
       await tester.tap(icons.at(1));
       await tester.pump();
-      expect(copied, '0.5000 XMR');
+      expect(copied, '0.5 XMR');
 
       await tester.pump(const Duration(seconds: 61));
     });

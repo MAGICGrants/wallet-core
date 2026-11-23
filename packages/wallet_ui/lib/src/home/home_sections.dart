@@ -72,7 +72,11 @@ class HomeSections {
   final HomeActivity activity;
   final HomeLabels labels;
 
-  const HomeSections({required this.activity, required this.labels});
+  /// The decimals a coin's amounts show here (`FiatRateModel.trimDigitsOf`);
+  /// null, or a null answer, is every digit.
+  final int? Function(CryptoWallet wallet)? trimDigitsOf;
+
+  const HomeSections({required this.activity, required this.labels, this.trimDigitsOf});
 
   /// Incoming payments not spendable yet across [coins], and change from a
   /// send still locked, newest first, at most [incomingShown] of them; null
@@ -129,12 +133,12 @@ class HomeSections {
     } else {
       detail = labels.confirmations(done, needed);
     }
-    final shown = displayAmount(amount, w.baseUnitDecimals);
     return IncomingItem(
       icon: CoinMark(coinSymbol: w.coinSymbol, iconAsset: w.iconAsset, size: 32),
       title: title,
       detail: detail,
-      amount: '+${formatAmount(shown, math.min(w.decimals, 5))} ${w.coinSymbol}',
+      amount:
+          '+${formatTrimmedAmount(amount.abs(), w.baseUnitDecimals, trimDigitsOf?.call(w), symbol: w.coinSymbol)}',
       progress: needed == 0 ? 1 : done / needed,
     );
   }
@@ -150,12 +154,20 @@ class HomeSections {
       final w = coin.wallet;
       final a = activity.of(w, tokens: coin.tokens, now: at);
       anyHistory |= a.hasHistory;
+      final steps = a.balanceSteps;
       final points = [
-        for (final s in a.balanceSteps)
-          (at: s.at, value: displayAmount(s.balance, w.baseUnitDecimals)),
+        for (final s in steps) (at: s.at, value: displayAmount(s.balance, w.baseUnitDecimals)),
       ];
       if (points.every((p) => p.value == 0)) continue;
-      series.add(_series(w, points, single: coins.length == 1));
+      series.add(
+        _series(
+          w,
+          points,
+          first: steps.first.balance,
+          last: steps.last.balance,
+          single: coins.length == 1,
+        ),
+      );
     }
     final start = at.subtract(Duration(days: activity.days));
     return BalanceChartCard(
@@ -170,24 +182,32 @@ class HomeSections {
     );
   }
 
-  BalanceSeries _series(CryptoWallet w, List<ChartStep> points, {required bool single}) {
-    final first = points.first.value;
-    final last = points.last.value;
-    final digits = math.min(w.decimals, 4);
+  /// [first] and [last] are the window's opening and closing balances, in
+  /// base units, so the labels are written exactly.
+  BalanceSeries _series(
+    CryptoWallet w,
+    List<ChartStep> points, {
+    required BigInt first,
+    required BigInt last,
+    required bool single,
+  }) {
+    final digits = trimDigitsOf?.call(w);
+    String amount(BigInt units) => formatTrimmedAmount(units, w.baseUnitDecimals, digits);
     final String change;
     if (single) {
       // One coin: the change in coins, which needs no price.
       final diff = last - first;
-      final sign = diff > 0 ? '+' : (diff < 0 ? '−' : '');
-      change = '$sign${_trim(formatAmount(diff.abs(), digits))} ${w.coinSymbol}';
-    } else if (first == 0) {
+      final sign = diff > BigInt.zero ? '+' : (diff < BigInt.zero ? '−' : '');
+      change = '$sign${_trim(amount(diff.abs()))} ${w.coinSymbol}';
+    } else if (first == BigInt.zero) {
       change = labels.chartNew;
     } else {
-      final pct = ((last - first) / first * 100).round();
+      final from = points.first.value;
+      final pct = ((points.last.value - from) / from * 100).round();
       change = pct > 0 ? '+$pct%' : (pct < 0 ? '−${-pct}%' : '0%');
     }
     return BalanceSeries(
-      label: '${formatAmount(last, digits)} ${w.coinSymbol}',
+      label: '${amount(last)} ${w.coinSymbol}',
       color: CoinMark.colorOf(w.coinSymbol) ?? BrandColors.primary,
       points: points,
       change: change,

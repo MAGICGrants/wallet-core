@@ -605,4 +605,126 @@ void main() {
       }
     });
   });
+
+  group('Trim Decimals', () {
+    tearDown(() => FiatRateModel.requestPairForTesting = null);
+
+    /// A model priced by [rates] (Kraken pair to price), started on [wallets].
+    Future<FiatRateModel> pricedModel(
+      Map<String, Future<double> Function()> rates, {
+      List<FakeFiatWallet>? wallets,
+    }) async {
+      FiatRateModel.requestPairForTesting = (pair) =>
+          rates[pair]?.call() ?? Future.error('unexpected pair $pair');
+      final manager = await configuredManager(wallets ?? [FakeFiatWallet('XMR')]);
+      addTearDown(manager.dispose);
+      final model = pollingModel();
+      await model.startService(walletManager: manager);
+      await pumpEventQueue();
+      return model;
+    }
+
+    test('defaults to below one cent, and loads what was saved', () async {
+      expect(await FiatRateModel.loadTrimDecimals(), TrimDecimals.belowOne);
+      await SharedPreferencesService.set<String>(SettingsKeys.trimDecimals, '100');
+      final model = await pricedModel({'XXMRZUSD': () async => 152.37});
+      expect(model.trimDecimals, TrimDecimals.belowHundred);
+    });
+
+    test('works the digits out from the live rate, capped at the coin', () async {
+      final model = await pricedModel({'XXMRZUSD': () async => 152.37});
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 5);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 4), 4);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12, level: TrimDecimals.belowHundred), 3);
+    });
+
+    test('setTrimDecimals saves the level and redraws', () async {
+      final model = await pricedModel({'XXMRZUSD': () async => 152.37});
+      var notified = 0;
+      model.addListener(() => notified++);
+
+      await model.setTrimDecimals(TrimDecimals.belowTen);
+
+      expect(notified, 1);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 4);
+      expect(await SharedPreferencesService.get<String>(SettingsKeys.trimDecimals), '10');
+    });
+
+    test('off, or fiat disabled, is every digit', () async {
+      final model = await pricedModel({'XXMRZUSD': () async => 152.37});
+      await model.setTrimDecimals(TrimDecimals.off);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), isNull);
+
+      await model.setTrimDecimals(TrimDecimals.belowOne);
+      await FiatRateModel.saveFiatApiMode(FiatApiMode.disabled);
+      await model.startService();
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), isNull);
+    });
+
+    test('with no price and nothing saved, every digit', () async {
+      final never = Completer<double>();
+      final model = await pricedModel({'XXMRZUSD': () => never.future});
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), isNull);
+    });
+
+    test('an accepted rate saves the digits of every level', () async {
+      await pricedModel({'XXMRZUSD': () async => 152.37});
+      final saved = SavedTrimDigits.decode(
+        await SharedPreferencesService.get<String>(SettingsKeys.trimDigits),
+      );
+      expect(saved.digitsFor('XMR', TrimDecimals.belowOne), 5);
+      expect(saved.digitsFor('XMR', TrimDecimals.belowTen), 4);
+      expect(saved.digitsFor('XMR', TrimDecimals.belowHundred), 3);
+    });
+
+    test('saved digits keep amounts trimmed while the next price loads', () async {
+      // A launch with the saved rate already gone (the user changed currency
+      // last session) and Kraken not answering yet.
+      await SharedPreferencesService.set<String>(
+        SettingsKeys.trimDigits,
+        SavedTrimDigits.empty.withRate('XMR', 152.37, FiatCurrency.usd).encode(),
+      );
+      final never = Completer<double>();
+      final model = await pricedModel({'XXMRZUSD': () => never.future});
+
+      expect(model.rateFor('XMR'), isNull);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 5);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12, level: TrimDecimals.belowTen), 4);
+    });
+
+    test('a currency change wipes the rates but not the saved digits', () async {
+      final jpy = Completer<double>();
+      final model = await pricedModel({
+        'XXMRZUSD': () async => 152.37,
+        'USDTJPY': () => jpy.future,
+      });
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 5);
+
+      // What the Fiat API sheet does on saving.
+      await SharedPreferencesService.set<String>(SettingsKeys.fiatCurrency, 'JPY');
+      await FiatRateModel.clearPersistedRates();
+      await model.startService();
+      await pumpEventQueue();
+
+      expect(model.rateFor('XMR'), isNull, reason: 'the yen rate is still loading');
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 5);
+
+      jpy.complete(154);
+      await pumpEventQueue();
+      // ¥23,465 a coin: one yen is about two thirds of a cent, the same digits.
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 5);
+      final saved = SavedTrimDigits.decode(
+        await SharedPreferencesService.get<String>(SettingsKeys.trimDigits),
+      );
+      expect(saved.digitsFor('XMR', TrimDecimals.belowOne), 5);
+    });
+
+    test('a testnet coin trims at its mainnet price', () async {
+      final model = await pricedModel(
+        {'XXBTZUSD': () async => 91240},
+        wallets: [FakeFiatWallet('TBTC', fiatBase: 'BTC')],
+      );
+      expect(model.trimDigitsFor('TBTC', baseUnitDecimals: 8), 7);
+    });
+  });
 }

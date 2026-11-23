@@ -362,5 +362,15 @@
   "a11yAddressEnds": "{start}, terminando em {end}",
   "a11yAddressQr": "Código QR deste endereço",
   "a11yOverTor": "Via Tor",
-  "a11yOverHttps": "Via HTTPS"
+  "a11yOverHttps": "Via HTTPS",
+  "trimDecimalsLabel": "Reduzir Casas Decimais",
+  "trimDecimalsSheetSubtitle": "Oculta os últimos dígitos dos valores em moeda quando valem menos que isto. Envio, confirmação e detalhes da transação sempre mostram todos os dígitos.",
+  "trimDecimalsOff": "Desativado",
+  "trimDecimalsBelow": "Abaixo de {amount}",
+  "trimDecimalsEveryDigit": "Todos os dígitos",
+  "trimDecimalsWaiting": "Começa quando os preços carregarem",
+  "trimDecimalsPreviewSection": "Nesta Configuração",
+  "trimDecimalsRateNote": "Com 1 {coin} ≈ {price}. Os dígitos acompanham o preço.",
+  "trimDecimalsEachCoinNote": "Cada moeda é reduzida conforme seu próprio preço.",
+  "trimDecimalsLoadingNote": "Os preços ainda estão carregando. Até lá, os valores usam os dígitos salvos do último preço, ou mostram todos os dígitos."
 }

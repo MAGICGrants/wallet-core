@@ -50,8 +50,15 @@ class TxActivityRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final incoming = tx.direction == txDirectionIncoming;
     final coinRate = fiatRate.rateFor(asset.coinSymbol);
+    // The fiat figure only; the coin amount is written from base units below.
     final amount = displayAmount(tx.amountBaseUnits, asset.baseUnitDecimals);
     final amountFiat = coinRate != null ? amount * coinRate : null;
+    final amountText = formatTrimmedAmount(
+      tx.amountBaseUnits.abs(),
+      asset.baseUnitDecimals,
+      fiatRate.trimDigitsOf(asset),
+      symbol: asset.coinSymbol,
+    );
     final confirmed = asset.isTxConfirmed(tx);
     final date = DateTime.fromMillisecondsSinceEpoch(tx.timestamp * 1000);
     final amountColor = incoming ? BrandColors.success : BrandColors.ink;
@@ -128,33 +135,39 @@ class TxActivityRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${incoming ? '+' : '−'}${formatAmount(amount, asset.decimals, symbol: asset.coinSymbol)}',
-                  style: TextStyle(
-                    fontFamily: 'Ubuntu Mono',
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                    color: amountColor,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-                if (amountFiat != null && !fiatRate.isDisabled) ...[
-                  const SizedBox(height: 2),
+            // Every digit of an 18-decimal amount is long: past this width it
+            // wraps instead of squeezing the label column to nothing.
+            LimitedBox(
+              maxWidth: 200,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
                   Text(
-                    formatFiat(amountFiat, fiatRate.fiatCurrency),
+                    '${incoming ? '+' : '−'}$amountText',
+                    textAlign: TextAlign.end,
                     style: TextStyle(
                       fontFamily: 'Ubuntu Mono',
-                      fontSize: 11,
-                      height: 1.3,
-                      color: BrandColors.inkMuted,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      height: 1.25,
+                      color: amountColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
+                  if (amountFiat != null && !fiatRate.isDisabled) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      formatFiat(amountFiat, fiatRate.fiatCurrency),
+                      style: TextStyle(
+                        fontFamily: 'Ubuntu Mono',
+                        fontSize: 11,
+                        height: 1.3,
+                        color: BrandColors.inkMuted,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ],
         ),

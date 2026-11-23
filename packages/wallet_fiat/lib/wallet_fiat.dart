@@ -10,3 +10,4 @@ library;
 export 'src/fiat_conversion.dart';
 export 'src/fiat_currency.dart';
 export 'src/fiat_rate_model.dart';
+export 'src/trim_decimals.dart';

@@ -9,6 +9,7 @@ const LabeledAddressCoin _xmr = (
   coinSymbol: 'XMR',
   baseUnitDecimals: 12,
   kind: RotatingAddressKind.subaddress,
+  trimDecimals: 5,
 );
 
 UsedReceiveAddress _used(int index, {int ago = 3600, int txs = 1, int piconero = 250000000000}) =>
@@ -78,7 +79,7 @@ void main() {
       expect(find.text('Subaddress #9'), findsOneWidget);
       expect(find.text('Last used 3 hours ago'), findsOneWidget);
       expect(find.text('Donations'), findsOneWidget);
-      expect(find.text('4.2150 XMR'), findsOneWidget, reason: 'four decimals, not twelve');
+      expect(find.text('4.21500 XMR'), findsOneWidget, reason: "the coin's trimmed digits");
       expect(find.text('7 transactions'), findsOneWidget);
 
       await tester.tap(find.text('Donations'));

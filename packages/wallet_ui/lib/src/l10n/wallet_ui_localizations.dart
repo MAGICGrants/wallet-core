@@ -2272,6 +2272,66 @@ abstract class WalletUiLocalizations {
   /// In en, this message translates to:
   /// **'Over HTTPS'**
   String get a11yOverHttps;
+
+  /// Settings row under Price Display Settings, and the title of its sheet: hides the last digits of coin amounts worth less than a chosen fiat amount. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim Decimals'**
+  String get trimDecimalsLabel;
+
+  /// Intro under the Trim Decimals sheet title. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide the last digits of coin amounts when they are worth less than this. Send, confirm and transaction details always show every digit.'**
+  String get trimDecimalsSheetSubtitle;
+
+  /// Trim Decimals choice that hides nothing, and the row's value when chosen. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get trimDecimalsOff;
+
+  /// Trim Decimals choice, and the row's value when chosen: hide digits worth less than amount. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Below {amount}'**
+  String trimDecimalsBelow(String amount);
+
+  /// Description of the Off choice. Sentence case fragment.
+  ///
+  /// In en, this message translates to:
+  /// **'Every digit'**
+  String get trimDecimalsEveryDigit;
+
+  /// Description of a Trim Decimals choice while no price or saved digits are known yet. Sentence case fragment.
+  ///
+  /// In en, this message translates to:
+  /// **'Starts once prices load'**
+  String get trimDecimalsWaiting;
+
+  /// Section label over a sample amount per coin at the chosen Trim Decimals level. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'At This Setting'**
+  String get trimDecimalsPreviewSection;
+
+  /// Note under the Trim Decimals choices in a one-coin app. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'At 1 {coin} ≈ {price}. Digits follow the price.'**
+  String trimDecimalsRateNote(String coin, String price);
+
+  /// Note under the Trim Decimals choices when several coins are priced. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Each coin trims at its own price.'**
+  String get trimDecimalsEachCoinNote;
+
+  /// Note under the Trim Decimals choices while a price has not arrived. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Prices are still loading. Until they arrive, amounts use the digits saved from the last price, or show every digit.'**
+  String get trimDecimalsLoadingNote;
 }
 
 class _WalletUiLocalizationsDelegate extends LocalizationsDelegate<WalletUiLocalizations> {

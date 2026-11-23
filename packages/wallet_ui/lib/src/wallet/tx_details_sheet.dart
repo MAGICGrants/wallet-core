@@ -143,11 +143,10 @@ class _TxDetailsSheet extends StatelessWidget {
     showCopyToast(context, labels.copied);
   }
 
-  String _fmtAmount(BigInt units) => formatAmount(
-    displayAmount(units, wallet.baseUnitDecimals),
-    wallet.decimals,
-    symbol: wallet.coinSymbol,
-  );
+  /// Every digit: transaction details are the record of what moved, so they
+  /// never trim or round.
+  String _fmtAmount(BigInt units) =>
+      formatExactAmount(units, wallet.baseUnitDecimals, symbol: wallet.coinSymbol);
 
   /// Status-banner text, or null when there is nothing to warn about. Falls
   /// back to English when the app has not supplied a string: see
@@ -167,9 +166,9 @@ class _TxDetailsSheet extends StatelessWidget {
     final incoming = tx.direction == txDirectionIncoming;
     final statusBanner = _statusBanner;
     final date = DateTime.fromMillisecondsSinceEpoch(tx.timestamp * 1000);
-    final feeText = formatAmount(
-      displayAmount(tx.feeBaseUnits, wallet.feeBaseUnitDecimals),
-      wallet.feeDecimals,
+    final feeText = formatExactAmount(
+      tx.feeBaseUnits,
+      wallet.feeBaseUnitDecimals,
       symbol: wallet.feeCoinSymbol,
     );
     // A mempool tx has no block/timestamp; shown raw they read as 0 / 31 Dec 1969.

@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-import 'package:wallet_domain/wallet_domain.dart' show WalletManager;
+import 'package:wallet_domain/wallet_domain.dart' show CryptoWallet, WalletManager;
 import 'package:wallet_infra/wallet_infra.dart';
 
 import 'fiat_currency.dart';
+import 'trim_decimals.dart';
 
 /// Ceiling on a Kraken ticker reply, which is a handful of numbers.
 ///
@@ -96,6 +98,11 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     await SharedPreferencesService.set<String>(SettingsKeys.fiatApiMode, mode.name);
   }
 
+  /// The stored Trim Decimals level; [TrimDecimals.initial] when none is.
+  static Future<TrimDecimals> loadTrimDecimals() async => TrimDecimals.fromStorage(
+    await SharedPreferencesService.get<String>(SettingsKeys.trimDecimals),
+  );
+
   /// Clears every persisted rate, in every currency. Called when the user
   /// changes the fiat currency or API mode, so a rate saved long ago is not
   /// shown if they come back to that currency.
@@ -127,6 +134,8 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
   Timer? _rateFetchTimer;
   WalletManager? _walletManager;
   Set<String> _lastFetchedActiveCoins = {};
+  TrimDecimals _trimDecimals = TrimDecimals.initial;
+  SavedTrimDigits _savedDigits = SavedTrimDigits.empty;
 
   /// How long to wait before each retry of a failed fetch, after which the
   /// 10-minute poll takes over. Without these a fetch that failed once, at
@@ -178,6 +187,52 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
 
   /// The user's currency, from the shared table: its symbol and minor units.
   FiatCurrency get fiatCurrency => FiatCurrency.of(_fiatCode);
+
+  /// The Trim Decimals level, loaded by [startService]. Kept while fiat is
+  /// disabled, when it has no effect, so turning prices back on restores it.
+  TrimDecimals get trimDecimals => _trimDecimals;
+
+  /// Saves [level] and redraws every amount that trims.
+  Future<void> setTrimDecimals(TrimDecimals level) async {
+    await SharedPreferencesService.set<String>(SettingsKeys.trimDecimals, level.storageValue);
+    if (_trimDecimals == level) return;
+    _trimDecimals = level;
+    notifyListeners();
+  }
+
+  /// How many decimals the balance and activity screens show of
+  /// [coinSymbol], or null for every digit.
+  ///
+  /// Worked out from the coin's rate in the current currency when there is
+  /// one, fresh or saved from the last fetch. Without one (a price still
+  /// loading, or the currency just changed and wiped the saved rates) it falls
+  /// back to the digits saved with the coin's last accepted rate. Null with
+  /// fiat disabled, with Trim Decimals off, or with nothing known about the
+  /// coin's price. Capped at [baseUnitDecimals]. [level] asks about another
+  /// level than the chosen one, for the picker's previews.
+  ///
+  /// Never for send, confirm or transaction details: those show every digit.
+  int? trimDigitsFor(String coinSymbol, {required int baseUnitDecimals, TrimDecimals? level}) {
+    final chosen = level ?? _trimDecimals;
+    if (_isDisabled || chosen == TrimDecimals.off) return null;
+    final base = _fiatBaseOf(coinSymbol);
+    final rate = _rateInFiat(_rates[base]);
+    final digits = rate != null
+        ? trimmedDecimals(rate, fiatCurrency, chosen)
+        : _savedDigits.digitsFor(base, chosen);
+    return digits == null ? null : math.min(digits, baseUnitDecimals);
+  }
+
+  /// [trimDigitsFor] for [wallet], at its base-unit precision.
+  int? trimDigitsOf(CryptoWallet wallet, {TrimDecimals? level}) =>
+      trimDigitsFor(wallet.coinSymbol, baseUnitDecimals: wallet.baseUnitDecimals, level: level);
+
+  /// The Kraken coin [coinSymbol] is priced as: its own symbol, or for a
+  /// testnet coin its mainnet base.
+  String _fiatBaseOf(String coinSymbol) {
+    final symbol = coinSymbol.toUpperCase();
+    return (_walletManager?.getWallet(symbol)?.fiatBaseSymbol ?? symbol).toUpperCase();
+  }
 
   /// [rateFor] with the currency attached, or null when fiat is disabled or no
   /// rate has arrived. A disabled API keeps its last in-memory rates, so this is
@@ -256,6 +311,10 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
   Future<void> _loadPersisted() async {
     _fiatCode = await SharedPreferencesService.get<String>(SettingsKeys.fiatCurrency) ?? 'USD';
     _fiatApiMode = await FiatRateModel.loadFiatApiMode();
+    _trimDecimals = await FiatRateModel.loadTrimDecimals();
+    _savedDigits = SavedTrimDigits.decode(
+      await SharedPreferencesService.get<String>(SettingsKeys.trimDigits),
+    );
     final fiat = _fiatCode;
     for (final coin in _krakenBase.keys) {
       await SharedPreferencesService.remove(_legacyPersistKeyFor(coin));
@@ -264,8 +323,15 @@ class FiatRateModel with ChangeNotifier implements FiatQuoteSource {
     }
   }
 
+  /// Saves an accepted rate, and the decimals it gives the coin at every Trim
+  /// Decimals level. The digits outlive [clearPersistedRates], so amounts keep
+  /// trimming until the next rate lands.
   Future<void> _persist(String coin, String fiat, double rate) async {
     await SharedPreferencesService.set<double>(_persistKeyFor(coin, fiat), rate);
+    // Updated in memory before the write: fetches for several coins overlap,
+    // and each write then carries every coin saved so far.
+    _savedDigits = _savedDigits.withRate(coin, rate, FiatCurrency.of(fiat));
+    await SharedPreferencesService.set<String>(SettingsKeys.trimDigits, _savedDigits.encode());
   }
 
   Future<double> _requestPairRateClearnet(String pair) async {

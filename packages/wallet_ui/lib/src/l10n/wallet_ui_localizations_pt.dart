@@ -1279,4 +1279,40 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
 
   @override
   String get a11yOverHttps => 'Via HTTPS';
+
+  @override
+  String get trimDecimalsLabel => 'Reduzir Casas Decimais';
+
+  @override
+  String get trimDecimalsSheetSubtitle =>
+      'Oculta os últimos dígitos dos valores em moeda quando valem menos que isto. Envio, confirmação e detalhes da transação sempre mostram todos os dígitos.';
+
+  @override
+  String get trimDecimalsOff => 'Desativado';
+
+  @override
+  String trimDecimalsBelow(String amount) {
+    return 'Abaixo de $amount';
+  }
+
+  @override
+  String get trimDecimalsEveryDigit => 'Todos os dígitos';
+
+  @override
+  String get trimDecimalsWaiting => 'Começa quando os preços carregarem';
+
+  @override
+  String get trimDecimalsPreviewSection => 'Nesta Configuração';
+
+  @override
+  String trimDecimalsRateNote(String coin, String price) {
+    return 'Com 1 $coin ≈ $price. Os dígitos acompanham o preço.';
+  }
+
+  @override
+  String get trimDecimalsEachCoinNote => 'Cada moeda é reduzida conforme seu próprio preço.';
+
+  @override
+  String get trimDecimalsLoadingNote =>
+      'Os preços ainda estão carregando. Até lá, os valores usam os dígitos salvos do último preço, ou mostram todos os dígitos.';
 }

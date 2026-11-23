@@ -458,7 +458,12 @@ void main() {
 
   group('HomeSections', () {
     test('a locked Monero receipt shows when it unlocks; elsewhere, confirmations', () {
-      final sections = HomeSections(activity: HomeActivity(), labels: _labels);
+      // Trim Decimals at 5 digits: XMR near $150 below one cent.
+      final sections = HomeSections(
+        activity: HomeActivity(),
+        labels: _labels,
+        trimDigitsOf: (_) => 5,
+      );
       final xmr = _Coin('XMR')
         ..total = BigInt.from(2000000000000)
         ..unlocked = BigInt.from(1000000000000)
@@ -509,7 +514,12 @@ void main() {
     });
 
     test('change from a send shows like a receipt, titled as change', () {
-      final sections = HomeSections(activity: HomeActivity(), labels: _labels);
+      // Trim Decimals at 5 digits: XMR near $150 below one cent.
+      final sections = HomeSections(
+        activity: HomeActivity(),
+        labels: _labels,
+        trimDigitsOf: (_) => 5,
+      );
       final xmr = _Coin('XMR')
         ..total = BigInt.from(2000000000000)
         ..unlocked = BigInt.from(500000000000)
