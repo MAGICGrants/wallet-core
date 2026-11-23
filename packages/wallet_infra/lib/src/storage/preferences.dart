@@ -45,6 +45,12 @@ class SettingsKeys {
   // store was last asked. The day, not the moment -- this store is plaintext.
   static const String storeReviewEligible = 'storeReviewEligible';
   static const String storeReviewLastAskedDay = 'storeReviewLastAskedDay';
+
+  /// Whether the home shows the security checklist at all (a bool; absent
+  /// means shown), and the names of the steps it leaves out (a string list),
+  /// as chosen in Settings.
+  static const String securityChecklistShown = 'securityChecklistShown';
+  static const String securityChecklistStepsOff = 'securityChecklistStepsOff';
 }
 
 /// Non-secret key/value storage.

@@ -962,6 +962,40 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
   String get homeChecklistSecurityKeys => 'Set Up a Security Key';
 
   @override
+  String get securityChecklistLabel => 'Security Checklist';
+
+  @override
+  String get securityChecklistShown => 'Shown on home';
+
+  @override
+  String get securityChecklistHidden => 'Hidden from home';
+
+  @override
+  String get securityChecklistSheetSubtitle =>
+      'Choose whether your home screen shows this checklist, and which steps it reminds you about.';
+
+  @override
+  String get securityChecklistHomeSection => 'Home Screen';
+
+  @override
+  String get securityChecklistShowOnHome => 'Show on Home';
+
+  @override
+  String get securityChecklistShowOnHomeDesc => 'Until every step you keep below is done';
+
+  @override
+  String get securityChecklistStepsSection => 'Remind Me About';
+
+  @override
+  String get securityChecklistStepDone => 'Done';
+
+  @override
+  String get securityChecklistStepNotDone => 'Not done';
+
+  @override
+  String get securityChecklistSeedDone => 'Done · asked again every 6 months';
+
+  @override
   String verifySeedSubtitle(int first, int second, int third) {
     return 'Input words $first, $second and $third of your recovery phrase below.';
   }

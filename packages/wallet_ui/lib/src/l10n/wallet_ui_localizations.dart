@@ -1817,6 +1817,72 @@ abstract class WalletUiLocalizations {
   /// **'Set Up a Security Key'**
   String get homeChecklistSecurityKeys;
 
+  /// Settings row under Security and Privacy, and the title of the card it opens, where the home's checklist is turned on or off and its steps chosen. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Security Checklist'**
+  String get securityChecklistLabel;
+
+  /// Subtitle of the Security Checklist settings row while the home shows the checklist. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Shown on home'**
+  String get securityChecklistShown;
+
+  /// Subtitle of the Security Checklist settings row once the user turned the checklist off. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden from home'**
+  String get securityChecklistHidden;
+
+  /// Description under the Security Checklist card's title. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose whether your home screen shows this checklist, and which steps it reminds you about.'**
+  String get securityChecklistSheetSubtitle;
+
+  /// Section label above the Show on Home switch; shown upper-cased. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Home Screen'**
+  String get securityChecklistHomeSection;
+
+  /// Switch row title: whether the home shows the security checklist at all. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Show on Home'**
+  String get securityChecklistShowOnHome;
+
+  /// Subtitle of the Show on Home switch: the card leaves once the steps left switched on are done. Sentence case, no period.
+  ///
+  /// In en, this message translates to:
+  /// **'Until every step you keep below is done'**
+  String get securityChecklistShowOnHomeDesc;
+
+  /// Section label above one switch per checklist step; shown upper-cased. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind Me About'**
+  String get securityChecklistStepsSection;
+
+  /// Subtitle of a checklist step's switch row: the step is done. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get securityChecklistStepDone;
+
+  /// Subtitle of a checklist step's switch row: the step is not done yet. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Not done'**
+  String get securityChecklistStepNotDone;
+
+  /// Subtitle of the recovery phrase step once checked: the check expires after about six months and the step opens again. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Done · asked again every 6 months'**
+  String get securityChecklistSeedDone;
+
   /// No description provided for @verifySeedSubtitle.
   ///
   /// In en, this message translates to:

@@ -26,6 +26,7 @@ export 'src/home/home_sections.dart';
 export 'src/home/incoming_card.dart';
 export 'src/home/security_checklist.dart';
 export 'src/home/security_checklist_card.dart';
+export 'src/home/security_checklist_sheet.dart';
 export 'src/home/wallet_home_view.dart';
 
 // Legal pages both apps show, in each app's own chrome (SubPageChrome).

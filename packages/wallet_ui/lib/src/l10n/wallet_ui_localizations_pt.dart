@@ -965,6 +965,41 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
   String get homeChecklistSecurityKeys => 'Configure uma Chave de Segurança';
 
   @override
+  String get securityChecklistLabel => 'Lista de Verificação de Segurança';
+
+  @override
+  String get securityChecklistShown => 'Mostrada na tela inicial';
+
+  @override
+  String get securityChecklistHidden => 'Oculta da tela inicial';
+
+  @override
+  String get securityChecklistSheetSubtitle =>
+      'Escolha se a tela inicial mostra esta lista e de quais etapas ela lembra você.';
+
+  @override
+  String get securityChecklistHomeSection => 'Tela Inicial';
+
+  @override
+  String get securityChecklistShowOnHome => 'Mostrar na Tela Inicial';
+
+  @override
+  String get securityChecklistShowOnHomeDesc =>
+      'Até que todas as etapas que você mantiver abaixo estejam concluídas';
+
+  @override
+  String get securityChecklistStepsSection => 'Lembretes';
+
+  @override
+  String get securityChecklistStepDone => 'Concluída';
+
+  @override
+  String get securityChecklistStepNotDone => 'Não concluída';
+
+  @override
+  String get securityChecklistSeedDone => 'Concluída · pedida novamente a cada 6 meses';
+
+  @override
   String verifySeedSubtitle(int first, int second, int third) {
     return 'Insira as palavras $first, $second e $third da sua frase de recuperação abaixo.';
   }
