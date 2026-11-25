@@ -824,6 +824,10 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
       'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.';
 
   @override
+  String get sendCoinsNotVerifiedError =>
+      'Não foi possível verificar seus fundos com este servidor, então nada foi enviado. Tente novamente ou use outro servidor.';
+
+  @override
   String get torSettingsTitle => 'Configurações do Tor';
 
   @override

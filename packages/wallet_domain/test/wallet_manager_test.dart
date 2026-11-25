@@ -736,6 +736,27 @@ void main() {
       m.dispose();
     });
 
+    test('a corrupt-file rebuild removes only what the wallet says is corrupt', () async {
+      // Monero keeps its other mode's file: it opened fine last time and holds
+      // that mode's own transaction keys. Wholesale deletion would lose them.
+      installSpice();
+      final xmr = _DeletesCorruptOnly('XMR', existing: true);
+      final m = manager([xmr])..setWalletPassword('pw');
+      await m.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+      );
+
+      xmr.openError = const FormatException('LWS wallet file is corrupt or unreadable: x');
+      xmr.restores.clear();
+      await m.openAll();
+
+      expect(xmr.corruptDeletes, 1);
+      expect(xmr.deleteFileCount, 0);
+      expect(xmr.restores, hasLength(1));
+      m.dispose();
+    });
+
     test('one coin failing to open does not stop the others', () async {
       installSpice();
       final bad = FakeWallet('BTC', existing: true)..openError = StateError('boom');
@@ -1010,5 +1031,19 @@ class _LockableWallet extends FakeWallet {
   Future<bool> leaveViewOnlyMode(String password) async {
     events.add('leave $password');
     return leaveSucceeds;
+  }
+}
+
+/// A wallet whose corrupt-file cleanup is narrower than [deleteFiles], as
+/// Monero's is.
+class _DeletesCorruptOnly extends FakeWallet {
+  _DeletesCorruptOnly(super.symbol, {super.existing});
+
+  int corruptDeletes = 0;
+
+  @override
+  Future<void> deleteCorruptFiles() async {
+    corruptDeletes++;
+    existing = false;
   }
 }

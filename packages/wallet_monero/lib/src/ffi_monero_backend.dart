@@ -173,9 +173,21 @@ class FfiMoneroBackend extends MoneroBackend {
     );
   }
 
+  /// monero_c reads NUL-terminated copies of these strings, so an address with
+  /// U+0000 in it reaches C cut short there: the part before it is checked or
+  /// paid, while the screens show the whole. [MoneroWallet] refuses such an
+  /// address first; these guards hold where the copy is made.
+  static bool _hasNul(String address) => address.contains('\u0000');
+
+  static void _refuseNul(List<String> destinations) {
+    if (destinations.any(_hasNul)) {
+      throw ArgumentError('A destination address contains U+0000');
+    }
+  }
+
   @override
   bool addressValid(String address, int networkType) =>
-      monero.Wallet_addressValid(address, networkType);
+      !_hasNul(address) && monero.Wallet_addressValid(address, networkType);
 
   @override
   Future<bool> connectToDaemon(NativeHandle wallet) {
@@ -426,6 +438,7 @@ class FfiMoneroBackend extends MoneroBackend {
     required List<BigInt> amounts,
     int priority = 0,
   }) async {
+    _refuseNul(destinations);
     final w = wallet.id;
     final ints = amounts.map((a) => a.toInt()).toList(growable: false);
     final raw = await Isolate.run(
@@ -526,6 +539,7 @@ class FfiMoneroBackend extends MoneroBackend {
     int priority = 0,
     int subaddrAccount = 0,
   }) async {
+    _refuseNul(destinations);
     final w = wallet.id;
     final ints = amounts.map((a) => a.toInt()).toList(growable: false);
     final address = await Isolate.run(

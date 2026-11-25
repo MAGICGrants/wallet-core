@@ -9,6 +9,15 @@ enum TxBuildProblem {
   /// app straight onto a filled-in Send form before the connection is up.
   notConnected,
 
+  /// The wallet could not check what its server said about the coins this
+  /// transaction would spend, so it signed nothing. Bitcoin checks each coin's
+  /// value and script against the transaction that created it, because a
+  /// signature commits to the value the wallet was told; it stops when the
+  /// server will not show that transaction or the transaction disagrees. Retrying
+  /// can help with a flaky server; a server that keeps doing it should be
+  /// replaced.
+  coinsNotVerified,
+
   /// Anything else.
   other,
 }

@@ -359,15 +359,30 @@ class MoneroWallet extends CryptoWallet {
     final path = target?.path ?? await resolveWalletPath();
     final openPassword = target?.password ?? password;
 
-    final wallet = await _backend.openWallet(
+    var wallet = await _backend.openWallet(
       manager,
       path: path,
       password: openPassword,
       networkType: networkType,
     );
-    final error = await _backend.walletErrorString(wallet);
+    var error = await _backend.walletErrorString(wallet);
+    final lws = target == null && !_isNodeMode;
+    if (error.isNotEmpty && lws && _isUnreadableLwsFile(error)) {
+      final reopened = await _openPassingOverUnfinishedSave(manager, wallet, path, openPassword);
+      if (reopened != null) {
+        wallet = reopened;
+        error = '';
+      }
+    }
     if (error.isNotEmpty) {
       walletLog(LogLevel.error, 'openWallet error: $error');
+      if (lws && _isUnreadableLwsFile(error)) {
+        // Typed so the wallet manager rebuilds it from the stored seed, as it
+        // does other coins' damaged files. It does that only when the seed
+        // store opened with this same password, which is what tells a damaged
+        // file from a wrong password: lwsf reports both as a failed decrypt.
+        throw FormatException('LWS wallet file is corrupt or unreadable: $error');
+      }
       throw Exception('openWallet error: $error');
     }
 
@@ -405,6 +420,55 @@ class MoneroWallet extends CryptoWallet {
     // run: it holds no wallet password, and `setupBackgroundSync` refuses to run
     // from a background cache anyway.
     if (target == null) await applyBackgroundSyncSetting(password: password);
+  }
+
+  /// Whether [error], from opening an LWS wallet, means the file could not be
+  /// read: it did not decrypt, or what decrypted did not parse. A wrong
+  /// password reads the same as a damaged file here.
+  static bool _isUnreadableLwsFile(String error) {
+    final e = error.toLowerCase();
+    return e.contains('decrypt') ||
+        e.contains('msgpack') ||
+        e.contains('schema') ||
+        e.contains('unable to open wallet file');
+  }
+
+  /// Opens the LWS wallet at [path] again without its unfinished save, after
+  /// [failed] could not be read; null if that fails too.
+  ///
+  /// lwsf saves to `<path>.new` and renames it over the wallet file. A save cut
+  /// short (a full disk, a kill mid-write) leaves a `.new` that builds before
+  /// the lwsf fix still load first, fail to decrypt, and stop at, though the
+  /// wallet file beside it is intact. So the `.new` is set aside and the open
+  /// tried once more. If that works, the `.new` did not decrypt with the
+  /// password that opens the wallet, and is deleted. If it fails as well, the
+  /// trouble is elsewhere (a wrong password, say), and the `.new`, which may be
+  /// the newest save there is, goes back where it was.
+  Future<NativeHandle?> _openPassingOverUnfinishedSave(
+    NativeHandle manager,
+    NativeHandle failed,
+    String path,
+    String password,
+  ) async {
+    final pending = File('$path.new');
+    if (!await pending.exists()) return null;
+
+    await _backend.closeWallet(manager, failed, store: false);
+    final aside = await pending.rename('$path.new.unopened');
+    final wallet = await _backend.openWallet(
+      manager,
+      path: path,
+      password: password,
+      networkType: networkType,
+    );
+    if ((await _backend.walletErrorString(wallet)).isEmpty) {
+      walletLog(LogLevel.warn, 'Opened the LWS wallet past an unfinished save that would not open');
+      await aside.delete();
+      return wallet;
+    }
+    await _backend.closeWallet(manager, wallet, store: false);
+    await aside.rename(pending.path);
+    return null;
   }
 
   /// True when the open wallet is the view-only background cache rather than the
@@ -1058,12 +1122,18 @@ class MoneroWallet extends CryptoWallet {
   /// without them leaves an orphaned cache holding this wallet's view key and
   /// the transactions it saw; with nothing that will ever open it again to
   /// notice.
+  ///
+  /// `<path>.new` is lwsf's unfinished save. Builds of lwsf before the
+  /// full-disk fix open it in preference to the wallet file and rename it over
+  /// a fresh one at the first save, so one left behind would break the wallet
+  /// a restore had just rebuilt.
   static List<String> _walletFilesFor(String path) {
     final background = backgroundPathFor(path);
     return [
       path,
       '$path.keys',
       '$path.address.txt',
+      '$path.new',
       background,
       '$background.keys',
       '$background.address.txt',
@@ -1375,6 +1445,15 @@ class MoneroWallet extends CryptoWallet {
     final wallet = _wallet;
     if (wallet == null || !_daemonInitialised) return;
     await _backend.pauseRefresh(wallet);
+  }
+
+  /// Only the current mode's files: the one that failed to open. The other
+  /// mode's file, if this wallet ever had one, opened fine the last time and
+  /// holds that mode's own transaction keys and notes.
+  @override
+  Future<void> deleteCorruptFiles() async {
+    await _closeOpenWallet();
+    await _deleteWalletFilesForCurrentMode();
   }
 
   @override
@@ -2342,11 +2421,29 @@ class MoneroWallet extends CryptoWallet {
   /// address validator cannot disagree about it.
   int get networkType => _networkTypeOverride ?? MoneroConsts.mainnetNetworkType;
 
+  /// Payable by this wallet: [_hasAddressForm] checks its characters and
+  /// length, then monero_c decodes it and checks its checksum and network.
   @override
   bool isAddressValid(String address) {
-    if (address.isEmpty) return false;
+    if (!_hasAddressForm(address)) return false;
     return _backend.addressValid(address, networkType);
   }
+
+  /// Whether [address] has the form of a Monero address: only characters of
+  /// Monero's base58 alphabet, and 95 of them (a standard address or a
+  /// subaddress) or 106 (an integrated address). Checked before any address
+  /// goes to monero_c, which reads a NUL-terminated copy: an address followed
+  /// by U+0000 and anything at all would reach C as the address alone, while
+  /// the screens show the whole string. The alphabet also refuses spaces, line
+  /// breaks and invisible characters. Prefix, checksum and network stay
+  /// monero_c's to judge.
+  static bool _hasAddressForm(String address) =>
+      (address.length == _addressLength || address.length == _integratedAddressLength) &&
+      _base58.hasMatch(address);
+
+  static const _addressLength = 95;
+  static const _integratedAddressLength = 106;
+  static final _base58 = RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$');
 
   /// `Wallet_estimateTransactionFee` exists only in `magicgrants/monero_c`,
   /// which is why the build pins that fork.
@@ -2359,6 +2456,10 @@ class MoneroWallet extends CryptoWallet {
     final wallet = _wallet;
     if (wallet == null) {
       walletLog(LogLevel.warn, 'estimateFee: no open wallet');
+      return null;
+    }
+    if (!_hasAddressForm(destinationAddress)) {
+      walletLog(LogLevel.warn, 'estimateFee: the destination is not a Monero address');
       return null;
     }
     try {
@@ -2400,6 +2501,15 @@ class MoneroWallet extends CryptoWallet {
     await waitForSpendKeys();
     final wallet = _wallet;
     if (wallet == null) throw Exception('No open Monero wallet.');
+    // The Send forms check the address first; this holds for any caller that
+    // does not, so the build never pays a different address than the confirm
+    // sheet shows ([_hasAddressForm]).
+    if (!_hasAddressForm(destinationAddress)) {
+      throw const TxBuildFailure(
+        TxBuildProblem.other,
+        detail: 'the destination is not a Monero address',
+      );
+    }
 
     // Amount and destination are never logged.
     walletLog(

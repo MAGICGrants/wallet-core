@@ -823,6 +823,10 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
       'Couldn\'t reach the server. Check your connection and try again.';
 
   @override
+  String get sendCoinsNotVerifiedError =>
+      'Couldn\'t verify your funds with this server, so nothing was sent. Try again or use a different server.';
+
+  @override
   String get torSettingsTitle => 'Tor Settings';
 
   @override

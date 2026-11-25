@@ -330,6 +330,7 @@ class WalletManager with ChangeNotifier {
     // The password goes first, before the slow part (each close stores its
     // wallet). Nothing below needs it: every wallet closes with its own cache
     // password and native state. And nothing else can use it meanwhile.
+    _locks++;
     _password = null;
     WalletPasswordStore.current.endSession();
     await _closeBackup();
@@ -358,6 +359,7 @@ class WalletManager with ChangeNotifier {
     if (upgrade != null) await upgrade;
     AppSession.lock();
     // The password first, as in [fullyLock]: nothing below needs it.
+    _locks++;
     _password = null;
     WalletPasswordStore.current.endSession();
     await _closeBackup();
@@ -557,6 +559,10 @@ class WalletManager with ChangeNotifier {
 
   Future<void>? _openWalletFilesInFlight;
 
+  /// How many times [fullyLock] or [lockSpend] has dropped the password. An
+  /// open that finds it moved since it began knows a lock landed meanwhile.
+  int _locks = 0;
+
   Future<void> _openWalletFiles() => _openWalletFilesInFlight ??= _openWalletFilesOnce();
 
   /// Asked before this app opens its wallet files with the password, so
@@ -575,6 +581,7 @@ class WalletManager with ChangeNotifier {
 
   Future<void> _openWalletFilesOnce() async {
     final password = _password;
+    final locks = _locks;
     if (isUnattendedRun || password == null) return;
     try {
       await claimWalletFiles?.call();
@@ -609,8 +616,22 @@ class WalletManager with ChangeNotifier {
       // takes here, to choose the iteration counts from real numbers.
       unawaited(WalletFileCrypto.logDerivationTimes());
 
-      if (upgrading) {
-        final upgrade = _upgradeToGuard(storedSeed);
+      if (upgrading && _locks != locks) {
+        // A lock landed while the wallets opened, before the upgrade began,
+        // and took the password it would move from. The wallets stay under
+        // that password for the rest of the session, so copies left marked
+        // would be put back at the next launch over everything it writes.
+        // Nothing was re-keyed: they go now, and the upgrade is due again at
+        // the next launch.
+        log(LogLevel.info, '[WalletManager] A lock came first; the security-key upgrade waits');
+        try {
+          await GuardUpgradeFiles.cancel();
+        } catch (e) {
+          log(LogLevel.error, '[WalletManager] Could not delete the upgrade copies: $e');
+        }
+      } else if (upgrading) {
+        // No await since the check: from here a lock waits for the upgrade.
+        final upgrade = _upgradeToGuard(storedSeed, from: password);
         _guardUpgradeInFlight = upgrade;
         try {
           switch (await upgrade) {
@@ -626,7 +647,9 @@ class WalletManager with ChangeNotifier {
         }
       }
 
-      if (storedSeed != null) _openBackup(storedSeed.seed);
+      // Not opened again behind a lock that landed meanwhile; an unlock since
+      // then has put the password back and opens it as usual.
+      if (storedSeed != null && _password != null) _openBackup(storedSeed.seed);
       await applyViewOnlySetting();
     } finally {
       _openWalletFilesInFlight = null;
@@ -760,7 +783,7 @@ class WalletManager with ChangeNotifier {
             'Removing corrupt wallet file and re-bootstrapping.',
             coin: w.coinSymbol,
           );
-          await w.deleteFiles();
+          await w.deleteCorruptFiles();
           await _restoreOne(w, storedSeed.seed, storedSeed.from, _password!);
         } catch (e2) {
           log(LogLevel.error, 'Failed to re-bootstrap: $e2', coin: w.coinSymbol);
@@ -1028,7 +1051,8 @@ class WalletManager with ChangeNotifier {
   // only the new password opens. An upgrade the app did not live to finish is
   // therefore kept when the password the kept copy gives opens the guard's
   // record, and put back from the copies otherwise; a failure short of the
-  // commit puts it back at once.
+  // commit puts it back at once. A lock that lands while the wallets open,
+  // before the upgrade begins, cancels it: the copies go, unused.
 
   /// The upgrade under way, which a lock waits for: it must not drop the
   /// password, or take Monero into background mode, halfway through.
@@ -1078,12 +1102,15 @@ class WalletManager with ChangeNotifier {
     }
   }
 
-  /// The upgrade, with the wallets open under the old password.
-  Future<_GuardUpgrade> _upgradeToGuard(({SeedSource seed, RestorePoint from})? storedSeed) async {
-    final guard = passwordGuard!;
-    final store = WalletPasswordStore.current;
-    final from = _password!;
+  /// The upgrade, with the wallets open under [from], the password the open
+  /// began with. Any failure, however early, puts it back.
+  Future<_GuardUpgrade> _upgradeToGuard(
+    ({SeedSource seed, RestorePoint from})? storedSeed, {
+    required String from,
+  }) async {
     try {
+      final guard = passwordGuard!;
+      final store = WalletPasswordStore.current;
       // Every wallet with a file must be open: one left closed would keep the
       // old password after the commit, and never open again.
       for (final w in _visibleWallets) {

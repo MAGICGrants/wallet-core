@@ -282,6 +282,8 @@
   "sendPickContactTitle": "Send to a Contact",
   "sendFailedToGetFeesError": "Failed to get fees.",
   "sendNoConnectionError": "Couldn't reach the server. Check your connection and try again.",
+  "sendCoinsNotVerifiedError": "Couldn't verify your funds with this server, so nothing was sent. Try again or use a different server.",
+  "@sendCoinsNotVerifiedError": {"description": "Error toast when the wallet could not check the coins a send would spend against the server. Sentence case."},
   "torSettingsTitle": "Tor Settings",
   "torSettingsModeBuiltIn": "Built-in Tor",
   "torSettingsModeExternal": "External Tor",

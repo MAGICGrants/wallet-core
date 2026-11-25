@@ -5,8 +5,8 @@ version: 0.1.0
 resolution: workspace
 
 environment:
-  sdk: 3.13.5
-  flutter: 3.47.7
+  sdk: 3.13.7
+  flutter: 3.47.9
 
 dependencies:
   flutter:
@@ -21,7 +21,7 @@ dependencies:
   tor_ffi_plugin:
     git:
       url: https://github.com/MAGICGrants/tor
-      ref: 72e455ffe1faecd5884bea7ec1da666f757a8f0e
+      ref: 609b2ddf794694fefd88306ee3a9329190d4499f
 
   path_provider: 2.1.5
   shared_preferences: 2.5.3

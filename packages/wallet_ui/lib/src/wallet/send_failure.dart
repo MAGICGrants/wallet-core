@@ -10,6 +10,7 @@ extension SendFailureMessages on WalletUiLocalizations {
   /// stays "Unknown error.", and the wallet's log has the backend's reason.
   String txBuildFailureMessage(Object error) => switch (error) {
     TxBuildFailure(problem: TxBuildProblem.notConnected) => sendNoConnectionError,
+    TxBuildFailure(problem: TxBuildProblem.coinsNotVerified) => sendCoinsNotVerifiedError,
     _ => unknownError,
   };
 }

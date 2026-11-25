@@ -8,8 +8,9 @@ import 'package:wallet_infra/wallet_infra.dart';
 /// Beside each file the upgrade may write, `<file>.upgrade-bak` holds its
 /// copy, or `<file>.upgrade-new` (empty) says it did not exist and is to be
 /// deleted. `guard_upgrade` marks a complete set: written after the last copy,
-/// deleted after the copies once the upgrade is kept or put back. All of them
-/// live in the app's folder, beside the wallet's files.
+/// deleted after the copies once the upgrade is kept or put back, and before
+/// them when a lock cancels the upgrade ([cancel]). All of them live in the
+/// app's folder, beside the wallet's files.
 class GuardUpgradeFiles {
   GuardUpgradeFiles._();
 
@@ -63,6 +64,17 @@ class GuardUpgradeFiles {
     }
     final marker = await _marker();
     if (await marker.exists()) await marker.delete();
+  }
+
+  /// For an upgrade that never began re-keying: the marker goes first, then
+  /// the copies. A copy a failed delete leaves is then a leftover of an
+  /// unmarked set, which nothing puts back and the next [backUp] deletes.
+  /// ([discard] deletes the marker last, so a discard cut short after an
+  /// upgrade was kept is finished by the next unlock.)
+  static Future<void> cancel() async {
+    final marker = await _marker();
+    if (await marker.exists()) await marker.delete();
+    await discard();
   }
 
   static String _original(File file, String suffix) =>

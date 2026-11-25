@@ -127,11 +127,38 @@ void main() {
       }, reason: 'checked against mainnet, the network the wallet is built for');
     });
 
-    test('an address monero_c accepts is payable, whatever its shape', () {
-      // Length and leading character are monero_c's business now, not a list
-      // kept in step by hand here.
-      backend.addressValidator = (address, _) => address == 'accepted-by-monero-c';
-      expect(wallet.isAddressValid('accepted-by-monero-c'), isTrue);
+    test('only the two lengths of a Monero address reach monero_c', () {
+      // 95 for a standard address or a subaddress, 106 for an integrated one.
+      // The leading character is monero_c's to judge, by network.
+      backend.addressValidator = (address, networkType) => true;
+      backend.addressValidCalls.clear();
+      for (final length in [1, 94, 96, 105, 107]) {
+        expect(wallet.isAddressValid('4${'A' * (length - 1)}'), isFalse, reason: '$length');
+      }
+      expect(backend.addressValidCalls, isEmpty);
+      expect(wallet.isAddressValid('4${'A' * 94}'), isTrue);
+      expect(wallet.isAddressValid('4${'A' * 105}'), isTrue);
+    });
+
+    test('a character outside base58 is refused before monero_c sees it', () {
+      // monero_c reads a NUL-terminated copy, so it would judge only what comes
+      // before a U+0000, while the confirm sheet shows the whole string. Every
+      // case here has a Monero address's length, so only the alphabet stops it.
+      backend.addressValidator = (address, networkType) => true;
+      backend.addressValidCalls.clear();
+      final address = '4${'A' * 94}';
+      final allButLast = address.substring(0, 94);
+      for (final text in [
+        // 95 + 1 + 10 = 106, an integrated address's length.
+        '$address\u0000Lx7wS9jX7w',
+        '\u202E${address.substring(1)}',
+        for (final c in ['\u0000', '\u200B', '\u202E', ' ', '\n', '0', 'O', 'I', 'l', '-'])
+          '$allButLast$c',
+      ]) {
+        expect(wallet.isAddressValid(text), isFalse, reason: '${text.codeUnits}');
+      }
+      expect(backend.addressValidCalls, isEmpty);
+      expect(wallet.isAddressValid(address), isTrue);
     });
 
     test('an empty address is refused without troubling the validator', () {
@@ -505,6 +532,106 @@ void main() {
     });
   });
 
+  group('an LWS wallet a failed save left behind', () {
+    // lwsf saves to `<path>.new` and renames it over the wallet file. Builds
+    // before the lwsf fix load a `.new` first and stop when it fails to
+    // decrypt, so one cut short by a full disk left the wallet unopenable
+    // with a good file right beside it. The fake answers as those builds do.
+    const decryptFailed = 'Unable to decrypt file (likely bad password)';
+    late String path;
+    late File pending;
+
+    setUp(() async {
+      connect();
+      path = await pathFor('lws');
+      backend.existingWalletPaths.add(path);
+      await File(path).writeAsString('the last complete save');
+      pending = File('$path.new');
+      await pending.writeAsString('half a save');
+      backend.openError = (p, password) =>
+          password != 'pw' || File('$p.new').existsSync() ? decryptFailed : null;
+    });
+
+    test('opens the wallet file past a .new that does not decrypt', () async {
+      await wallet.openExisting(password: 'pw');
+
+      expect(wallet.isLoaded, isTrue);
+      expect(backend.countOf('openWallet'), 2);
+      expect(backend.closedWallets, hasLength(1), reason: 'the failed handle is closed');
+      expect(pending.existsSync(), isFalse, reason: 'it did not decrypt with the right password');
+      expect(File('$path.new.unopened').existsSync(), isFalse);
+      expect(File(path).readAsStringSync(), 'the last complete save');
+    });
+
+    test('a wrong password puts the .new back: it may be the newest save', () async {
+      await expectLater(wallet.openExisting(password: 'wrong'), throwsA(isA<FormatException>()));
+
+      expect(pending.readAsStringSync(), 'half a save');
+      expect(File('$path.new.unopened').existsSync(), isFalse);
+    });
+
+    test('a wallet file that will not read either is reported as corrupt', () async {
+      // Typed for the wallet manager, which then rebuilds from the stored seed
+      // if (and only if) the seed store opened with this same password.
+      await pending.delete();
+      backend.openError = (_, _) => 'Expected more bytes in the msgpack stream';
+
+      await expectLater(
+        wallet.openExisting(password: 'pw'),
+        throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('corrupt'))),
+      );
+      expect(backend.countOf('openWallet'), 1, reason: 'no .new, so nothing to retry without');
+    });
+
+    test('a failure that is not about reading the file is left alone', () async {
+      backend.openError = (_, _) => 'Wallet file NetworkType does not match requested';
+
+      await expectLater(
+        wallet.openExisting(password: 'pw'),
+        throwsA(allOf(isException, isNot(isA<FormatException>()))),
+      );
+      expect(backend.countOf('openWallet'), 1);
+      expect(pending.readAsStringSync(), 'half a save');
+    });
+
+    test('node mode is not touched: wallet2 has no .new', () async {
+      connect(type: 'node');
+      final nodePath = await pathFor('node');
+      backend.existingWalletPaths.add(nodePath);
+      await File('$nodePath.new').writeAsString('not wallet2');
+      backend.openError = (_, _) => decryptFailed;
+
+      await expectLater(
+        wallet.openExisting(password: 'pw'),
+        throwsA(allOf(isException, isNot(isA<FormatException>()))),
+      );
+      expect(backend.countOf('openWallet'), 1);
+      expect(File('$nodePath.new').existsSync(), isTrue);
+    });
+
+    test('a corrupt-file rebuild clears this mode, .new included, and keeps the other', () async {
+      final nodePath = await pathFor('node');
+      await File(nodePath).writeAsString('node wallet');
+      await File('$nodePath.keys').writeAsString('node keys');
+
+      await wallet.deleteCorruptFiles();
+
+      expect(File(path).existsSync(), isFalse);
+      expect(
+        pending.existsSync(),
+        isFalse,
+        reason: 'old lwsf would rename it over the rebuilt file',
+      );
+      expect(File(nodePath).existsSync(), isTrue);
+      expect(File('$nodePath.keys').existsSync(), isTrue);
+    });
+
+    test('deleting the wallet removes the .new too', () async {
+      await wallet.deleteFiles();
+      expect(pending.existsSync(), isFalse);
+    });
+  });
+
   group('primary address', () {
     // The LWS whitelisting screens show it so the user can hand it to a server
     // they have not connected to yet. Cached only by `load()`, it stayed blank
@@ -584,6 +711,16 @@ void main() {
 
     test('returns null with no open wallet rather than throwing', () async {
       expect(await wallet.estimateFee('4${'A' * 94}', BigInt.one), isNull);
+    });
+
+    test('no estimate for an address with a hidden character', () async {
+      connect();
+      backend.existingWalletPaths.add(await pathFor('lws'));
+      await wallet.openExisting(password: 'pw');
+
+      backend.feeEstimate = BigInt.from(31230000);
+      expect(await wallet.estimateFee('4${'A' * 94}\u0000Lx7wS9jX7w', BigInt.one), isNull);
+      expect(backend.called('estimateTransactionFee'), isFalse);
     });
 
     group('a missing estimate is recorded', () {
@@ -734,6 +871,17 @@ void main() {
       backend.existingWalletPaths.add(await pathFor('lws'));
       await wallet.openExisting(password: 'pw');
     }
+
+    test('an address with a hidden character is refused before the build', () async {
+      // The Send forms check first; this is for a caller that does not. The
+      // build would pay only what comes before the U+0000.
+      await openWallet();
+      await expectLater(
+        wallet.createTx('$theirs\u0000Lx7wS9jX7w', BigInt.from(1000), false),
+        throwsA(isA<TxBuildFailure>().having((e) => e.problem, 'problem', TxBuildProblem.other)),
+      );
+      expect(backend.createTransactionRequests, isEmpty);
+    });
 
     test('before the wallet has connected: not connected', () async {
       await openWallet();

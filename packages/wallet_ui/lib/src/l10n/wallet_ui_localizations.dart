@@ -1595,6 +1595,12 @@ abstract class WalletUiLocalizations {
   /// **'Couldn\'t reach the server. Check your connection and try again.'**
   String get sendNoConnectionError;
 
+  /// Error toast when the wallet could not check the coins a send would spend against the server. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t verify your funds with this server, so nothing was sent. Try again or use a different server.'**
+  String get sendCoinsNotVerifiedError;
+
   /// No description provided for @torSettingsTitle.
   ///
   /// In en, this message translates to:

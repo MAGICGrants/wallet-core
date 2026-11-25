@@ -17,6 +17,18 @@ void main() {
       );
     });
 
+    test('${locale.languageCode}: unverified coins say nothing was sent and name the server', () {
+      expect(
+        strings.txBuildFailureMessage(
+          const TxBuildFailure(
+            TxBuildProblem.coinsNotVerified,
+            detail: 'the server misreported an input',
+          ),
+        ),
+        strings.sendCoinsNotVerifiedError,
+      );
+    });
+
     test('${locale.languageCode}: anything else stays unknown, without the backend text', () {
       for (final error in [
         const TxBuildFailure(TxBuildProblem.other, detail: 'Invalid destination address'),
