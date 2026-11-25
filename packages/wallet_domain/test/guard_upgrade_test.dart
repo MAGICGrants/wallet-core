@@ -60,10 +60,8 @@ class _FileWallet extends FakeWallet {
 
   /// What a save in this session writes: the wallet's own state, under the
   /// password it was opened with.
-  Future<void> save(String content) async => writeStringAtomic(
-    await file(),
-    await WalletFileCrypto.encryptToBase64(content, openedWith!),
-  );
+  Future<void> save(String content) async =>
+      writeStringAtomic(await file(), await WalletFileCrypto.encryptToBase64(content, openedWith!));
 
   @override
   Future<void> openExisting({required String password}) async {
