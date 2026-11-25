@@ -19,11 +19,16 @@ class HomeLabels {
   /// "Incoming (+2 Others)".
   final String Function(int others) incomingMore;
 
-  /// "Unlocks in about {minutes} minutes · {done} of {needed}".
+  /// "Unlocks in about {minutes} minutes", then "{done} of {needed}" on a line
+  /// of its own.
   final String Function(int minutes, int done, int needed) unlocksIn;
 
   /// "{done} of {needed} confirmations".
   final String Function(int done, int needed) confirmations;
+
+  /// The title of change coming back from the wallet's own sends, named for
+  /// the coin's [asset]: "Monero Change".
+  final String Function(String asset) change;
 
   /// "Balance · 90 days".
   final String chartTitle;
@@ -45,6 +50,7 @@ class HomeLabels {
     required this.incomingMore,
     required this.unlocksIn,
     required this.confirmations,
+    required this.change,
     required this.chartTitle,
     required this.chartToday,
     required this.chartEachCoin,
@@ -67,17 +73,33 @@ class HomeSections {
   final HomeActivity activity;
   final HomeLabels labels;
 
-  const HomeSections({required this.activity, required this.labels});
+  /// The decimals a coin's amounts show here (`FiatRateModel.trimDigitsOf`);
+  /// null, or a null answer, is every digit.
+  final int? Function(CryptoWallet wallet)? trimDigitsOf;
 
-  /// Incoming payments not spendable yet across [coins], newest first, at
-  /// most [incomingShown] of them; null when there are none, so the home
-  /// leaves the card out.
+  const HomeSections({required this.activity, required this.labels, this.trimDigitsOf});
+
+  /// Incoming payments not spendable yet across [coins], and change from a
+  /// send still locked, newest first, at most [incomingShown] of them; null
+  /// when there are none, so the home leaves the card out.
   IncomingCard? incoming(List<HomeCoin> coins, {DateTime? now}) {
     final rows = <({int when, IncomingItem item})>[];
     for (final coin in coins) {
       final w = coin.wallet;
-      for (final tx in activity.of(w, tokens: coin.tokens, now: now).pendingIncoming) {
-        rows.add((when: tx.broadcastAt ?? tx.timestamp, item: _incomingItem(w, tx)));
+      final a = activity.of(w, tokens: coin.tokens, now: now);
+      for (final tx in a.pendingIncoming) {
+        rows.add((
+          when: tx.broadcastAt ?? tx.timestamp,
+          item: _item(w, tx, title: w.assetName, amount: tx.amountBaseUnits),
+        ));
+      }
+      // A send is one outgoing transaction, so the change it leaves locked is
+      // not among the payments above; it gets a row of its own, named as such.
+      if (a.lockedChange case final change?) {
+        rows.add((
+          when: change.send.broadcastAt ?? change.send.timestamp,
+          item: _item(w, change.send, title: labels.change(w.assetName), amount: change.amount),
+        ));
       }
     }
     if (rows.isEmpty) return null;
@@ -89,7 +111,14 @@ class HomeSections {
     );
   }
 
-  IncomingItem _incomingItem(CryptoWallet w, TxDetails tx) {
+  /// A row for [amount] arriving with [tx]: how far along [tx] is, and when
+  /// that makes the amount spendable.
+  IncomingItem _item(
+    CryptoWallet w,
+    TxDetails tx, {
+    required String title,
+    required BigInt amount,
+  }) {
     final needed = w.requiredConfirmations;
     final done = math.min(math.max(tx.height == -1 ? 0 : tx.confirmations, 0), needed);
     final blockTime = w.averageBlockTime;
@@ -105,12 +134,12 @@ class HomeSections {
     } else {
       detail = labels.confirmations(done, needed);
     }
-    final amount = displayAmount(tx.amountBaseUnits, w.baseUnitDecimals);
     return IncomingItem(
       icon: CoinMark(coinSymbol: w.coinSymbol, iconAsset: w.iconAsset, size: 32),
-      title: w.assetName,
+      title: title,
       detail: detail,
-      amount: '+${formatAmount(amount, math.min(w.decimals, 5))} ${w.coinSymbol}',
+      amount:
+          '+${formatTrimmedAmount(amount.abs(), w.baseUnitDecimals, trimDigitsOf?.call(w), symbol: w.coinSymbol)}',
       progress: needed == 0 ? 1 : done / needed,
     );
   }
@@ -126,12 +155,20 @@ class HomeSections {
       final w = coin.wallet;
       final a = activity.of(w, tokens: coin.tokens, now: at);
       anyHistory |= a.hasHistory;
+      final steps = a.balanceSteps;
       final points = [
-        for (final s in a.balanceSteps)
-          (at: s.at, value: displayAmount(s.balance, w.baseUnitDecimals)),
+        for (final s in steps) (at: s.at, value: displayAmount(s.balance, w.baseUnitDecimals)),
       ];
       if (points.every((p) => p.value == 0)) continue;
-      series.add(_series(w, points, single: coins.length == 1));
+      series.add(
+        _series(
+          w,
+          points,
+          first: steps.first.balance,
+          last: steps.last.balance,
+          single: coins.length == 1,
+        ),
+      );
     }
     final start = at.subtract(Duration(days: activity.days));
     return BalanceChartCard(
@@ -146,24 +183,32 @@ class HomeSections {
     );
   }
 
-  BalanceSeries _series(CryptoWallet w, List<ChartStep> points, {required bool single}) {
-    final first = points.first.value;
-    final last = points.last.value;
-    final digits = math.min(w.decimals, 4);
+  /// [first] and [last] are the window's opening and closing balances, in
+  /// base units, so the labels are written exactly.
+  BalanceSeries _series(
+    CryptoWallet w,
+    List<ChartStep> points, {
+    required BigInt first,
+    required BigInt last,
+    required bool single,
+  }) {
+    final digits = trimDigitsOf?.call(w);
+    String amount(BigInt units) => formatTrimmedAmount(units, w.baseUnitDecimals, digits);
     final String change;
     if (single) {
       // One coin: the change in coins, which needs no price.
       final diff = last - first;
-      final sign = diff > 0 ? '+' : (diff < 0 ? '−' : '');
-      change = '$sign${_trim(formatAmount(diff.abs(), digits))} ${w.coinSymbol}';
-    } else if (first == 0) {
+      final sign = diff > BigInt.zero ? '+' : (diff < BigInt.zero ? '−' : '');
+      change = '$sign${_trim(amount(diff.abs()))} ${w.coinSymbol}';
+    } else if (first == BigInt.zero) {
       change = labels.chartNew;
     } else {
-      final pct = ((last - first) / first * 100).round();
+      final from = points.first.value;
+      final pct = ((points.last.value - from) / from * 100).round();
       change = pct > 0 ? '+$pct%' : (pct < 0 ? '−${-pct}%' : '0%');
     }
     return BalanceSeries(
-      label: '${formatAmount(last, digits)} ${w.coinSymbol}',
+      label: '${amount(last)} ${w.coinSymbol}',
       color: CoinMark.colorOf(w.coinSymbol) ?? BrandColors.primary,
       points: points,
       change: change,

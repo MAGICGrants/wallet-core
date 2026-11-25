@@ -405,7 +405,7 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
         Text(_locationStatus(i18n, id), style: BrandText.caption.copyWith(color: BrandColors.ink));
 
     return [
-      Text(i18n.backupEnable, style: BrandText.title),
+      Semantics(header: true, child: Text(i18n.backupEnable, style: BrandText.title)),
       const SizedBox(height: BrandSpacing.lg),
       // It does not replace the recovery phrase.
       WarningCard(
@@ -430,7 +430,11 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                i18n.backupSummary(service.paymentCount, service.contactCount),
+                i18n.backupSummary(
+                  service.paymentCount,
+                  service.contactCount,
+                  service.addressLabelCount,
+                ),
                 style: BrandText.listTitle,
               ),
               if (lastSync != null)
@@ -560,7 +564,11 @@ class _MetadataBackupScreenState extends State<MetadataBackupScreen> {
               Text(i18n.backupRestoreTitle, style: BrandText.listTitle),
               const SizedBox(height: BrandSpacing.xs),
               Text(
-                i18n.backupRestoreSummary(report.payments, report.contactsRestored),
+                i18n.backupRestoreSummary(
+                  report.payments,
+                  report.contactsRestored,
+                  report.labelsRestored,
+                ),
                 style: BrandText.body,
               ),
               if (report.failed.isNotEmpty)
@@ -629,31 +637,34 @@ class _NumberedStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 24,
-          height: 24,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(color: BrandColors.surfaceAccent, shape: BoxShape.circle),
-          child: Text(
-            '$number',
-            style: BrandText.mono.copyWith(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: BrandColors.primaryDeep,
+    // The number and its step read as one line.
+    return MergeSemantics(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: BrandColors.surfaceAccent, shape: BoxShape.circle),
+            child: Text(
+              '$number',
+              style: BrandText.mono.copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: BrandColors.primaryDeep,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: BrandSpacing.md),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(text, style: BrandText.body),
+          const SizedBox(width: BrandSpacing.md),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(text, style: BrandText.body),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

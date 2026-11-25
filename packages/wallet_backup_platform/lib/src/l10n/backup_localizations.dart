@@ -109,7 +109,7 @@ abstract class BackupLocalizations {
   /// No description provided for @backupSeedWarning.
   ///
   /// In en, this message translates to:
-  /// **'This backs up additional data not stored on the blockchain, like certain transaction data and your address book.'**
+  /// **'This backs up additional data not stored on the blockchain, like certain transaction data, your address book and your address labels.'**
   String get backupSeedWarning;
 
   /// No description provided for @backupSecurityNote.
@@ -193,8 +193,8 @@ abstract class BackupLocalizations {
   /// No description provided for @backupSummary.
   ///
   /// In en, this message translates to:
-  /// **'{payments, plural, =1{1 payment} other{{payments} payments}} and {contacts, plural, =1{1 contact} other{{contacts} contacts}} backed up'**
-  String backupSummary(int payments, int contacts);
+  /// **'{payments, plural, =1{1 payment} other{{payments} payments}}, {contacts, plural, =1{1 contact} other{{contacts} contacts}} and {labels, plural, =1{1 address label} other{{labels} address labels}} backed up'**
+  String backupSummary(int payments, int contacts, int labels);
 
   /// No description provided for @backupLastChecked.
   ///
@@ -379,8 +379,8 @@ abstract class BackupLocalizations {
   /// No description provided for @backupRestoreSummary.
   ///
   /// In en, this message translates to:
-  /// **'{payments, plural, =1{Found 1 payment} other{Found {payments} payments}}; {contacts, plural, =1{restored 1 contact} other{restored {contacts} contacts}}.'**
-  String backupRestoreSummary(int payments, int contacts);
+  /// **'{payments, plural, =1{Found 1 payment} other{Found {payments} payments}}; {contacts, plural, =1{restored 1 contact} other{restored {contacts} contacts}} and {labels, plural, =1{1 address label} other{{labels} address labels}}.'**
+  String backupRestoreSummary(int payments, int contacts, int labels);
 
   /// No description provided for @backupRestoreUnreadable.
   ///
@@ -451,8 +451,8 @@ abstract class BackupLocalizations {
   /// No description provided for @backupRestoreFound.
   ///
   /// In en, this message translates to:
-  /// **'Restored {payments, plural, =1{1 payment} other{{payments} payments}} and {contacts, plural, =1{1 contact} other{{contacts} contacts}} from your backup'**
-  String backupRestoreFound(int payments, int contacts);
+  /// **'Restored {payments, plural, =1{1 payment} other{{payments} payments}}, {contacts, plural, =1{1 contact} other{{contacts} contacts}} and {labels, plural, =1{1 address label} other{{labels} address labels}} from your backup'**
+  String backupRestoreFound(int payments, int contacts, int labels);
 
   /// No description provided for @backupEnable.
   ///

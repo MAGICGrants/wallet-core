@@ -21,12 +21,14 @@ NativeTxInfo _received({
   required int index,
   int account = 0,
   int height = 3000000,
+  int timestamp = 1700000000,
+  int direction = txDirectionIncoming,
 }) => NativeTxInfo(
-  direction: txDirectionIncoming,
+  direction: direction,
   hash: hash,
   amount: BigInt.from(1500000000000),
   fee: BigInt.zero,
-  timestamp: 1700000000,
+  timestamp: timestamp,
   blockHeight: height,
   confirmations: 10,
   subaddrAccount: account,
@@ -295,6 +297,38 @@ void main() {
 
       // Regressing to 1 would hand out an already-used address until restart.
       expect(wallet.unusedSubaddressIndex, 6);
+    });
+
+    test('a deleted wallet\'s history does not carry into the next wallet', () async {
+      // The app keeps one MoneroWallet for its whole run, so creating or
+      // restoring after a delete reuses it. In node mode load() derives the
+      // index before the new wallet has synced, so before its history is first
+      // read. The deleted wallet's transactions were still cached, the new
+      // wallet took that wallet's next index, and the never-regress rule above
+      // then kept it through any rescan.
+      await openWallet(type: 'node');
+      backend.transactions = [for (var i = 1; i <= 5; i++) _received(hash: 'old$i', index: i)];
+      await wallet.refreshTxHistory();
+      await wallet.loadUnusedSubaddressIndex();
+      expect(wallet.unusedSubaddressIndex, 6);
+
+      await wallet.delete();
+
+      // A different wallet, restored in node mode and not yet synced.
+      backend.transactions = [];
+      backend.synchronizedValue = false;
+      connect(type: 'node');
+      await wallet.restoreFromSeed(
+        seed: const Bip39Seed(
+          'abandon abandon abandon abandon abandon abandon '
+          'abandon abandon abandon abandon abandon about',
+        ),
+        from: const RestorePoint.height(2800000),
+        password: 'pw',
+      );
+      await wallet.load();
+
+      expect(wallet.unusedSubaddressIndex, 1);
     });
   });
 
@@ -712,5 +746,39 @@ void main() {
       // silently break provisioning while looking like a privacy improvement.
       expect(posts.single.body, contains('the-view-key'));
     });
+  });
+
+  group('loadUsedReceiveAddresses', () {
+    setUp(() {
+      wallet.dispose();
+      backend = _IndexedAddressBackend();
+      wallet = MoneroWallet(backend: backend);
+    });
+
+    test(
+      'each subaddress that received, newest first; spends and the primary do not count',
+      () async {
+        backend.transactions = [
+          _received(hash: 'a', index: 1, timestamp: 1700000000),
+          _received(hash: 'b', index: 3, timestamp: 1700000300),
+          _received(hash: 'c', index: 1, timestamp: 1700000600),
+          // Spent from subaddress 2: an outgoing entry carries the index it spent
+          // from, which is not a receipt.
+          _received(hash: 'd', index: 2, direction: txDirectionOutgoing),
+          // A payout to the primary address.
+          _received(hash: 'e', index: 0),
+        ];
+        await openWallet();
+        await wallet.loadTxHistory();
+
+        final used = await wallet.loadUsedReceiveAddresses();
+        expect(used.map((u) => u.index), [1, 3]);
+        expect(used.first.address, '8${'1' * 94}');
+        expect(used.first.txCount, 2);
+        expect(used.first.receivedBaseUnits, BigInt.from(3000000000000));
+        expect(used.first.lastUsed, 1700000600);
+        expect(wallet.rotatingAddressKind, RotatingAddressKind.subaddress);
+      },
+    );
   });
 }

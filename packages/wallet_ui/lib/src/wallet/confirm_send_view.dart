@@ -218,13 +218,23 @@ class ConfirmSendView extends StatelessWidget {
                             color: BrandColors.primaryDeep,
                           ),
                           const SizedBox(width: 11),
-                          Expanded(child: Text(labels.title, style: BrandText.sheetTitle)),
+                          Expanded(
+                            child: Semantics(
+                              header: true,
+                              namesRoute: true,
+                              child: Text(labels.title, style: BrandText.sheetTitle),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 7),
-                      Text(
-                        labels.description,
-                        style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+                      // Its own node, so the sheet's heading stays the title alone.
+                      Semantics(
+                        container: true,
+                        child: Text(
+                          labels.description,
+                          style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+                        ),
                       ),
                     ],
                   ),
@@ -288,25 +298,28 @@ class ConfirmSendView extends StatelessWidget {
   }
 
   Widget _detailRow(String label, Widget value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              height: 1.35,
-              color: BrandColors.ink,
+    // Each label is read with its value, as one line.
+    return MergeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+                color: BrandColors.ink,
+              ),
             ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Align(alignment: Alignment.centerRight, child: value),
-          ),
-        ],
+            const SizedBox(width: 14),
+            Expanded(
+              child: Align(alignment: Alignment.centerRight, child: value),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -363,19 +376,22 @@ class ConfirmSendView extends StatelessWidget {
     // be bolded regardless of locale. The app inserts a sentinel token (not a
     // space, since the sentence itself has spaces) via its l10n getter.
     final parts = token.isEmpty ? [warning] : warning.split(token);
-    return WarningCard(
-      child: Text.rich(
-        TextSpan(
-          children: [
-            TextSpan(text: parts.first),
-            TextSpan(
-              text: percent,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            if (parts.length > 1) TextSpan(text: parts.last),
-          ],
+    // One node: the sentence reads whole, the bold percentage in its place.
+    return MergeSemantics(
+      child: WarningCard(
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: parts.first),
+              TextSpan(
+                text: percent,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              if (parts.length > 1) TextSpan(text: parts.last),
+            ],
+          ),
+          style: BrandText.body,
         ),
-        style: BrandText.body,
       ),
     );
   }

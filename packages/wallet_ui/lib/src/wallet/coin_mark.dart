@@ -22,6 +22,10 @@ class CoinMark extends StatelessWidget {
   /// where a proportional dot would be too tiny to read.
   final double statusDotFactor;
 
+  /// What the status dot means ("Connected"), read by screen readers: its
+  /// colour alone says nothing to one. Null leaves the dot unspoken.
+  final String? statusLabel;
+
   const CoinMark({
     super.key,
     required this.coinSymbol,
@@ -30,6 +34,7 @@ class CoinMark extends StatelessWidget {
     this.statusColor,
     this.statusRingColor,
     this.statusDotFactor = 0.32,
+    this.statusLabel,
   });
 
   /// The chain colour of [symbol]'s tile, or null for a coin with no tile.
@@ -60,8 +65,16 @@ class CoinMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The coin's name always sits beside its mark, so the mark itself is
+    // decoration; left in, the SVG adds an empty image to whatever reads it.
+    final Widget mark = ExcludeSemantics(child: _icon());
+    if (statusColor == null) return mark;
+    return Semantics(label: statusLabel, child: _withDot(mark));
+  }
+
+  Widget _icon() {
     final mark = _mark(coinSymbol);
-    final Widget icon = mark == null
+    return mark == null
         ? SvgPicture.asset(iconAsset, width: size, height: size)
         : CoinTile(
             size: size,
@@ -73,9 +86,9 @@ class CoinMark extends StatelessWidget {
               height: size * 0.63,
             ),
           );
+  }
 
-    if (statusColor == null) return icon;
-
+  Widget _withDot(Widget icon) {
     final dot = size * statusDotFactor;
     return Stack(
       clipBehavior: Clip.none,

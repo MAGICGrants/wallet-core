@@ -45,6 +45,9 @@ abstract class MetadataBackup {
   /// The address book was saved.
   void contactsChanged();
 
+  /// The address labels were saved.
+  void addressLabelsChanged();
+
   /// [wallet]'s transaction history was re-read.
   void historyChanged(CryptoWallet wallet);
 

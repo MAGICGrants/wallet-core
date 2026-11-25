@@ -47,6 +47,9 @@ class ModeSelectCard extends StatelessWidget {
     return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      checked: selected,
+      inMutuallyExclusiveGroup: true,
+      focusRadius: BrandRadii.rField,
       child: AnimatedContainer(
         duration: BrandMotion.transition,
         curve: Curves.easeInOut,
@@ -75,7 +78,11 @@ class ModeSelectCard extends StatelessWidget {
                 if (!radioLeading) ...[const SizedBox(width: 13), dot],
               ],
             ),
-            if (selected && expanded != null) ...[const SizedBox(height: 14), expanded!],
+            // Its own controls, not part of the card's name.
+            if (selected && expanded != null) ...[
+              const SizedBox(height: 14),
+              Semantics(container: true, explicitChildNodes: true, child: expanded!),
+            ],
           ],
         ),
       ),

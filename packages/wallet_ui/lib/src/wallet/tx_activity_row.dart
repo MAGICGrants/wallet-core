@@ -5,6 +5,7 @@ import 'package:wallet_fiat/wallet_fiat.dart' show FiatRateModel;
 
 import '../design/brand.dart';
 import '../design/click_cursor.dart';
+import '../l10n/ui_strings.dart';
 import 'coin_mark.dart';
 import 'format.dart';
 
@@ -49,8 +50,15 @@ class TxActivityRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final incoming = tx.direction == txDirectionIncoming;
     final coinRate = fiatRate.rateFor(asset.coinSymbol);
+    // The fiat figure only; the coin amount is written from base units below.
     final amount = displayAmount(tx.amountBaseUnits, asset.baseUnitDecimals);
     final amountFiat = coinRate != null ? amount * coinRate : null;
+    final amountText = formatTrimmedAmount(
+      tx.amountBaseUnits.abs(),
+      asset.baseUnitDecimals,
+      fiatRate.trimDigitsOf(asset),
+      symbol: asset.coinSymbol,
+    );
     final confirmed = asset.isTxConfirmed(tx);
     final date = DateTime.fromMillisecondsSinceEpoch(tx.timestamp * 1000);
     final amountColor = incoming ? BrandColors.success : BrandColors.ink;
@@ -63,6 +71,15 @@ class TxActivityRow extends StatelessWidget {
       TxStatus.unknown => (Icons.warning_rounded, BrandColors.warning),
       TxStatus.ok => confirmed ? null : (Icons.hourglass_top_rounded, BrandColors.warning),
     };
+    // The cue in words, read with the row: the icon alone says nothing to a
+    // screen reader, and a failed send must not sound like a sent one.
+    final strings = uiStringsOf(context);
+    final String? statusWords = switch (tx.status) {
+      TxStatus.failed => strings?.a11yTxFailed,
+      TxStatus.unknown => strings?.a11yTxUnknown,
+      TxStatus.ok => confirmed ? null : strings?.pending,
+    };
+    final time = DateFormat('HH:mm').format(date);
 
     return Tappable(
       behavior: HitTestBehavior.opaque,
@@ -95,16 +112,21 @@ class TxActivityRow extends StatelessWidget {
                   Row(
                     children: [
                       if (statusCue != null) ...[
-                        Icon(statusCue.$1, size: 12, color: statusCue.$2),
+                        Icon(
+                          statusCue.$1,
+                          size: 12,
+                          color: statusCue.$2,
+                          semanticLabel: statusWords,
+                        ),
                         const SizedBox(width: 4),
                       ],
                       Text(
                         // Default (en) symbols: initializeDateFormatting isn't wired, so a
                         // locale arg would throw for pt. Single-coin apps
                         // (showCoinIcon false) drop the redundant coin name.
-                        showCoinIcon
-                            ? '${DateFormat('HH:mm').format(date)} · ${asset.assetName}'
-                            : DateFormat('HH:mm').format(date),
+                        showCoinIcon ? '$time · ${asset.assetName}' : time,
+                        // Read without the dot between time and coin.
+                        semanticsLabel: showCoinIcon ? '$time, ${asset.assetName}' : null,
                         style: TextStyle(fontSize: 11, height: 1.3, color: BrandColors.inkMuted),
                       ),
                     ],
@@ -113,33 +135,39 @@ class TxActivityRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${incoming ? '+' : '−'}${formatAmount(amount, asset.decimals, symbol: asset.coinSymbol)}',
-                  style: TextStyle(
-                    fontFamily: 'Ubuntu Mono',
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                    color: amountColor,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-                if (amountFiat != null && !fiatRate.isDisabled) ...[
-                  const SizedBox(height: 2),
+            // Every digit of an 18-decimal amount is long: past this width it
+            // wraps instead of squeezing the label column to nothing.
+            LimitedBox(
+              maxWidth: 200,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
                   Text(
-                    formatFiat(amountFiat, fiatRate.fiatCurrency),
+                    '${incoming ? '+' : '−'}$amountText',
+                    textAlign: TextAlign.end,
                     style: TextStyle(
                       fontFamily: 'Ubuntu Mono',
-                      fontSize: 11,
-                      height: 1.3,
-                      color: BrandColors.inkMuted,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      height: 1.25,
+                      color: amountColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
+                  if (amountFiat != null && !fiatRate.isDisabled) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      formatFiat(amountFiat, fiatRate.fiatCurrency),
+                      style: TextStyle(
+                        fontFamily: 'Ubuntu Mono',
+                        fontSize: 11,
+                        height: 1.3,
+                        color: BrandColors.inkMuted,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ],
         ),

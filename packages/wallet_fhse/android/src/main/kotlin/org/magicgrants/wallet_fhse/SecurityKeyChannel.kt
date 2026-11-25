@@ -20,7 +20,8 @@ import java.util.concurrent.RejectedExecutionException
  *
  * While an operation runs, its progress goes to Dart as `status` calls on the
  * same channel ({state, transport}), on the main thread, fire-and-forget, and
- * never after the operation's result.
+ * never after the operation's result. Lines for the app's log go the same way
+ * as `log` calls ({line, warning}), each before its operation's result.
  *
  * The `prompt` argument is accepted but unused: Android has no system NFC
  * sheet, so the Flutter UI shows its own instructions.
@@ -50,7 +51,7 @@ class SecurityKeyChannel(activity: Activity, messenger: BinaryMessenger) :
 
     private val channel = MethodChannel(messenger, NAME)
     private val activityRef = WeakReference(activity)
-    private val operations = SecurityKeyOperations(activity) { activityRef.get() }
+    private val operations = SecurityKeyOperations(activity, ::postLog) { activityRef.get() }
     private val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "security-key").apply { isDaemon = true }
     }
@@ -185,6 +186,13 @@ class SecurityKeyChannel(activity: Activity, messenger: BinaryMessenger) :
                     channel.invokeMethod("status", mapOf("state" to state, "transport" to transport))
                 }
             }
+        }
+    }
+
+    /** Sends a line for the app's log to Dart: posted to the main thread, fire-and-forget. Any thread. */
+    private fun postLog(line: String, warning: Boolean) {
+        mainHandler.post {
+            if (!disposed) channel.invokeMethod("log", mapOf("line" to line, "warning" to warning))
         }
     }
 

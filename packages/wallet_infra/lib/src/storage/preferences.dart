@@ -21,6 +21,14 @@ class SettingsKeys {
   // user), so re-enabling Tor can restore it.
   static const String fiatAutoDisabledByTor = 'fiatAutoDisabledByTor';
 
+  /// "Trim Decimals": a `TrimDecimals` storage value (`off`, `1`, `10`, `100`).
+  static const String trimDecimals = 'trimDecimals';
+
+  /// The decimals each Trim Decimals level gave each coin at its last accepted
+  /// rate, as JSON, so amounts keep trimming while the next price loads. Not
+  /// cleared with the saved rates.
+  static const String trimDigits = 'trimDigits';
+
   /// How OpenAlias names are looked up: an `OpenAliasMode` name.
   static const String openAliasMode = 'openAliasMode';
   // The unit the send screen's amount was last typed in: `coin` or `fiat`.
@@ -45,6 +53,12 @@ class SettingsKeys {
   // store was last asked. The day, not the moment -- this store is plaintext.
   static const String storeReviewEligible = 'storeReviewEligible';
   static const String storeReviewLastAskedDay = 'storeReviewLastAskedDay';
+
+  /// Whether the home shows the security checklist at all (a bool; absent
+  /// means shown), and the names of the steps it leaves out (a string list),
+  /// as chosen in Settings.
+  static const String securityChecklistShown = 'securityChecklistShown';
+  static const String securityChecklistStepsOff = 'securityChecklistStepsOff';
 }
 
 /// Non-secret key/value storage.

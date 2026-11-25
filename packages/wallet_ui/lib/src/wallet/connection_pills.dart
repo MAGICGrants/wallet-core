@@ -85,9 +85,13 @@ class ConnectionPills extends StatelessWidget {
       ?typePill,
     ];
     if (pills.isEmpty) return const SizedBox.shrink();
-    return compact
-        ? Row(mainAxisSize: MainAxisSize.min, spacing: 6, children: pills)
-        : Wrap(spacing: 6, runSpacing: 6, children: pills);
+    // Read as one description of the connection ("Over Tor, Over HTTPS,
+    // Node"), not a stop per pill.
+    return MergeSemantics(
+      child: compact
+          ? Row(mainAxisSize: MainAxisSize.min, spacing: 6, children: pills)
+          : Wrap(spacing: 6, runSpacing: 6, children: pills),
+    );
   }
 }
 

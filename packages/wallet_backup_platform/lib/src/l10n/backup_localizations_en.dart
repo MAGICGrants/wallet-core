@@ -18,7 +18,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
 
   @override
   String get backupSeedWarning =>
-      'This backs up additional data not stored on the blockchain, like certain transaction data and your address book.';
+      'This backs up additional data not stored on the blockchain, like certain transaction data, your address book and your address labels.';
 
   @override
   String get backupSecurityNote =>
@@ -37,28 +37,23 @@ class BackupLocalizationsEn extends BackupLocalizations {
       'Create a new wallet with a modern recovery phrase on another device.';
 
   @override
-  String get backupLegacyStep2 =>
-      'Send the funds from this legacy wallet to your modern wallet.';
+  String get backupLegacyStep2 => 'Send the funds from this legacy wallet to your modern wallet.';
 
   @override
   String get backupLegacyStep3 =>
       'Export your wallet data from this legacy wallet in an unencrypted CSV. Save this in a secure location along with your legacy recovery phrase.';
 
   @override
-  String get backupLegacyStep4 =>
-      'Restore the modern wallet on this device.';
+  String get backupLegacyStep4 => 'Restore the modern wallet on this device.';
 
   @override
-  String get backupExportCsv =>
-      'Export Unencrypted CSV';
+  String get backupExportCsv => 'Export Unencrypted CSV';
 
   @override
-  String get backupCsvExported =>
-      'History exported';
+  String get backupCsvExported => 'History exported';
 
   @override
-  String get backupCsvExportFailed =>
-      'Could not export the history';
+  String get backupCsvExportFailed => 'Could not export the history';
 
   @override
   String get backupUnsupportedPassphrase =>
@@ -71,7 +66,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
   String get backupOpening => 'Opening your backup…';
 
   @override
-  String backupSummary(int payments, int contacts) {
+  String backupSummary(int payments, int contacts, int labels) {
     String _temp0 = intl.Intl.pluralLogic(
       payments,
       locale: localeName,
@@ -84,7 +79,13 @@ class BackupLocalizationsEn extends BackupLocalizations {
       other: '$contacts contacts',
       one: '1 contact',
     );
-    return '$_temp0 and $_temp1 backed up';
+    String _temp2 = intl.Intl.pluralLogic(
+      labels,
+      locale: localeName,
+      other: '$labels address labels',
+      one: '1 address label',
+    );
+    return '$_temp0, $_temp1 and $_temp2 backed up';
   }
 
   @override
@@ -212,7 +213,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
   String get backupRestoreTitle => 'Last Restore';
 
   @override
-  String backupRestoreSummary(int payments, int contacts) {
+  String backupRestoreSummary(int payments, int contacts, int labels) {
     String _temp0 = intl.Intl.pluralLogic(
       payments,
       locale: localeName,
@@ -225,7 +226,13 @@ class BackupLocalizationsEn extends BackupLocalizations {
       other: 'restored $contacts contacts',
       one: 'restored 1 contact',
     );
-    return '$_temp0; $_temp1.';
+    String _temp2 = intl.Intl.pluralLogic(
+      labels,
+      locale: localeName,
+      other: '$labels address labels',
+      one: '1 address label',
+    );
+    return '$_temp0; $_temp1 and $_temp2.';
   }
 
   @override
@@ -281,7 +288,7 @@ class BackupLocalizationsEn extends BackupLocalizations {
   String get backupDeleted => 'iCloud copy deleted';
 
   @override
-  String backupRestoreFound(int payments, int contacts) {
+  String backupRestoreFound(int payments, int contacts, int labels) {
     String _temp0 = intl.Intl.pluralLogic(
       payments,
       locale: localeName,
@@ -294,7 +301,13 @@ class BackupLocalizationsEn extends BackupLocalizations {
       other: '$contacts contacts',
       one: '1 contact',
     );
-    return 'Restored $_temp0 and $_temp1 from your backup';
+    String _temp2 = intl.Intl.pluralLogic(
+      labels,
+      locale: localeName,
+      other: '$labels address labels',
+      one: '1 address label',
+    );
+    return 'Restored $_temp0, $_temp1 and $_temp2 from your backup';
   }
 
   @override

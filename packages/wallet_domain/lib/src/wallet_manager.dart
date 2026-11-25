@@ -9,6 +9,7 @@ import 'app_config.dart';
 import 'app_session.dart';
 import 'crypto_wallet.dart';
 import 'guard_upgrade_files.dart';
+import 'labels/address_label_store.dart';
 import 'metadata_backup.dart';
 import 'seed/seed.dart';
 import 'seed/seed_policy.dart';
@@ -63,7 +64,16 @@ class WalletManager with ChangeNotifier {
   /// keystore behaviour.
   static WalletPasswordGuard? passwordGuard;
 
-  String? _password;
+  String? _walletPassword;
+
+  /// The wallet password, while the wallet is unlocked. Every change reaches
+  /// the address labels, which are encrypted with it ([AddressLabelKey]): they
+  /// open when it arrives and close when it goes.
+  String? get _password => _walletPassword;
+  set _password(String? value) {
+    _walletPassword = value;
+    AddressLabelKey.password = value;
+  }
 
   /// Where [_password] came from.
   _PasswordSource _passwordSource = _PasswordSource.typed;
@@ -320,6 +330,7 @@ class WalletManager with ChangeNotifier {
     // The password goes first, before the slow part (each close stores its
     // wallet). Nothing below needs it: every wallet closes with its own cache
     // password and native state. And nothing else can use it meanwhile.
+    _locks++;
     _password = null;
     WalletPasswordStore.current.endSession();
     await _closeBackup();
@@ -348,6 +359,7 @@ class WalletManager with ChangeNotifier {
     if (upgrade != null) await upgrade;
     AppSession.lock();
     // The password first, as in [fullyLock]: nothing below needs it.
+    _locks++;
     _password = null;
     WalletPasswordStore.current.endSession();
     await _closeBackup();
@@ -547,6 +559,10 @@ class WalletManager with ChangeNotifier {
 
   Future<void>? _openWalletFilesInFlight;
 
+  /// How many times [fullyLock] or [lockSpend] has dropped the password. An
+  /// open that finds it moved since it began knows a lock landed meanwhile.
+  int _locks = 0;
+
   Future<void> _openWalletFiles() => _openWalletFilesInFlight ??= _openWalletFilesOnce();
 
   /// Asked before this app opens its wallet files with the password, so
@@ -565,6 +581,7 @@ class WalletManager with ChangeNotifier {
 
   Future<void> _openWalletFilesOnce() async {
     final password = _password;
+    final locks = _locks;
     if (isUnattendedRun || password == null) return;
     try {
       await claimWalletFiles?.call();
@@ -599,8 +616,22 @@ class WalletManager with ChangeNotifier {
       // takes here, to choose the iteration counts from real numbers.
       unawaited(WalletFileCrypto.logDerivationTimes());
 
-      if (upgrading) {
-        final upgrade = _upgradeToGuard(storedSeed);
+      if (upgrading && _locks != locks) {
+        // A lock landed while the wallets opened, before the upgrade began,
+        // and took the password it would move from. The wallets stay under
+        // that password for the rest of the session, so copies left marked
+        // would be put back at the next launch over everything it writes.
+        // Nothing was re-keyed: they go now, and the upgrade is due again at
+        // the next launch.
+        log(LogLevel.info, '[WalletManager] A lock came first; the security-key upgrade waits');
+        try {
+          await GuardUpgradeFiles.cancel();
+        } catch (e) {
+          log(LogLevel.error, '[WalletManager] Could not delete the upgrade copies: $e');
+        }
+      } else if (upgrading) {
+        // No await since the check: from here a lock waits for the upgrade.
+        final upgrade = _upgradeToGuard(storedSeed, from: password);
         _guardUpgradeInFlight = upgrade;
         try {
           switch (await upgrade) {
@@ -616,7 +647,9 @@ class WalletManager with ChangeNotifier {
         }
       }
 
-      if (storedSeed != null) _openBackup(storedSeed.seed);
+      // Not opened again behind a lock that landed meanwhile; an unlock since
+      // then has put the password back and opens it as usual.
+      if (storedSeed != null && _password != null) _openBackup(storedSeed.seed);
       await applyViewOnlySetting();
     } finally {
       _openWalletFilesInFlight = null;
@@ -750,7 +783,7 @@ class WalletManager with ChangeNotifier {
             'Removing corrupt wallet file and re-bootstrapping.',
             coin: w.coinSymbol,
           );
-          await w.deleteFiles();
+          await w.deleteCorruptFiles();
           await _restoreOne(w, storedSeed.seed, storedSeed.from, _password!);
         } catch (e2) {
           log(LogLevel.error, 'Failed to re-bootstrap: $e2', coin: w.coinSymbol);
@@ -984,6 +1017,10 @@ class WalletManager with ChangeNotifier {
     // A new wallet starts unverified: the keystore can outlive an uninstall
     // (iOS), so a record from a wallet that was here before must not carry over.
     await SeedCheckStore.delete();
+    // Address labels outlive an uninstall the same way. A new wallet starts
+    // with none; a restore gets its own back from the metadata backup, which
+    // opens below.
+    await clearAddressLabels();
 
     _setPassword(walletPassword, guarded ? _PasswordSource.guard : _passwordSource);
 
@@ -1014,7 +1051,8 @@ class WalletManager with ChangeNotifier {
   // only the new password opens. An upgrade the app did not live to finish is
   // therefore kept when the password the kept copy gives opens the guard's
   // record, and put back from the copies otherwise; a failure short of the
-  // commit puts it back at once.
+  // commit puts it back at once. A lock that lands while the wallets open,
+  // before the upgrade begins, cancels it: the copies go, unused.
 
   /// The upgrade under way, which a lock waits for: it must not drop the
   /// password, or take Monero into background mode, halfway through.
@@ -1048,6 +1086,7 @@ class WalletManager with ChangeNotifier {
     try {
       await GuardUpgradeFiles.backUp([
         await SeedStore.path(),
+        await addressLabelsPath(),
         for (final w in _wallets.values) ...await w.walletPasswordFilePaths(),
       ]);
       return true;
@@ -1063,12 +1102,15 @@ class WalletManager with ChangeNotifier {
     }
   }
 
-  /// The upgrade, with the wallets open under the old password.
-  Future<_GuardUpgrade> _upgradeToGuard(({SeedSource seed, RestorePoint from})? storedSeed) async {
-    final guard = passwordGuard!;
-    final store = WalletPasswordStore.current;
-    final from = _password!;
+  /// The upgrade, with the wallets open under [from], the password the open
+  /// began with. Any failure, however early, puts it back.
+  Future<_GuardUpgrade> _upgradeToGuard(
+    ({SeedSource seed, RestorePoint from})? storedSeed, {
+    required String from,
+  }) async {
     try {
+      final guard = passwordGuard!;
+      final store = WalletPasswordStore.current;
       // Every wallet with a file must be open: one left closed would keep the
       // old password after the commit, and never open again.
       for (final w in _visibleWallets) {
@@ -1090,6 +1132,7 @@ class WalletManager with ChangeNotifier {
         for (final w in _wallets.values) {
           await w.changeWalletPassword(from: from, to: to);
         }
+        await rekeyAddressLabels(from: from, to: to);
       }
       await SeedStore.save(seed: kept.seed, from: kept.from, password: to);
       await guard.keepForNewWallet(to);
@@ -1216,7 +1259,7 @@ class WalletManager with ChangeNotifier {
   ///
   /// [extraPrefKeys] lets the app clear its own (pending txs, notification
   /// state) in the same pass; the manager does not know them. The address book
-  /// and the app's settings outlive the wallet.
+  /// and the app's settings outlive the wallet; its address labels do not.
   Future<void> deleteAll({List<String> extraPrefKeys = const []}) async {
     AppSession.lock();
     // The guard first: one left behind by a delete cut short would make the
@@ -1246,6 +1289,9 @@ class WalletManager with ChangeNotifier {
       log(LogLevel.error, '[WalletManager] Failed to delete stored seed: $e');
     }
     await SeedCheckStore.delete();
+    // The labels name this seed's addresses. A restore from the seed brings
+    // them back from the metadata backup.
+    await clearAddressLabels();
 
     _password = null;
     final store = WalletPasswordStore.current;

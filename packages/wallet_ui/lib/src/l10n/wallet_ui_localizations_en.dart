@@ -483,7 +483,7 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
   String get receiveSubaddressTab => 'Subaddress';
 
   @override
-  String get receivePrimaryTab => 'Primary Address';
+  String get receivePrimaryTab => 'Primary';
 
   @override
   String get receiveCopyAddress => 'Copy Address';
@@ -653,6 +653,19 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
   String get settingsAddressBookDeleted => 'Address book deleted';
 
   @override
+  String get settingsDeleteAddressLabelsButton => 'Delete Address Labels';
+
+  @override
+  String get settingsDeleteAddressLabelsDialogText =>
+      'Are you sure you want to delete your address labels? If automatic backup is turned on, it will also delete the address labels in these automatic backups.';
+
+  @override
+  String get settingsDeleteAddressLabelsDialogDeleteButton => 'Delete';
+
+  @override
+  String get settingsAddressLabelsDeleted => 'Address labels deleted';
+
+  @override
   String get txDetailsTitle => 'Transaction Details';
 
   @override
@@ -810,6 +823,10 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
       'Couldn\'t reach the server. Check your connection and try again.';
 
   @override
+  String get sendCoinsNotVerifiedError =>
+      'Couldn\'t verify your funds with this server, so nothing was sent. Try again or use a different server.';
+
+  @override
   String get torSettingsTitle => 'Tor Settings';
 
   @override
@@ -891,12 +908,17 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
       other: '$minutes minutes',
       one: '1 minute',
     );
-    return 'Unlocks in about $_temp0 · $done of $needed';
+    return 'Unlocks in about $_temp0\n$done of $needed';
   }
 
   @override
   String homeIncomingConfirmations(int done, int needed) {
     return '$done of $needed confirmations';
+  }
+
+  @override
+  String homeIncomingChange(String asset) {
+    return '$asset Change';
   }
 
   @override
@@ -936,6 +958,40 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
 
   @override
   String get homeChecklistSecurityKeys => 'Set Up a Security Key';
+
+  @override
+  String get securityChecklistLabel => 'Security Checklist';
+
+  @override
+  String get securityChecklistShown => 'Shown on home';
+
+  @override
+  String get securityChecklistHidden => 'Hidden from home';
+
+  @override
+  String get securityChecklistSheetSubtitle =>
+      'Choose whether your home screen shows this checklist, and which steps it reminds you about.';
+
+  @override
+  String get securityChecklistHomeSection => 'Home Screen';
+
+  @override
+  String get securityChecklistShowOnHome => 'Show on Home';
+
+  @override
+  String get securityChecklistShowOnHomeDesc => 'Until every step you keep below is done';
+
+  @override
+  String get securityChecklistStepsSection => 'Remind Me About';
+
+  @override
+  String get securityChecklistStepDone => 'Done';
+
+  @override
+  String get securityChecklistStepNotDone => 'Not done';
+
+  @override
+  String get securityChecklistSeedDone => 'Done · asked again every 6 months';
 
   @override
   String verifySeedSubtitle(int first, int second, int third) {
@@ -990,4 +1046,267 @@ class WalletUiLocalizationsEn extends WalletUiLocalizations {
   String generateSeedPasswordNote(String appName) {
     return '$appName Wallet asks for your password before showing these words again.';
   }
+
+  @override
+  String get receiveAddressTab => 'Address';
+
+  @override
+  String get receiveLabeledTab => 'Labeled';
+
+  @override
+  String get labeledCaption =>
+      'Optionally label addresses if you want to easily search for transactions involving them.';
+
+  @override
+  String labeledUsedHeader(String kind, int count) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Used Subaddresses',
+      'other': 'Used Addresses',
+    });
+    return '$_temp0 · $count';
+  }
+
+  @override
+  String labeledOnlyHeader(String kind, int count) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Labeled Subaddresses',
+      'other': 'Labeled Addresses',
+    });
+    return '$_temp0 · $count';
+  }
+
+  @override
+  String get labeledHideUnlabeled => 'Hide Unlabeled';
+
+  @override
+  String labeledAddressTitle(String kind, int index) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Subaddress #$index',
+      'other': 'Address #$index',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String labeledTransactionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transactions',
+      one: '1 transaction',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String labeledLastUsed(String time) {
+    return 'Last used $time';
+  }
+
+  @override
+  String get labeledLabelButton => 'Label';
+
+  @override
+  String labeledEmptyTitle(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'No used subaddresses yet',
+      'other': 'No used addresses yet',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String labeledEmptyBody(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'A subaddress shows up here after its first transaction.',
+      'other': 'An address shows up here after its first transaction.',
+    });
+    return 'Optionally label addresses if you want to easily search for transactions involving them. $_temp0';
+  }
+
+  @override
+  String labelSheetTitle(String kind, int index) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Label Subaddress #$index',
+      'other': 'Label Address #$index',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get labelSheetField => 'Label';
+
+  @override
+  String get labelSheetSave => 'Save Label';
+
+  @override
+  String get addressDetailTransactions => 'Transactions';
+
+  @override
+  String get addressDetailLastTransaction => 'Last Transaction';
+
+  @override
+  String get addressDetailEditLabel => 'Edit Label';
+
+  @override
+  String get addressDetailAddLabel => 'Add Label';
+
+  @override
+  String get historyFilterLabeledAddresses => 'Your Labeled Addresses';
+
+  @override
+  String get timeAgoMoment => 'a moment ago';
+
+  @override
+  String get timeAgoMinute => 'a minute ago';
+
+  @override
+  String timeAgoMinutes(int count) {
+    return '$count minutes ago';
+  }
+
+  @override
+  String get timeAgoHour => 'about an hour ago';
+
+  @override
+  String timeAgoHours(int count) {
+    return '$count hours ago';
+  }
+
+  @override
+  String get timeAgoDay => 'a day ago';
+
+  @override
+  String timeAgoDays(int count) {
+    return '$count days ago';
+  }
+
+  @override
+  String get timeAgoMonth => 'about a month ago';
+
+  @override
+  String timeAgoMonths(int count) {
+    return '$count months ago';
+  }
+
+  @override
+  String get timeAgoYear => 'about a year ago';
+
+  @override
+  String timeAgoYears(int count) {
+    return '$count years ago';
+  }
+
+  @override
+  String get a11yShare => 'Share';
+
+  @override
+  String get a11yScanQrCode => 'Scan QR Code';
+
+  @override
+  String get a11yFlashlight => 'Flashlight';
+
+  @override
+  String get a11ySwitchCamera => 'Switch Camera';
+
+  @override
+  String get a11yShowPassword => 'Show Password';
+
+  @override
+  String get a11yHidePassword => 'Hide Password';
+
+  @override
+  String get a11yClear => 'Clear';
+
+  @override
+  String get a11yRemove => 'Remove';
+
+  @override
+  String get a11yHide => 'Hide';
+
+  @override
+  String a11yCopyValue(String label) {
+    return 'Copy $label';
+  }
+
+  @override
+  String a11yWordOfCount(int index, int count) {
+    return 'Word $index of $count';
+  }
+
+  @override
+  String a11yStepOfCount(int step, int count) {
+    return 'Step $step of $count';
+  }
+
+  @override
+  String get a11yLoading => 'Loading';
+
+  @override
+  String get a11yRecoveryPhrase => 'Recovery Phrase';
+
+  @override
+  String get a11ySearch => 'Search';
+
+  @override
+  String get a11yMonth => 'Month';
+
+  @override
+  String get a11yYear => 'Year';
+
+  @override
+  String get a11yTxFailed => 'Failed';
+
+  @override
+  String get a11yTxUnknown => 'Not confirmed as sent';
+
+  @override
+  String a11yAddressEnds(String start, String end) {
+    return '$start, ending $end';
+  }
+
+  @override
+  String get a11yAddressQr => 'QR code of this address';
+
+  @override
+  String get a11yOverTor => 'Over Tor';
+
+  @override
+  String get a11yOverHttps => 'Over HTTPS';
+
+  @override
+  String get trimDecimalsLabel => 'Trim Decimals';
+
+  @override
+  String get trimDecimalsSheetSubtitle =>
+      'Hide the last digits of coin amounts when they are worth less than this. Send, confirm and transaction details always show every digit.';
+
+  @override
+  String get trimDecimalsOff => 'Off';
+
+  @override
+  String trimDecimalsBelow(String amount) {
+    return 'Below $amount';
+  }
+
+  @override
+  String get trimDecimalsEveryDigit => 'Every digit';
+
+  @override
+  String get trimDecimalsWaiting => 'Starts once prices load';
+
+  @override
+  String get trimDecimalsPreviewSection => 'At This Setting';
+
+  @override
+  String trimDecimalsRateNote(String coin, String price) {
+    return 'At 1 $coin ≈ $price. Digits follow the price.';
+  }
+
+  @override
+  String get trimDecimalsEachCoinNote => 'Each coin trims at its own price.';
+
+  @override
+  String get trimDecimalsLoadingNote =>
+      'Prices are still loading. Until they arrive, amounts use the digits saved from the last price, or show every digit.';
 }

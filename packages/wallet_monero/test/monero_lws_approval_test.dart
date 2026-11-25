@@ -98,6 +98,19 @@ void main() {
     expect(wallet.lwsPendingApproval, isNull);
   });
 
+  test('a send that fails while awaiting approval is not called a lost connection', () async {
+    await open('lws');
+    backend.connectToDaemonError = accountPending;
+    await connect();
+    expect(wallet.lwsPendingApproval, LwsPendingApproval.account);
+    backend.pendingError = 'Tx construction: $accountPending';
+
+    await expectLater(
+      wallet.createTx('4${'A' * 94}', BigInt.from(1000), false),
+      throwsA(isA<TxBuildFailure>().having((e) => e.problem, 'problem', TxBuildProblem.other)),
+    );
+  });
+
   test('a node has no light-wallet server to approve anything', () async {
     await open('node');
     backend.connectToDaemonError = accountPending;

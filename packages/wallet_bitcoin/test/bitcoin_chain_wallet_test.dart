@@ -104,7 +104,15 @@ void main() {
   /// Answers the subscribe/history/listunspent trio for the scripthashes in
   /// [used], and reports "no history" for everything else, which is what makes
   /// the gap-limit walk terminate.
-  void scriptUsed(Map<String, ({int valueSats, int height, String txHash, int vout})> used) {
+  ///
+  /// [bodies] are raw transactions by txid for `blockchain.transaction.get`.
+  /// A send checks each coin against its parent there, so a case that spends
+  /// needs the parent (see [ElectrumFixtures.fundingTx]); with none given, every
+  /// body request fails.
+  void scriptUsed(
+    Map<String, ({int valueSats, int height, String txHash, int vout})> used, {
+    Map<String, String> bodies = const {},
+  }) {
     String? statusFor(String sh) => used.containsKey(sh) ? 'status-$sh' : null;
 
     fake.handlers['blockchain.scripthash.subscribe'] = (params) => statusFor(params[0] as String);
@@ -125,9 +133,33 @@ void main() {
         ),
       ];
     };
-    // The history read asks for each discovered transaction; nothing in these
-    // cases needs the body, so answer with an error rather than a wrong shape.
-    fake.failing['blockchain.transaction.get'] = StateError('no tx bodies in this fixture');
+    if (bodies.isEmpty) {
+      // The history read asks for each discovered transaction; nothing in these
+      // cases needs the body, so answer with an error rather than a wrong shape.
+      fake.failing['blockchain.transaction.get'] = StateError('no tx bodies in this fixture');
+    } else {
+      // Anything else comes back empty, which the wallet treats as missing.
+      fake.failing.remove('blockchain.transaction.get');
+      fake.handlers['blockchain.transaction.get'] = (params) => bodies[params[0] as String];
+    }
+  }
+
+  /// A confirmed coin of [valueSats] on [address] with a real parent: what
+  /// [scriptUsed] takes, plus the parent to pass as one of its bodies.
+  ({
+    String sh,
+    ({int valueSats, int height, String txHash, int vout}) entry,
+    String txid,
+    String rawHex,
+  })
+  coin(String address, int valueSats, {int nonce = 0}) {
+    final parent = ElectrumFixtures.fundingTx(address: address, valueSats: valueSats, nonce: nonce);
+    return (
+      sh: _sh(address),
+      entry: (valueSats: valueSats, height: 799990, txHash: parent.txid, vout: 0),
+      txid: parent.txid,
+      rawHex: parent.rawHex,
+    );
   }
 
   Future<void> connectAndRefresh() async {
@@ -962,10 +994,15 @@ void main() {
   });
 
   group('send', () {
+    /// The txid of the coin [fundedWallet] holds.
+    late String fundingTxid;
+
     /// One 200,000-sat confirmed output on the first receive address.
     Future<void> fundedWallet() async {
       await restore();
-      scriptUsed({_sh(_receive0): (valueSats: 200000, height: 799990, txHash: _txidIn, vout: 0)});
+      final c = coin(_receive0, 200000);
+      fundingTxid = c.txid;
+      scriptUsed({c.sh: c.entry}, bodies: {c.txid: c.rawHex});
       await connectAndRefresh();
     }
 
@@ -982,7 +1019,7 @@ void main() {
 
       final btc = tx as BitcoinPendingTx;
       expect(btc.rawHex, isNotEmpty);
-      expect(btc.spentOutpoints.single.txHash, _txidIn);
+      expect(btc.spentOutpoints.single.txHash, fundingTxid);
       expect(btc.spentOutpoints.single.vout, 0);
     });
 
@@ -1008,7 +1045,7 @@ void main() {
 
       // The whole balance is spent, and the arithmetic closes.
       final btc = tx as BitcoinPendingTx;
-      expect(btc.spentOutpoints.single.txHash, _txidIn);
+      expect(btc.spentOutpoints.single.txHash, fundingTxid);
       expect(tx.amountBaseUnits + tx.feeBaseUnits, BigInt.from(200000));
     });
 
@@ -1286,12 +1323,162 @@ void main() {
       await fundedWallet();
       expect(wallet.commitTx(_NotABitcoinTx(), _theirs), throwsA(isA<ArgumentError>()));
     });
+
+    group('each coin is checked against its parent before signing', () {
+      // A SegWit v0 signature commits to its own
+      // input's value and no other, and that value is whatever `listunspent`
+      // said. A server that under-reports one coin, rejects the broadcast, then
+      // under-reports another coin on the retry gets two signings of one
+      // unsigned transaction, and can join the honest signature from each into
+      // a valid transaction that burns the difference as fee. The first lie
+      // has to stop the send, before anything is signed.
+      const realA = 500000;
+      const realB = 650000;
+      final a = coin(_receive0, realA);
+      final b = coin(_receive1, realB);
+
+      Matcher refused(TxBuildProblem problem) =>
+          throwsA(isA<TxBuildFailure>().having((e) => e.problem, 'problem', problem));
+
+      /// Coins A and B on the first two receive addresses. The server lists
+      /// them as worth [claimA] and [claimB] and serves [bodies], by default
+      /// both real parents.
+      Future<void> twoCoins({
+        int claimA = realA,
+        int claimB = realB,
+        Map<String, String>? bodies,
+      }) async {
+        await restore();
+        scriptUsed({
+          a.sh: (valueSats: claimA, height: 799990, txHash: a.txid, vout: 0),
+          b.sh: (valueSats: claimB, height: 799990, txHash: b.txid, vout: 0),
+        }, bodies: bodies ?? {a.txid: a.rawHex, b.txid: b.rawHex});
+        await connectAndRefresh();
+      }
+
+      test('an honest server still sends, spending both coins', () async {
+        await twoCoins();
+        final tx = await wallet.createTx(_theirs, BigInt.from(900000), false) as BitcoinPendingTx;
+        expect(tx.spentOutpoints.map((o) => o.txHash).toSet(), {a.txid, b.txid});
+        await expectLater(wallet.commitTx(tx, _theirs), completes);
+      });
+
+      // Two sweeps: each lie is one half of the spliced transaction.
+      for (final (claimA, claimB) in const [(realA, 1000), (1000, realB)]) {
+        test('a sweep with A told as $claimA and B as $claimB is refused unsigned', () async {
+          await twoCoins(claimA: claimA, claimB: claimB);
+          await expectLater(
+            wallet.createTx(_theirs, BigInt.zero, true),
+            refused(TxBuildProblem.coinsNotVerified),
+          );
+          expect(fake.broadcasts, isEmpty);
+
+          final written = await logged();
+          expect(written, contains('misreported'));
+          expect(written, isNot(contains(a.txid)));
+          expect(written, isNot(contains(b.txid)));
+        });
+      }
+
+      test('a normal send with change is checked too', () async {
+        // A send that is not a sweep: 900,000 out of a balance told as 950,000.
+        await twoCoins(claimA: 300000);
+        await expectLater(
+          wallet.createTx(_theirs, BigInt.from(900000), false),
+          refused(TxBuildProblem.coinsNotVerified),
+        );
+      });
+
+      test('an over-reported coin is refused as well', () async {
+        // Not a theft (the signature would not verify) but still a value the
+        // wallet was not entitled to sign.
+        await twoCoins(claimB: realB + 1);
+        await expectLater(
+          wallet.createTx(_theirs, BigInt.zero, true),
+          refused(TxBuildProblem.coinsNotVerified),
+        );
+      });
+
+      test('a parent the server will not serve is refused', () async {
+        await twoCoins(bodies: {a.txid: a.rawHex});
+        await expectLater(
+          wallet.createTx(_theirs, BigInt.zero, true),
+          refused(TxBuildProblem.coinsNotVerified),
+        );
+      });
+
+      test('a parent whose bytes hash to some other txid is refused', () async {
+        // Right address and value, so only the hash gives it away.
+        final impostor = coin(_receive1, realB, nonce: 9);
+        await twoCoins(bodies: {a.txid: a.rawHex, b.txid: impostor.rawHex});
+        await expectLater(
+          wallet.createTx(_theirs, BigInt.zero, true),
+          refused(TxBuildProblem.coinsNotVerified),
+        );
+      });
+
+      test('a coin whose parent pays somebody else is refused', () async {
+        final theirs = ElectrumFixtures.fundingTx(address: _theirs, valueSats: 200000);
+        await restore();
+        scriptUsed(
+          {_sh(_receive0): (valueSats: 200000, height: 799990, txHash: theirs.txid, vout: 0)},
+          bodies: {theirs.txid: theirs.rawHex},
+        );
+        await connectAndRefresh();
+        await expectLater(
+          wallet.createTx(_theirs, BigInt.zero, true),
+          refused(TxBuildProblem.coinsNotVerified),
+        );
+      });
+
+      test('an output index past the parent\'s last output is refused', () async {
+        await restore();
+        scriptUsed(
+          {a.sh: (valueSats: realA, height: 799990, txHash: a.txid, vout: 1)},
+          bodies: {a.txid: a.rawHex},
+        );
+        await connectAndRefresh();
+        await expectLater(
+          wallet.createTx(_theirs, BigInt.zero, true),
+          refused(TxBuildProblem.coinsNotVerified),
+        );
+      });
+
+      test('a coin past the parent\'s first output checks against that output', () async {
+        final later = ElectrumFixtures.fundingTx(address: _receive0, valueSats: 200000, vout: 2);
+        await restore();
+        scriptUsed(
+          {_sh(_receive0): (valueSats: 200000, height: 799990, txHash: later.txid, vout: 2)},
+          bodies: {later.txid: later.rawHex},
+        );
+        await connectAndRefresh();
+        await expectLater(wallet.createTx(_theirs, BigInt.zero, true), completes);
+      });
+
+      test('a checked coin is not fetched again', () async {
+        await fundedWallet();
+        await wallet.createTx(_theirs, BigInt.from(50000), false);
+        final fetches = fake.countOf('blockchain.transaction.get');
+        await wallet.createTx(_theirs, BigInt.from(60000), false);
+        expect(fake.countOf('blockchain.transaction.get'), fetches);
+      });
+
+      test('a connection lost while checking reads as not connected', () async {
+        await fundedWallet();
+        fake.failing['blockchain.transaction.get'] = const ElectrumDisconnectException();
+        await expectLater(
+          wallet.createTx(_theirs, BigInt.from(50000), false),
+          refused(TxBuildProblem.notConnected),
+        );
+      });
+    });
   });
 
   group('logging is redacted', () {
     test('a full send names no txid, scripthash or address in plaintext', () async {
       await restore();
-      scriptUsed({_sh(_receive0): (valueSats: 200000, height: 799990, txHash: _txidIn, vout: 0)});
+      final c = coin(_receive0, 200000);
+      scriptUsed({c.sh: c.entry}, bodies: {c.txid: c.rawHex});
       await connectAndRefresh();
       final tx = await wallet.createTx(_theirs, BigInt.from(50000), false);
       await wallet.commitTx(tx, _theirs);
@@ -1299,7 +1486,7 @@ void main() {
       final written = await logged();
       expect(written, isNotEmpty, reason: 'the assertions below would be vacuous');
       for (final secret in [
-        _txidIn,
+        c.txid,
         _txidOut,
         computeTxid((tx as BitcoinPendingTx).rawHex),
         _sh(_receive0),
@@ -1315,7 +1502,8 @@ void main() {
 
     test('a broadcast is still traceable through a fingerprint', () async {
       await restore();
-      scriptUsed({_sh(_receive0): (valueSats: 200000, height: 799990, txHash: _txidIn, vout: 0)});
+      final c = coin(_receive0, 200000);
+      scriptUsed({c.sh: c.entry}, bodies: {c.txid: c.rawHex});
       await connectAndRefresh();
       final tx = await wallet.createTx(_theirs, BigInt.from(50000), false);
       final txid = computeTxid((tx as BitcoinPendingTx).rawHex);

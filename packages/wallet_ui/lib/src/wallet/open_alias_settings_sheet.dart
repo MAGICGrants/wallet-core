@@ -126,13 +126,23 @@ class _OpenAliasSettingsSheetState extends State<_OpenAliasSettingsSheet> {
                           color: BrandColors.primaryDeep,
                         ),
                         const SizedBox(width: 11),
-                        Expanded(child: Text(l.title, style: BrandText.sheetTitle)),
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            namesRoute: true,
+                            child: Text(l.title, style: BrandText.sheetTitle),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 7),
-                    Text(
-                      l.subtitle,
-                      style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+                    // Its own node, so the sheet's heading stays the title alone.
+                    Semantics(
+                      container: true,
+                      child: Text(
+                        l.subtitle,
+                        style: BrandText.bodyMuted.copyWith(fontSize: 13, height: 1.5),
+                      ),
                     ),
                   ],
                 ),

@@ -12,32 +12,43 @@ class IconCircleButton extends StatelessWidget {
   final double size;
   final Color? color;
 
+  /// What a screen reader calls the button ("Back", "Close"): the icon alone
+  /// says nothing to one.
+  final String? semanticLabel;
+
   const IconCircleButton({
     super.key,
     required this.icon,
     required this.onPressed,
     this.size = 36,
     this.color,
+    this.semanticLabel,
   });
 
   @override
   Widget build(BuildContext context) {
     final target = size < 44 ? 44.0 : size;
-    return SizedBox(
-      width: target,
-      height: target,
-      child: Center(
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Material(
-            color: color ?? BrandColors.card,
-            shape: CircleBorder(side: BorderSide(color: BrandColors.border)),
-            child: InkWell(
-              mouseCursor: WidgetStateMouseCursor.clickable,
-              onTap: onPressed,
-              customBorder: const CircleBorder(),
-              child: Icon(icon, size: size * 0.5, color: BrandColors.ink),
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: onPressed != null,
+      label: semanticLabel,
+      child: SizedBox(
+        width: target,
+        height: target,
+        child: Center(
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Material(
+              color: color ?? BrandColors.card,
+              shape: CircleBorder(side: BorderSide(color: BrandColors.border)),
+              child: InkWell(
+                mouseCursor: WidgetStateMouseCursor.clickable,
+                onTap: onPressed,
+                customBorder: const CircleBorder(),
+                child: Icon(icon, size: size * 0.5, color: BrandColors.ink),
+              ),
             ),
           ),
         ),

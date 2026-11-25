@@ -1,5 +1,6 @@
 /// Seed-keyed metadata backup for Monero wallets: payment destinations,
-/// transaction keys and the address book, as many small sealed files.
+/// transaction keys, the address book and address labels, as many small sealed
+/// files.
 ///
 /// Pure Dart; the platform locations (iCloud) live in `wallet_backup_platform`.
 library;

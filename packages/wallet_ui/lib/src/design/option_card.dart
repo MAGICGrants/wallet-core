@@ -37,64 +37,80 @@ class OptionCard extends StatelessWidget {
     final end =
         trailing ??
         (tap != null ? Icon(Icons.chevron_right, color: BrandColors.inkFaint, size: 20) : null);
-    final card = DecoratedBox(
-      decoration: BoxDecoration(
-        color: BrandColors.card,
-        borderRadius: BrandRadii.rField,
-        border: Border.all(color: BrandColors.border),
-      ),
-      child: ClipRRect(
-        borderRadius: BrandRadii.rField,
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            mouseCursor: tap != null ? WidgetStateMouseCursor.clickable : MouseCursor.defer,
-            onTap: tap,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: BrandColors.surfaceSunken,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(icon, color: BrandColors.primary, size: 22),
-                      ),
-                      const SizedBox(width: 13),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: BrandColors.ink,
-                              ),
+    // A card whose only control is its trailing switch reads as that switch,
+    // named by the card's title; a tappable card is named by it already.
+    Widget mergeWithTrailing(Widget row) =>
+        tap == null && trailing != null ? MergeSemantics(child: row) : row;
+    final card = Semantics(
+      container: true,
+      button: tap != null ? true : null,
+      enabled: enabled ? null : false,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: BrandColors.card,
+          borderRadius: BrandRadii.rField,
+          border: Border.all(color: BrandColors.border),
+        ),
+        child: ClipRRect(
+          borderRadius: BrandRadii.rField,
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              mouseCursor: tap != null ? WidgetStateMouseCursor.clickable : MouseCursor.defer,
+              onTap: tap,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    mergeWithTrailing(
+                      Row(
+                        children: [
+                          Container(
+                            width: 46,
+                            height: 46,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: BrandColors.surfaceSunken,
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                            const SizedBox(height: 3),
-                            Text(description, style: BrandText.caption),
-                          ],
-                        ),
+                            child: Icon(icon, color: BrandColors.primary, size: 22),
+                          ),
+                          const SizedBox(width: 13),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: BrandColors.ink,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(description, style: BrandText.caption),
+                              ],
+                            ),
+                          ),
+                          if (end != null) ...[const SizedBox(width: BrandSpacing.sm), end],
+                        ],
                       ),
-                      if (end != null) ...[const SizedBox(width: BrandSpacing.sm), end],
+                    ),
+                    if (child != null) ...[
+                      const SizedBox(height: 12),
+                      Divider(height: 1, thickness: 1, color: BrandColors.border),
+                      const SizedBox(height: 12),
+                      // Its own controls and status, not part of the card's name.
+                      Semantics(
+                        container: true,
+                        explicitChildNodes: true,
+                        child: Padding(padding: const EdgeInsets.only(left: 59), child: child),
+                      ),
                     ],
-                  ),
-                  if (child != null) ...[
-                    const SizedBox(height: 12),
-                    Divider(height: 1, thickness: 1, color: BrandColors.border),
-                    const SizedBox(height: 12),
-                    Padding(padding: const EdgeInsets.only(left: 59), child: child),
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -102,7 +118,10 @@ class OptionCard extends StatelessWidget {
       ),
     );
     if (enabled) return card;
-    // Faded, and nothing in it answers: not the card, nor its trailing or child.
-    return IgnorePointer(child: Opacity(opacity: 0.55, child: card));
+    // Faded, and nothing in it answers: not the card, nor its trailing or
+    // child, and the keyboard skips it.
+    return ExcludeFocus(
+      child: IgnorePointer(child: Opacity(opacity: 0.55, child: card)),
+    );
   }
 }

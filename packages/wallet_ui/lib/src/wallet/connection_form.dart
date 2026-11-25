@@ -9,6 +9,7 @@ import '../design/brand_segmented.dart';
 import '../design/section_header.dart';
 import '../design/sheet.dart';
 import '../design/warning_callout.dart';
+import '../l10n/ui_strings.dart';
 import 'connection_pills.dart';
 
 /// Which test-card state the [ConnectionFormView] renders. The wrapper maps its
@@ -225,13 +226,22 @@ class ConnectionFormView extends StatelessWidget {
         keyboardType: TextInputType.url,
         onChanged: onAddressChanged,
         trailing: onScan != null
-            ? _FieldIconButton(icon: Icons.qr_code_2, onPressed: onScan!)
+            ? _FieldIconButton(
+                icon: Icons.qr_code_2,
+                semanticLabel: uiStringsOf(context)?.a11yScanQrCode,
+                onPressed: onScan!,
+              )
             : null,
       ),
       if (errorMessage != null)
         Padding(
           padding: const EdgeInsets.only(top: 6, left: 4),
-          child: Text(errorMessage!, style: BrandText.caption.copyWith(color: BrandColors.error)),
+          // Spoken as it appears or changes.
+          child: Semantics(
+            container: true,
+            liveRegion: true,
+            child: Text(errorMessage!, style: BrandText.caption.copyWith(color: BrandColors.error)),
+          ),
         ),
       const SizedBox(height: 16),
       _InsetField(
@@ -369,7 +379,10 @@ class _InsetField extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       child: Row(
         children: [
-          Expanded(child: field),
+          // Named by the label above it; the placeholder goes once it is typed in.
+          Expanded(
+            child: Semantics(label: label ?? hint, child: field),
+          ),
           ?trailing,
         ],
       ),
@@ -395,13 +408,17 @@ class _FieldIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
 
-  const _FieldIconButton({required this.icon, required this.onPressed});
+  /// What a screen reader calls it: the icon alone says nothing.
+  final String? semanticLabel;
+
+  const _FieldIconButton({required this.icon, required this.onPressed, this.semanticLabel});
 
   @override
   Widget build(BuildContext context) {
     return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onPressed,
+      semanticLabel: semanticLabel,
       child: Padding(
         padding: const EdgeInsets.only(left: 8),
         child: Icon(icon, size: 20, color: BrandColors.primaryDeep),
@@ -428,9 +445,13 @@ class _CheckRow extends StatelessWidget {
         children: [
           // Tap target is the check + label; vertical padding here sets the row
           // height (no extra slop on the box, which was bloating the gaps).
+          // A checkbox, named by its label; dimmed while it can't be changed.
           Tappable(
             behavior: HitTestBehavior.opaque,
             onTap: onTap,
+            checked: checked,
+            enabled: enabled,
+            focusRadius: BorderRadius.circular(6),
             cursor: enabled ? null : SystemMouseCursors.forbidden,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 7),
@@ -494,10 +515,13 @@ class _Spinner extends StatelessWidget {
     return SizedBox(
       width: 22,
       height: 22,
-      child: CircularProgressIndicator(
-        strokeWidth: 2.4,
-        color: BrandColors.primaryDeep,
-        backgroundColor: BrandColors.border,
+      // The title beside it says what is under way.
+      child: ExcludeSemantics(
+        child: CircularProgressIndicator(
+          strokeWidth: 2.4,
+          color: BrandColors.primaryDeep,
+          backgroundColor: BrandColors.border,
+        ),
       ),
     );
   }
@@ -531,13 +555,18 @@ class _StatusRowCard extends StatelessWidget {
                 leading,
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 1.2,
-                      fontWeight: FontWeight.w700,
-                      color: BrandColors.ink,
+                  // Spoken when the state changes: Tor starting, a test running.
+                  child: Semantics(
+                    container: true,
+                    liveRegion: true,
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                        color: BrandColors.ink,
+                      ),
                     ),
                   ),
                 ),
@@ -618,13 +647,18 @@ class _ResultCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 1.2,
-                      fontWeight: FontWeight.w700,
-                      color: titleColor,
+                  // The test's result, spoken as it arrives.
+                  child: Semantics(
+                    container: true,
+                    liveRegion: true,
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                        color: titleColor,
+                      ),
                     ),
                   ),
                 ),

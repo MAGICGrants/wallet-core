@@ -359,15 +359,30 @@ class MoneroWallet extends CryptoWallet {
     final path = target?.path ?? await resolveWalletPath();
     final openPassword = target?.password ?? password;
 
-    final wallet = await _backend.openWallet(
+    var wallet = await _backend.openWallet(
       manager,
       path: path,
       password: openPassword,
       networkType: networkType,
     );
-    final error = await _backend.walletErrorString(wallet);
+    var error = await _backend.walletErrorString(wallet);
+    final lws = target == null && !_isNodeMode;
+    if (error.isNotEmpty && lws && _isUnreadableLwsFile(error)) {
+      final reopened = await _openPassingOverUnfinishedSave(manager, wallet, path, openPassword);
+      if (reopened != null) {
+        wallet = reopened;
+        error = '';
+      }
+    }
     if (error.isNotEmpty) {
       walletLog(LogLevel.error, 'openWallet error: $error');
+      if (lws && _isUnreadableLwsFile(error)) {
+        // Typed so the wallet manager rebuilds it from the stored seed, as it
+        // does other coins' damaged files. It does that only when the seed
+        // store opened with this same password, which is what tells a damaged
+        // file from a wrong password: lwsf reports both as a failed decrypt.
+        throw FormatException('LWS wallet file is corrupt or unreadable: $error');
+      }
       throw Exception('openWallet error: $error');
     }
 
@@ -405,6 +420,55 @@ class MoneroWallet extends CryptoWallet {
     // run: it holds no wallet password, and `setupBackgroundSync` refuses to run
     // from a background cache anyway.
     if (target == null) await applyBackgroundSyncSetting(password: password);
+  }
+
+  /// Whether [error], from opening an LWS wallet, means the file could not be
+  /// read: it did not decrypt, or what decrypted did not parse. A wrong
+  /// password reads the same as a damaged file here.
+  static bool _isUnreadableLwsFile(String error) {
+    final e = error.toLowerCase();
+    return e.contains('decrypt') ||
+        e.contains('msgpack') ||
+        e.contains('schema') ||
+        e.contains('unable to open wallet file');
+  }
+
+  /// Opens the LWS wallet at [path] again without its unfinished save, after
+  /// [failed] could not be read; null if that fails too.
+  ///
+  /// lwsf saves to `<path>.new` and renames it over the wallet file. A save cut
+  /// short (a full disk, a kill mid-write) leaves a `.new` that builds before
+  /// the lwsf fix still load first, fail to decrypt, and stop at, though the
+  /// wallet file beside it is intact. So the `.new` is set aside and the open
+  /// tried once more. If that works, the `.new` did not decrypt with the
+  /// password that opens the wallet, and is deleted. If it fails as well, the
+  /// trouble is elsewhere (a wrong password, say), and the `.new`, which may be
+  /// the newest save there is, goes back where it was.
+  Future<NativeHandle?> _openPassingOverUnfinishedSave(
+    NativeHandle manager,
+    NativeHandle failed,
+    String path,
+    String password,
+  ) async {
+    final pending = File('$path.new');
+    if (!await pending.exists()) return null;
+
+    await _backend.closeWallet(manager, failed, store: false);
+    final aside = await pending.rename('$path.new.unopened');
+    final wallet = await _backend.openWallet(
+      manager,
+      path: path,
+      password: password,
+      networkType: networkType,
+    );
+    if ((await _backend.walletErrorString(wallet)).isEmpty) {
+      walletLog(LogLevel.warn, 'Opened the LWS wallet past an unfinished save that would not open');
+      await aside.delete();
+      return wallet;
+    }
+    await _backend.closeWallet(manager, wallet, store: false);
+    await aside.rename(pending.path);
+    return null;
   }
 
   /// True when the open wallet is the view-only background cache rather than the
@@ -1058,12 +1122,18 @@ class MoneroWallet extends CryptoWallet {
   /// without them leaves an orphaned cache holding this wallet's view key and
   /// the transactions it saw; with nothing that will ever open it again to
   /// notice.
+  ///
+  /// `<path>.new` is lwsf's unfinished save. Builds of lwsf before the
+  /// full-disk fix open it in preference to the wallet file and rename it over
+  /// a fresh one at the first save, so one left behind would break the wallet
+  /// a restore had just rebuilt.
   static List<String> _walletFilesFor(String path) {
     final background = backgroundPathFor(path);
     return [
       path,
       '$path.keys',
       '$path.address.txt',
+      '$path.new',
       background,
       '$background.keys',
       '$background.address.txt',
@@ -1377,6 +1447,15 @@ class MoneroWallet extends CryptoWallet {
     await _backend.pauseRefresh(wallet);
   }
 
+  /// Only the current mode's files: the one that failed to open. The other
+  /// mode's file, if this wallet ever had one, opened fine the last time and
+  /// holds that mode's own transaction keys and notes.
+  @override
+  Future<void> deleteCorruptFiles() async {
+    await _closeOpenWallet();
+    await _deleteWalletFilesForCurrentMode();
+  }
+
   @override
   Future<void> deleteFiles() async {
     await _closeOpenWallet();
@@ -1421,6 +1500,8 @@ class MoneroWallet extends CryptoWallet {
     _unusedSubaddressIndexIsSupported = null;
     _primaryAddress = '';
     _subaddressCache = null;
+    _usedSubaddresses.clear();
+    _cachedHistory = const [];
   }
 
   @override
@@ -1962,6 +2043,14 @@ class MoneroWallet extends CryptoWallet {
       withTxKeys: !_isBackgroundWallet && !_inBackgroundMode,
     );
 
+    // The time each transaction was shown at before: the last read, or the
+    // history saved with the wallet when nothing has been read since it opened.
+    final shownBefore = <String, int>{
+      for (final tx in txHistory) tx.hash: tx.timestamp,
+      for (final tx in _cachedHistory) tx.hash: tx.timestamp,
+    };
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
     final out = <TxDetails>[];
     for (var i = 0; i < infos.length; i++) {
       final info = infos[i];
@@ -1980,7 +2069,7 @@ class MoneroWallet extends CryptoWallet {
               .map((s) => int.tryParse(s.trim()))
               .whereType<int>()
               .toList(),
-          timestamp: info.timestamp,
+          timestamp: shownTimestamp(info.timestamp, before: shownBefore[info.hash], now: now),
           height: info.blockHeight,
           confirmations: info.confirmations,
           // The transaction secret key, which is what both apps put here and
@@ -1994,6 +2083,31 @@ class MoneroWallet extends CryptoWallet {
     // Newest first, matching what the UI expects.
     out.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     _cachedHistory = out;
+  }
+
+  /// How far ahead of this device's clock a reported time may be and still be
+  /// taken as real. A block's time may run up to two hours ahead of the
+  /// network's; nothing real is a day ahead.
+  static const _maxReportedAhead = Duration.secondsPerDay;
+
+  /// The Unix seconds a transaction is shown and sorted at.
+  ///
+  /// A transaction not yet in a block has no block time. wallet2 gives it the
+  /// time it was sent or seen, but LWSF gives it a placeholder once the light
+  /// wallet server has synced it: the largest time it can hold (the smallest
+  /// for a failed one). Multiplied into milliseconds either one wraps around
+  /// to the edge of 1970, so the send sat under "31 December" in the history
+  /// until it was mined. 0 is no time either. In its place goes the time this
+  /// wallet
+  /// showed the transaction at [before] (the send time LWSF recorded before
+  /// the server's sync replaced it, or when it was first seen), or [now] the
+  /// first time.
+  @visibleForTesting
+  static int shownTimestamp(int reported, {int? before, required int now}) {
+    bool real(int t) => t > 0 && t <= now + _maxReportedAhead;
+    if (real(reported)) return reported;
+    if (before != null && real(before)) return before;
+    return now;
   }
 
   /// Caches [info]'s transaction key, including the *absence* of one, but not
@@ -2248,17 +2362,88 @@ class MoneroWallet extends CryptoWallet {
   /// receive screen toggles between this and the primary itself.
   String? getUnusedSubaddress() => unusedSubaddress?.address;
 
+  @override
+  RotatingAddressKind get rotatingAddressKind => RotatingAddressKind.subaddress;
+
+  /// Subaddresses of account 0 derived for [loadUsedReceiveAddresses], by
+  /// index: each is a native call, and an index's address never changes.
+  final Map<int, String> _usedSubaddresses = {};
+
+  /// Every subaddress of account 0 that has received a transaction. Spends from
+  /// a subaddress also carry its index ([TxDetails.subaddrIndexList] on an
+  /// outgoing entry names the subaddresses spent from), so only incoming
+  /// entries count, and index 0, the primary address, is left out.
+  ///
+  /// wallet2 (node mode) lists a transaction that paid two subaddresses as two
+  /// entries, each with its own index and amount.
+  ///
+  /// **Known limitation, LWS mode:** lwsf lists such a transaction once, with
+  /// every index and only the total. The whole amount, and the transaction, are
+  /// credited to the first index, as [_recipientsFor] attributes it in the
+  /// transaction's details, rather than split by a guess; the other
+  /// subaddresses it paid show no receipt from it, and one that only ever
+  /// received that way is missing from the list.
+  @override
+  Future<List<UsedReceiveAddress>> loadUsedReceiveAddresses() async {
+    final receipts = <AddressReceipt>[];
+    for (final tx in txHistory) {
+      if (tx.direction != txDirectionIncoming || tx.accountIndex != 0) continue;
+      final index = tx.subaddrIndexList.isEmpty ? null : tx.subaddrIndexList.first;
+      if (index == null || index < 1) continue;
+      final address =
+          tx.recipients.where((r) => !r.isChange).firstOrNull?.address ??
+          await _subaddressAt(index);
+      if (address == null || address.isEmpty) continue;
+      receipts.add((
+        address: address,
+        index: index,
+        amountBaseUnits: tx.amountBaseUnits,
+        txHash: tx.hash,
+        timestamp: tx.timestamp,
+      ));
+    }
+    return summarizeReceipts(receipts);
+  }
+
+  Future<String?> _subaddressAt(int index) async {
+    final known = _usedSubaddresses[index];
+    if (known != null) return known;
+    final wallet = _wallet;
+    if (wallet == null) return null;
+    final address = await _backend.address(wallet, accountIndex: 0, addressIndex: index);
+    if (address.isNotEmpty) _usedSubaddresses[index] = address;
+    return address;
+  }
+
   /// The network this wallet's addresses belong to.
   ///
   /// Both apps ship Monero mainnet only. Named so the wallet factory and the
   /// address validator cannot disagree about it.
   int get networkType => _networkTypeOverride ?? MoneroConsts.mainnetNetworkType;
 
+  /// Payable by this wallet: [_hasAddressForm] checks its characters and
+  /// length, then monero_c decodes it and checks its checksum and network.
   @override
   bool isAddressValid(String address) {
-    if (address.isEmpty) return false;
+    if (!_hasAddressForm(address)) return false;
     return _backend.addressValid(address, networkType);
   }
+
+  /// Whether [address] has the form of a Monero address: only characters of
+  /// Monero's base58 alphabet, and 95 of them (a standard address or a
+  /// subaddress) or 106 (an integrated address). Checked before any address
+  /// goes to monero_c, which reads a NUL-terminated copy: an address followed
+  /// by U+0000 and anything at all would reach C as the address alone, while
+  /// the screens show the whole string. The alphabet also refuses spaces, line
+  /// breaks and invisible characters. Prefix, checksum and network stay
+  /// monero_c's to judge.
+  static bool _hasAddressForm(String address) =>
+      (address.length == _addressLength || address.length == _integratedAddressLength) &&
+      _base58.hasMatch(address);
+
+  static const _addressLength = 95;
+  static const _integratedAddressLength = 106;
+  static final _base58 = RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$');
 
   /// `Wallet_estimateTransactionFee` exists only in `magicgrants/monero_c`,
   /// which is why the build pins that fork.
@@ -2271,6 +2456,10 @@ class MoneroWallet extends CryptoWallet {
     final wallet = _wallet;
     if (wallet == null) {
       walletLog(LogLevel.warn, 'estimateFee: no open wallet');
+      return null;
+    }
+    if (!_hasAddressForm(destinationAddress)) {
+      walletLog(LogLevel.warn, 'estimateFee: the destination is not a Monero address');
       return null;
     }
     try {
@@ -2312,6 +2501,15 @@ class MoneroWallet extends CryptoWallet {
     await waitForSpendKeys();
     final wallet = _wallet;
     if (wallet == null) throw Exception('No open Monero wallet.');
+    // The Send forms check the address first; this holds for any caller that
+    // does not, so the build never pays a different address than the confirm
+    // sheet shows ([_hasAddressForm]).
+    if (!_hasAddressForm(destinationAddress)) {
+      throw const TxBuildFailure(
+        TxBuildProblem.other,
+        detail: 'the destination is not a Monero address',
+      );
+    }
 
     // Amount and destination are never logged.
     walletLog(
@@ -2319,6 +2517,10 @@ class MoneroWallet extends CryptoWallet {
       'Creating tx to ${Redact.id(destinationAddress)} '
       '${Redact.amount(amountBaseUnits)} sweep=$isSweepAll',
     );
+
+    // Read before the build too: the build can wait on the server long enough
+    // for a connect to finish meanwhile.
+    final wasConnected = isConnected;
 
     // The fee is wallet2's, chosen inside monero_c from `priority` and the
     // daemon's own estimate. Nothing in Dart picks it and nothing here bounds
@@ -2336,7 +2538,15 @@ class MoneroWallet extends CryptoWallet {
     final error = await _backend.pendingTxErrorString(handle);
     if (error.isNotEmpty) {
       walletLog(LogLevel.error, 'Failed to create transaction: $error');
-      throw Exception(error);
+      // Without a connection LWSF fails for want of fees, a login or decoys,
+      // worded "Tx construction: ..." or as a bare socket error, which tells
+      // the user nothing. An account awaiting the server's approval has its own
+      // state and screen, so it is not reported as a lost connection.
+      final notConnected = (!wasConnected || !isConnected) && lwsPendingApproval == null;
+      throw TxBuildFailure(
+        notConnected ? TxBuildProblem.notConnected : TxBuildProblem.other,
+        detail: error,
+      );
     }
 
     return MoneroPendingTransaction(

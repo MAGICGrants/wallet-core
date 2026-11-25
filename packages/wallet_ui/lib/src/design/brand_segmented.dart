@@ -45,6 +45,8 @@ class BrandSegmented extends StatelessWidget {
     return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: () => onSelect(i),
+      selected: selected,
+      focusRadius: BorderRadius.circular(11),
       child: Container(
         padding: EdgeInsets.symmetric(vertical: dense ? 9 : 16),
         alignment: Alignment.center,

@@ -7,6 +7,7 @@ import 'package:wallet_fhse/security_keys_ui.dart';
 import 'package:wallet_fhse/src/key_reply.dart';
 import 'package:wallet_fhse/src/security_key_backend.dart';
 import 'package:wallet_fhse/wallet_fhse.dart';
+import 'package:wallet_infra/wallet_infra.dart' show SecureScreenMixin;
 
 /// The key-first flow against a simulated native side: what `inspect` reports
 /// decides the steps, and the status events the key sends while it waits
@@ -185,6 +186,16 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('the flow, where a PIN is typed, is a protected screen while open', (tester) async {
+    // No screenshots or recordings, and on Android 14+ only accessibility
+    // tools can read it (SecureScreenMixin).
+    SecureScreenMixin.resetForTesting();
+    await pumpFlow(tester, enrolling: true, useKey: (_, _) async => null);
+    expect(SecureScreenMixin.mountedProtectedScreens, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(SecureScreenMixin.mountedProtectedScreens, 0);
+  });
+
   testWidgets('adding a key: touch, PIN, two touches, then a name', (tester) async {
     final result = Completer<SecurityKeyRecord?>();
     KeyVerification? used;
@@ -243,6 +254,23 @@ void main() {
     expect(find.text("Enter Your Key's PIN"), findsOneWidget);
     expect(find.text('Incorrect PIN. 2 attempts left before the key locks.'), findsOneWidget);
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
+  });
+
+  testWidgets('a shown PIN still gets no autocorrect, suggestions or keyboard learning', (
+    tester,
+  ) async {
+    await pumpFlow(tester, enrolling: false, useKey: (_, _) async => null);
+    await tap(tester, 'Connect Key');
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pump();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.obscureText, isFalse);
+    expect(field.autocorrect, isFalse);
+    expect(field.enableSuggestions, isFalse);
+    expect(field.enableIMEPersonalizedLearning, isFalse);
+    expect(field.smartDashesType, SmartDashesType.disabled);
+    expect(field.smartQuotesType, SmartQuotesType.disabled);
   });
 
   testWidgets('a YubiKey Bio skips the PIN and asks for its sensor', (tester) async {

@@ -9,10 +9,12 @@ import '../design/brand_card.dart';
 import '../design/click_cursor.dart';
 import '../design/brand_screen_header.dart';
 import '../design/brand_segmented.dart';
+import '../design/dropdown_layer.dart';
 import '../design/icon_circle_button.dart';
 import '../design/section_header.dart';
 import '../design/share_anchor.dart';
 import '../design/warning_callout.dart';
+import '../l10n/ui_strings.dart';
 import 'coin_mark.dart';
 
 /// A selectable receiving asset for [ReceiveView]'s dropdown.
@@ -89,6 +91,11 @@ class ReceiveView extends StatelessWidget {
   /// keeps the QR at its normal size and hides the hint.
   final VoidCallback? onToggleQr;
 
+  /// What the selected tab shows instead of the QR card, the warning and the
+  /// Copy button: the Labeled tab's list of used addresses. It has no single
+  /// address, so the share button goes too.
+  final Widget? tabBody;
+
   const ReceiveView({
     super.key,
     required this.labels,
@@ -110,6 +117,7 @@ class ReceiveView extends StatelessWidget {
     this.onSelectAsset,
     this.qrEnlarged = false,
     this.onToggleQr,
+    this.tabBody,
   });
 
   @override
@@ -132,7 +140,13 @@ class ReceiveView extends StatelessWidget {
             coinName: name,
             blockchainSubtitle: blockchainSubtitle,
           );
-    final spinner = Center(child: CircularProgressIndicator(color: BrandColors.primary));
+    final strings = uiStringsOf(context);
+    final spinner = Center(
+      child: CircularProgressIndicator(
+        color: BrandColors.primary,
+        semanticsLabel: strings?.a11yLoading,
+      ),
+    );
 
     return Scaffold(
       backgroundColor: BrandColors.paper,
@@ -151,10 +165,11 @@ class ReceiveView extends StatelessWidget {
                     // Builder so the rect handed to [onShare] is the share
                     // button's own, not the whole screen's: it is what the iOS
                     // share popover points at.
-                    action: onShare != null
+                    action: onShare != null && tabBody == null
                         ? Builder(
                             builder: (context) => IconCircleButton(
                               icon: Icons.ios_share,
+                              semanticLabel: strings?.a11yShare,
                               onPressed: ready ? () => onShare!(shareAnchorRect(context)) : null,
                             ),
                           )
@@ -187,26 +202,32 @@ class ReceiveView extends StatelessWidget {
                                   onSelect: onSelectTab ?? (_) {},
                                 ),
                               ],
-                              const SizedBox(height: 14),
-                              _QrCard(
-                                address: address,
-                                heading: qrHeading,
-                                onCopy: onCopy,
-                                enlarged: qrEnlarged,
-                                onToggle: onToggleQr,
-                                hint: qrEnlarged ? labels.shrinkQr : labels.enlargeQr,
-                                viewportHeight: viewport.maxHeight,
-                              ),
-                              if (warning != null) ...[
+                              if (tabBody case final body?) ...[
                                 const SizedBox(height: 14),
-                                WarningCard.text(warning!),
+                                body,
+                              ] else ...[
+                                const SizedBox(height: 14),
+                                ReceiveQrCard(
+                                  address: address,
+                                  heading: qrHeading,
+                                  onCopy: onCopy,
+                                  copyLabel: labels.copyAddress,
+                                  enlarged: qrEnlarged,
+                                  onToggle: onToggleQr,
+                                  hint: qrEnlarged ? labels.shrinkQr : labels.enlargeQr,
+                                  viewportHeight: viewport.maxHeight,
+                                ),
+                                if (warning != null) ...[
+                                  const SizedBox(height: 14),
+                                  WarningCard.text(warning!),
+                                ],
+                                const SizedBox(height: 14),
+                                BrandButton(
+                                  label: labels.copyAddress,
+                                  icon: Icons.copy_outlined,
+                                  onPressed: onCopy,
+                                ),
                               ],
-                              const SizedBox(height: 14),
-                              BrandButton(
-                                label: labels.copyAddress,
-                                icon: Icons.copy_outlined,
-                                onPressed: onCopy,
-                              ),
                             ],
                           ),
                         ),
@@ -301,17 +322,31 @@ class ReceiveAssetSelectorCard extends StatefulWidget {
 class ReceiveAssetSelectorCardState extends State<ReceiveAssetSelectorCard> {
   final LayerLink _link = LayerLink();
   final OverlayPortalController _menu = OverlayPortalController();
+  final FocusNode _trigger = FocusNode(debugLabel: 'ReceiveAssetSelector');
   bool _open = false;
 
+  /// Opened from the keyboard (the trigger had focus): focus goes into the
+  /// list, and back to the trigger when it closes.
+  bool _byKeyboard = false;
+
   void _toggle() {
-    setState(() => _open = !_open);
-    _open ? _menu.show() : _menu.hide();
+    if (_open) return _close();
+    _byKeyboard = _trigger.hasPrimaryFocus;
+    setState(() => _open = true);
+    _menu.show();
   }
 
   void _close() {
     if (!_open) return;
     setState(() => _open = false);
     _menu.hide();
+    if (_byKeyboard) _trigger.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    _trigger.dispose();
+    super.dispose();
   }
 
   @override
@@ -352,44 +387,48 @@ class ReceiveAssetSelectorCardState extends State<ReceiveAssetSelectorCard> {
       child: OverlayPortal(
         controller: _menu,
         overlayChildBuilder: _dropdown,
-        child: Tappable(onTap: _toggle, child: trigger),
+        // A dropdown: read as one button, with whether its list is open.
+        child: Tappable(
+          onTap: _toggle,
+          focusNode: _trigger,
+          expanded: _open,
+          focusRadius: BorderRadius.circular(16),
+          child: trigger,
+        ),
       ),
     );
   }
 
   Widget _dropdown(BuildContext ctx) {
     final width = math.min(MediaQuery.of(ctx).size.width, 480.0) - 32;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _close),
-        ),
-        CompositedTransformFollower(
-          link: _link,
-          showWhenUnlinked: false,
-          targetAnchor: Alignment.bottomLeft,
-          followerAnchor: Alignment.topLeft,
-          offset: const Offset(0, 6),
-          child: SizedBox(
-            width: width,
-            child: Material(
-              color: Colors.transparent,
-              child: BrandCard(
-                radius: 20,
-                clipBehavior: Clip.antiAlias,
-                shadow: const [
-                  BoxShadow(color: Color(0x1F2C170C), blurRadius: 24, offset: Offset(0, 12)),
-                ],
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [for (final o in widget.options) _row(o)],
-                ),
+    return DropdownLayer(
+      onClose: _close,
+      takeFocus: _byKeyboard,
+      menu: CompositedTransformFollower(
+        link: _link,
+        showWhenUnlinked: false,
+        targetAnchor: Alignment.bottomLeft,
+        followerAnchor: Alignment.topLeft,
+        offset: const Offset(0, 6),
+        child: SizedBox(
+          width: width,
+          child: Material(
+            color: Colors.transparent,
+            child: BrandCard(
+              radius: 20,
+              clipBehavior: Clip.antiAlias,
+              shadow: const [
+                BoxShadow(color: Color(0x1F2C170C), blurRadius: 24, offset: Offset(0, 12)),
+              ],
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [for (final o in widget.options) _row(o)],
               ),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -397,53 +436,59 @@ class ReceiveAssetSelectorCardState extends State<ReceiveAssetSelectorCard> {
     final selected = o.coinSymbol == widget.coinSymbol;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Material(
-        color: selected ? BrandColors.surfaceSunken : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          mouseCursor: WidgetStateMouseCursor.clickable,
+      // One option of the list: a button, the current one selected.
+      child: Semantics(
+        container: true,
+        button: true,
+        selected: selected,
+        child: Material(
+          color: selected ? BrandColors.surfaceSunken : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            _close();
-            widget.onSelect(o.coinSymbol);
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
-            child: Row(
-              children: [
-                CoinMark(coinSymbol: o.coinSymbol, iconAsset: o.iconAsset, size: 32),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        o.coinName,
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w500,
-                          height: 1.25,
-                          color: BrandColors.ink,
+          child: InkWell(
+            mouseCursor: WidgetStateMouseCursor.clickable,
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              _close();
+              widget.onSelect(o.coinSymbol);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
+              child: Row(
+                children: [
+                  CoinMark(coinSymbol: o.coinSymbol, iconAsset: o.iconAsset, size: 32),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          o.coinName,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w500,
+                            height: 1.25,
+                            color: BrandColors.ink,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        o.coinSymbol,
-                        style: TextStyle(
-                          fontFamily: 'Ubuntu Mono',
-                          fontSize: 11.5,
-                          height: 1.3,
-                          color: BrandColors.inkMuted,
+                        const SizedBox(height: 2),
+                        Text(
+                          o.coinSymbol,
+                          style: TextStyle(
+                            fontFamily: 'Ubuntu Mono',
+                            fontSize: 11.5,
+                            height: 1.3,
+                            color: BrandColors.inkMuted,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                if (selected) ...[
-                  const SizedBox(width: 8),
-                  Icon(Icons.check, size: 18, color: BrandColors.primary),
+                  if (selected) ...[
+                    const SizedBox(width: 8),
+                    Icon(Icons.check, size: 18, color: BrandColors.primary),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -452,19 +497,27 @@ class ReceiveAssetSelectorCardState extends State<ReceiveAssetSelectorCard> {
   }
 }
 
-class _QrCard extends StatelessWidget {
+/// The white QR panel with its enlarge hint, the heading and the tappable mono
+/// address: Receive's, and an address's own screen's.
+///
+/// [viewportHeight] caps how far an enlarged QR grows, so the whole code stays
+/// on screen; [onToggle] null keeps it at its normal size and hides [hint].
+class ReceiveQrCard extends StatelessWidget {
   final String address;
   final String heading;
   final VoidCallback onCopy;
+  final String copyLabel;
   final bool enlarged;
   final VoidCallback? onToggle;
   final String? hint;
   final double viewportHeight;
 
-  const _QrCard({
+  const ReceiveQrCard({
+    super.key,
     required this.address,
     required this.heading,
     required this.onCopy,
+    required this.copyLabel,
     required this.enlarged,
     required this.onToggle,
     required this.hint,
@@ -505,6 +558,7 @@ class _QrCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final qrLabel = uiStringsOf(context)?.a11yAddressQr;
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = enlarged ? _enlargedSize(constraints.maxWidth) : _normalSize;
@@ -559,16 +613,22 @@ class _QrCard extends StatelessWidget {
                             // The QR sits on a fixed white card so it scans, so
                             // its modules must stay dark in both themes — the
                             // themed ink goes light in dark mode.
-                            child: QrImageView(
-                              data: address,
-                              padding: EdgeInsets.zero,
-                              eyeStyle: const QrEyeStyle(
-                                eyeShape: QrEyeShape.square,
-                                color: Color(0xFF2C170C),
-                              ),
-                              dataModuleStyle: const QrDataModuleStyle(
-                                dataModuleShape: QrDataModuleShape.square,
-                                color: Color(0xFF2C170C),
+                            // An image, named for what it encodes.
+                            child: Semantics(
+                              container: true,
+                              image: true,
+                              child: QrImageView(
+                                data: address,
+                                semanticsLabel: qrLabel ?? 'qr code',
+                                padding: EdgeInsets.zero,
+                                eyeStyle: const QrEyeStyle(
+                                  eyeShape: QrEyeShape.square,
+                                  color: Color(0xFF2C170C),
+                                ),
+                                dataModuleStyle: const QrDataModuleStyle(
+                                  dataModuleShape: QrDataModuleShape.square,
+                                  color: Color(0xFF2C170C),
+                                ),
                               ),
                             ),
                           ),
@@ -590,8 +650,11 @@ class _QrCard extends StatelessWidget {
                 ] else
                   const SizedBox(height: 18),
                 SectionHeader(label: heading, padding: const EdgeInsets.only(bottom: 9)),
-                GestureDetector(
+                // A copy button too, named for it, that reads the address.
+                Tappable(
                   onTap: onCopy,
+                  behavior: HitTestBehavior.deferToChild,
+                  semanticLabel: copyLabel,
                   child: Text(
                     address,
                     textAlign: TextAlign.center,
@@ -626,7 +689,9 @@ class _QrHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = BrandColors.primaryDeep;
     const shape = RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12)));
+    // Container: one button node, not a flag merged into the card around it.
     return Semantics(
+      container: true,
       button: true,
       child: Material(
         type: MaterialType.transparency,

@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
-/// The app's half of the capture handshake with wallet-core's
-/// `scripts/store-screenshots.sh`, which takes each picture with the device's
-/// own tools (`simctl`, `adb`) so the status bar is in it, as on a device.
+/// The app's half of a capture handshake with a script on the host, which
+/// takes each picture with the device's own tools (`simctl`, `adb`) so the
+/// status bar is in it, as on a device. Makes it easier to take promotional
+/// screenshots and recordings.
 ///
 /// [capture] leaves a request in the app's temporary directory, which the host
 /// reads through the simulator's data container or `adb shell run-as`, and

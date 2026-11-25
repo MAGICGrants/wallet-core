@@ -135,6 +135,8 @@ class _TorStatusPillState extends State<TorStatusPill> {
         TorConnectionStatus.disconnected => (BrandColors.error, labels.disconnected),
       };
     }
+    // The dot only colours the words beside it. The words are spoken when the
+    // status changes (connecting, connected, disconnected), not on each poll.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       child: Row(
@@ -145,13 +147,19 @@ class _TorStatusPillState extends State<TorStatusPill> {
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 9),
-          Text(
-            text,
-            style: TextStyle(
-              fontFamily: 'Ubuntu',
-              fontSize: 12,
-              height: 1,
-              color: BrandColors.inkMuted,
+          Semantics(
+            container: true,
+            liveRegion: true,
+            child: Text(
+              text,
+              // "External Tor · connected" read without the dot.
+              semanticsLabel: text.replaceAll(' · ', ', '),
+              style: TextStyle(
+                fontFamily: 'Ubuntu',
+                fontSize: 12,
+                height: 1,
+                color: BrandColors.inkMuted,
+              ),
             ),
           ),
         ],

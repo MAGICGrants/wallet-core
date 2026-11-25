@@ -51,8 +51,12 @@ void scheduleImportWalletData(
       case BackupAvailability.opening:
         return;
     }
-    if (backup.enabled && report != null && (report.payments > 0 || report.contactsRestored > 0)) {
-      toast.show(i18n.backupRestoreFound(report.payments, report.contactsRestored));
+    if (backup.enabled &&
+        report != null &&
+        (report.payments > 0 || report.contactsRestored > 0 || report.labelsRestored > 0)) {
+      toast.show(
+        i18n.backupRestoreFound(report.payments, report.contactsRestored, report.labelsRestored),
+      );
       return;
     }
     await navigator.push(
@@ -105,6 +109,7 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
   bool _nothingNew = false;
   int _payments = 0;
   int _contacts = 0;
+  int _labels = 0;
   String? _turnedOnAt;
 
   /// Where [_Step.looking] looks, when not the platform's own locations.
@@ -150,6 +155,7 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
         _fromFile = false;
         _payments = report?.payments ?? 0;
         _contacts = report?.contactsRestored ?? 0;
+        _labels = report?.labelsRestored ?? 0;
         _turnedOnAt = _locationNames(i18n, _service, only: found);
       });
     } catch (e) {
@@ -202,6 +208,7 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
         _fromFile = false;
         _payments = report?.payments ?? 0;
         _contacts = report?.contactsRestored ?? 0;
+        _labels = report?.labelsRestored ?? 0;
         _turnedOnAt = where;
       });
     } catch (e) {
@@ -248,6 +255,7 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
         _nothingNew = result.added == 0;
         _payments = report?.payments ?? 0;
         _contacts = report?.contactsRestored ?? 0;
+        _labels = report?.labelsRestored ?? 0;
       });
     } catch (e) {
       if (!wasOn) await _service.setEnabled(false);
@@ -319,33 +327,48 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
       ),
       if (_error != null) ...[
         const SizedBox(height: BrandSpacing.md),
-        Text(_error!, style: BrandText.body.copyWith(color: BrandColors.error)),
+        // Spoken as it appears.
+        Semantics(
+          container: true,
+          liveRegion: true,
+          child: Text(_error!, style: BrandText.body.copyWith(color: BrandColors.error)),
+        ),
       ],
     ];
   }
 
   List<Widget> _working(String text) => [
     const SizedBox(height: BrandSpacing.xl),
-    const Center(child: CircularProgressIndicator()),
+    // The line under it says what is happening, and is spoken as it changes.
+    const Center(child: ExcludeSemantics(child: CircularProgressIndicator())),
     const SizedBox(height: BrandSpacing.lg),
-    Text(text, style: BrandText.body, textAlign: TextAlign.center),
+    Semantics(
+      container: true,
+      liveRegion: true,
+      child: Text(text, style: BrandText.body, textAlign: TextAlign.center),
+    ),
   ];
 
   List<Widget> _done(BackupLocalizations i18n) => [
-    BrandCard(
-      padding: const EdgeInsets.all(BrandSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(i18n.importDoneTitle, style: BrandText.listTitle),
-          const SizedBox(height: BrandSpacing.xs),
-          Text(
-            _fromFile && _nothingNew
-                ? i18n.backupImportNothingNew
-                : i18n.backupRestoreFound(_payments, _contacts),
-            style: BrandText.body,
-          ),
-        ],
+    // The result, spoken as it appears.
+    Semantics(
+      container: true,
+      liveRegion: true,
+      child: BrandCard(
+        padding: const EdgeInsets.all(BrandSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(i18n.importDoneTitle, style: BrandText.listTitle),
+            const SizedBox(height: BrandSpacing.xs),
+            Text(
+              _fromFile && _nothingNew
+                  ? i18n.backupImportNothingNew
+                  : i18n.backupRestoreFound(_payments, _contacts, _labels),
+              style: BrandText.body,
+            ),
+          ],
+        ),
       ),
     ),
     _note(i18n.importScanNote),
@@ -391,7 +414,11 @@ class _ImportWalletDataScreenState extends State<ImportWalletDataScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(i18n.importTitle, style: BrandText.title),
+                          Semantics(
+                            header: true,
+                            namesRoute: true,
+                            child: Text(i18n.importTitle, style: BrandText.title),
+                          ),
                           const SizedBox(height: BrandSpacing.sm),
                           ...content,
                         ],

@@ -41,7 +41,15 @@ Future<bool> showConfirmSheet({
               children: [
                 SheetIcon(icon: icon, bg: iconBg, color: iconColor),
                 const SizedBox(width: 11),
-                Expanded(child: Text(title, style: BrandText.sheetTitle)),
+                // The sheet's heading, and the name screen readers give it.
+                Expanded(
+                  child: Semantics(
+                    container: true,
+                    header: true,
+                    namesRoute: true,
+                    child: Text(title, style: BrandText.sheetTitle),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 7),

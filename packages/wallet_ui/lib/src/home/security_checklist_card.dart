@@ -97,8 +97,14 @@ class _ChecklistRow extends StatelessWidget {
         ],
       ),
     );
-    final semantics = Semantics(button: !done, checked: done, child: row);
-    if (done) return semantics;
-    return Tappable(onTap: item.onTap, child: semantics);
+    // Each step is one node that says whether it is done. A finished one is
+    // only that; an open one is also the button that goes to it (Tappable),
+    // and its unchecked state merges into that button's node.
+    if (done) return Semantics(container: true, checked: true, child: row);
+    return Tappable(
+      onTap: item.onTap,
+      focusRadius: BrandRadii.rTile,
+      child: Semantics(checked: false, child: row),
+    );
   }
 }

@@ -93,15 +93,22 @@ class HomeHeader extends StatelessWidget {
       padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 2),
       child: Row(
         children: [
-          logo,
+          // The name beside it says it all.
+          ExcludeSemantics(child: logo),
           const SizedBox(width: 10),
-          Text(
-            title,
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 18,
-              height: 1,
-              color: titleColor ?? BrandColors.ink,
+          // The home's title: its heading, and the name screen readers give it.
+          Semantics(
+            container: true,
+            header: true,
+            namesRoute: true,
+            child: Text(
+              title,
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 18,
+                height: 1,
+                color: titleColor ?? BrandColors.ink,
+              ),
             ),
           ),
         ],

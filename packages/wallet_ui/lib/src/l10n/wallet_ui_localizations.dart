@@ -956,7 +956,7 @@ abstract class WalletUiLocalizations {
   /// No description provided for @receivePrimaryTab.
   ///
   /// In en, this message translates to:
-  /// **'Primary Address'**
+  /// **'Primary'**
   String get receivePrimaryTab;
 
   /// No description provided for @receiveCopyAddress.
@@ -1277,6 +1277,30 @@ abstract class WalletUiLocalizations {
   /// **'Address book deleted'**
   String get settingsAddressBookDeleted;
 
+  /// Data settings row and its confirm sheet's title; shown only while there are labels. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Address Labels'**
+  String get settingsDeleteAddressLabelsButton;
+
+  /// Body of the confirm sheet, worded as the address book's. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete your address labels? If automatic backup is turned on, it will also delete the address labels in these automatic backups.'**
+  String get settingsDeleteAddressLabelsDialogText;
+
+  /// Confirm button. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get settingsDeleteAddressLabelsDialogDeleteButton;
+
+  /// Toast. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Address labels deleted'**
+  String get settingsAddressLabelsDeleted;
+
   /// No description provided for @txDetailsTitle.
   ///
   /// In en, this message translates to:
@@ -1571,6 +1595,12 @@ abstract class WalletUiLocalizations {
   /// **'Couldn\'t reach the server. Check your connection and try again.'**
   String get sendNoConnectionError;
 
+  /// Error toast when the wallet could not check the coins a send would spend against the server. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t verify your funds with this server, so nothing was sent. Try again or use a different server.'**
+  String get sendCoinsNotVerifiedError;
+
   /// No description provided for @torSettingsTitle.
   ///
   /// In en, this message translates to:
@@ -1703,10 +1733,10 @@ abstract class WalletUiLocalizations {
   /// **'Incoming'**
   String get homeIncomingTitle;
 
-  /// No description provided for @homeIncomingUnlocksIn.
+  /// Detail under a row on the home's Incoming card: when the funds unlock, then on its own line how many of the confirmations they need are done. Sentence case.
   ///
   /// In en, this message translates to:
-  /// **'Unlocks in about {minutes, plural, =1{1 minute} other{{minutes} minutes}} · {done} of {needed}'**
+  /// **'Unlocks in about {minutes, plural, =1{1 minute} other{{minutes} minutes}}\n{done} of {needed}'**
   String homeIncomingUnlocksIn(int minutes, int done, int needed);
 
   /// No description provided for @homeIncomingConfirmations.
@@ -1714,6 +1744,12 @@ abstract class WalletUiLocalizations {
   /// In en, this message translates to:
   /// **'{done} of {needed} confirmations'**
   String homeIncomingConfirmations(int done, int needed);
+
+  /// Row title on the home's Incoming card, in place of the coin's name: change from the wallet's own sends that cannot be spent until it unlocks. asset is the coin's name. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'{asset} Change'**
+  String homeIncomingChange(String asset);
 
   /// No description provided for @homeChartTitle.
   ///
@@ -1787,6 +1823,72 @@ abstract class WalletUiLocalizations {
   /// **'Set Up a Security Key'**
   String get homeChecklistSecurityKeys;
 
+  /// Settings row under Security and Privacy, and the title of the card it opens, where the home's checklist is turned on or off and its steps chosen. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Security Checklist'**
+  String get securityChecklistLabel;
+
+  /// Subtitle of the Security Checklist settings row while the home shows the checklist. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Shown on home'**
+  String get securityChecklistShown;
+
+  /// Subtitle of the Security Checklist settings row once the user turned the checklist off. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden from home'**
+  String get securityChecklistHidden;
+
+  /// Description under the Security Checklist card's title. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose whether your home screen shows this checklist, and which steps it reminds you about.'**
+  String get securityChecklistSheetSubtitle;
+
+  /// Section label above the Show on Home switch; shown upper-cased. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Home Screen'**
+  String get securityChecklistHomeSection;
+
+  /// Switch row title: whether the home shows the security checklist at all. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Show on Home'**
+  String get securityChecklistShowOnHome;
+
+  /// Subtitle of the Show on Home switch: the card leaves once the steps left switched on are done. Sentence case, no period.
+  ///
+  /// In en, this message translates to:
+  /// **'Until every step you keep below is done'**
+  String get securityChecklistShowOnHomeDesc;
+
+  /// Section label above one switch per checklist step; shown upper-cased. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind Me About'**
+  String get securityChecklistStepsSection;
+
+  /// Subtitle of a checklist step's switch row: the step is done. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get securityChecklistStepDone;
+
+  /// Subtitle of a checklist step's switch row: the step is not done yet. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Not done'**
+  String get securityChecklistStepNotDone;
+
+  /// Subtitle of the recovery phrase step once checked: the check expires after about six months and the step opens again. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Done · asked again every 6 months'**
+  String get securityChecklistSeedDone;
+
   /// No description provided for @verifySeedSubtitle.
   ///
   /// In en, this message translates to:
@@ -1852,6 +1954,390 @@ abstract class WalletUiLocalizations {
   /// In en, this message translates to:
   /// **'{appName} Wallet asks for your password before showing these words again.'**
   String generateSeedPasswordNote(String appName);
+
+  /// Receive tab showing the next fresh address of a chain whose addresses are not called subaddresses (Bitcoin). Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Address'**
+  String get receiveAddressTab;
+
+  /// Receive tab listing the used addresses, which the user can label. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Labeled'**
+  String get receiveLabeledTab;
+
+  /// Line above the used-address list on Receive's Labeled tab. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Optionally label addresses if you want to easily search for transactions involving them.'**
+  String get labeledCaption;
+
+  /// Section label over every used address; shown upper-cased. Title Case. kind is subaddress (Monero) or address.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, subaddress{Used Subaddresses} other{Used Addresses}} · {count}'**
+  String labeledUsedHeader(String kind, int count);
+
+  /// Section label while Hide Unlabeled is on; shown upper-cased. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, subaddress{Labeled Subaddresses} other{Labeled Addresses}} · {count}'**
+  String labeledOnlyHeader(String kind, int count);
+
+  /// Toggle beside the used-address list that hides addresses without a label. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Unlabeled'**
+  String get labeledHideUnlabeled;
+
+  /// Row title of a used address without a label. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, subaddress{Subaddress #{index}} other{Address #{index}}}'**
+  String labeledAddressTitle(String kind, int index);
+
+  /// How many transactions an address received, beside its total. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 transaction} other{{count} transactions}}'**
+  String labeledTransactionCount(int count);
+
+  /// When an address last received a transaction; time is a timeAgo string. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Last used {time}'**
+  String labeledLastUsed(String time);
+
+  /// Button on a used address that opens the label sheet. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Label'**
+  String get labeledLabelButton;
+
+  /// Empty-state title on the Labeled tab. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, subaddress{No used subaddresses yet} other{No used addresses yet}}'**
+  String labeledEmptyTitle(String kind);
+
+  /// Empty-state body on the Labeled tab. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Optionally label addresses if you want to easily search for transactions involving them. {kind, select, subaddress{A subaddress shows up here after its first transaction.} other{An address shows up here after its first transaction.}}'**
+  String labeledEmptyBody(String kind);
+
+  /// Title of the sheet that sets an address's label. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, subaddress{Label Subaddress #{index}} other{Label Address #{index}}}'**
+  String labelSheetTitle(String kind, int index);
+
+  /// Field label in the label sheet; shown upper-cased. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Label'**
+  String get labelSheetField;
+
+  /// Button that saves a label; an empty one removes it. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Label'**
+  String get labelSheetSave;
+
+  /// Stat label and button on an address's own screen: the button opens History filtered to it. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Transactions'**
+  String get addressDetailTransactions;
+
+  /// Stat label: when the address last received a transaction. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Last Transaction'**
+  String get addressDetailLastTransaction;
+
+  /// Button on a labeled address's screen. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Label'**
+  String get addressDetailEditLabel;
+
+  /// Button on an unlabeled address's screen. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Label'**
+  String get addressDetailAddLabel;
+
+  /// Section label in History's address filter, over the labeled addresses to pick from; shown upper-cased. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Labeled Addresses'**
+  String get historyFilterLabeledAddresses;
+
+  /// Relative time under 45 seconds, after Last used. Lower case, as timeago words it.
+  ///
+  /// In en, this message translates to:
+  /// **'a moment ago'**
+  String get timeAgoMoment;
+
+  /// Relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'a minute ago'**
+  String get timeAgoMinute;
+
+  /// Relative time; count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} minutes ago'**
+  String timeAgoMinutes(int count);
+
+  /// Relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'about an hour ago'**
+  String get timeAgoHour;
+
+  /// Relative time; count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} hours ago'**
+  String timeAgoHours(int count);
+
+  /// Relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'a day ago'**
+  String get timeAgoDay;
+
+  /// Relative time; count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} days ago'**
+  String timeAgoDays(int count);
+
+  /// Relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'about a month ago'**
+  String get timeAgoMonth;
+
+  /// Relative time; count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} months ago'**
+  String timeAgoMonths(int count);
+
+  /// Relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'about a year ago'**
+  String get timeAgoYear;
+
+  /// Relative time; count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} years ago'**
+  String timeAgoYears(int count);
+
+  /// Name of an icon-only button that opens the share sheet; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get a11yShare;
+
+  /// Name of an icon-only button that opens the QR scanner; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan QR Code'**
+  String get a11yScanQrCode;
+
+  /// Name of the scanner's flashlight toggle; screen readers add its on/off state. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Flashlight'**
+  String get a11yFlashlight;
+
+  /// Name of the scanner's front/back camera button; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Camera'**
+  String get a11ySwitchCamera;
+
+  /// Name of the eye button on a password field while the password is hidden; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Password'**
+  String get a11yShowPassword;
+
+  /// Name of the eye button on a password field while the password shows; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Password'**
+  String get a11yHidePassword;
+
+  /// Name of a small x button that empties a field or removes a picked contact; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get a11yClear;
+
+  /// Name of an icon-only button that removes an item from a list; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get a11yRemove;
+
+  /// Name of an icon-only button that covers the recovery phrase again; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide'**
+  String get a11yHide;
+
+  /// Name of an icon-only copy button next to a labelled value; read by screen readers. label is that value's own label, never the value. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy {label}'**
+  String a11yCopyValue(String label);
+
+  /// Name of one recovery-phrase entry field; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Word {index} of {count}'**
+  String a11yWordOfCount(int index, int count);
+
+  /// Onboarding progress, shown on desktop and read by screen readers on mobile. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {step} of {count}'**
+  String a11yStepOfCount(int step, int count);
+
+  /// Read by screen readers in place of a value that is still loading. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading'**
+  String get a11yLoading;
+
+  /// Name of the field a whole recovery phrase is typed into; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery Phrase'**
+  String get a11yRecoveryPhrase;
+
+  /// Name of a search field; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get a11ySearch;
+
+  /// Name of a month picker; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Month'**
+  String get a11yMonth;
+
+  /// Name of a year picker; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Year'**
+  String get a11yYear;
+
+  /// Status of a transaction row whose send failed; read by screen readers. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get a11yTxFailed;
+
+  /// Status of a transaction row whose send was not confirmed; read by screen readers. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Not confirmed as sent'**
+  String get a11yTxUnknown;
+
+  /// An address shown shortened, read by screen readers as its first and last characters. start and end are those characters. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'{start}, ending {end}'**
+  String a11yAddressEnds(String start, String end);
+
+  /// Name of the receive QR image; read by screen readers. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'QR code of this address'**
+  String get a11yAddressQr;
+
+  /// What a TOR pill on a connection means; read by screen readers. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Over Tor'**
+  String get a11yOverTor;
+
+  /// What an HTTPS pill on a connection means; read by screen readers. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Over HTTPS'**
+  String get a11yOverHttps;
+
+  /// Settings row under Price Display Settings, and the title of its sheet: hides the last digits of coin amounts worth less than a chosen fiat amount. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim Decimals'**
+  String get trimDecimalsLabel;
+
+  /// Intro under the Trim Decimals sheet title. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide the last digits of coin amounts when they are worth less than this. Send, confirm and transaction details always show every digit.'**
+  String get trimDecimalsSheetSubtitle;
+
+  /// Trim Decimals choice that hides nothing, and the row's value when chosen. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get trimDecimalsOff;
+
+  /// Trim Decimals choice, and the row's value when chosen: hide digits worth less than amount. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Below {amount}'**
+  String trimDecimalsBelow(String amount);
+
+  /// Description of the Off choice. Sentence case fragment.
+  ///
+  /// In en, this message translates to:
+  /// **'Every digit'**
+  String get trimDecimalsEveryDigit;
+
+  /// Description of a Trim Decimals choice while no price or saved digits are known yet. Sentence case fragment.
+  ///
+  /// In en, this message translates to:
+  /// **'Starts once prices load'**
+  String get trimDecimalsWaiting;
+
+  /// Section label over a sample amount per coin at the chosen Trim Decimals level. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'At This Setting'**
+  String get trimDecimalsPreviewSection;
+
+  /// Note under the Trim Decimals choices in a one-coin app. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'At 1 {coin} ≈ {price}. Digits follow the price.'**
+  String trimDecimalsRateNote(String coin, String price);
+
+  /// Note under the Trim Decimals choices when several coins are priced. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Each coin trims at its own price.'**
+  String get trimDecimalsEachCoinNote;
+
+  /// Note under the Trim Decimals choices while a price has not arrived. Sentence case.
+  ///
+  /// In en, this message translates to:
+  /// **'Prices are still loading. Until they arrive, amounts use the digits saved from the last price, or show every digit.'**
+  String get trimDecimalsLoadingNote;
 }
 
 class _WalletUiLocalizationsDelegate extends LocalizationsDelegate<WalletUiLocalizations> {

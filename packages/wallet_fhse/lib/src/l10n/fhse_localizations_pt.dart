@@ -598,4 +598,10 @@ class FhseLocalizationsPt extends FhseLocalizations {
   @override
   String get appLockUseRecoveryPhraseBody =>
       'Você pode acessar sua carteira com sua frase de recuperação. Isso só é recomendado como mecanismo de recuperação. Não deve ser a forma normal de acessar sua carteira.';
+
+  @override
+  String get showPin => 'Mostrar PIN';
+
+  @override
+  String get hidePin => 'Ocultar PIN';
 }

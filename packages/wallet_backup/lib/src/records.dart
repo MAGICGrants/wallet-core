@@ -5,9 +5,9 @@ import 'crypto.dart';
 
 /// The record registry. A number, once used, is never reused.
 ///
-/// This version writes two types: outgoing payments (1) and contacts (3).
-/// Every other type, and every field these two do not know, is kept byte for
-/// byte, so an older wallet never drops what a newer one wrote.
+/// This version writes three types: outgoing payments (1), contacts (3) and
+/// address labels (4). Every other type, and every field these do not know, is
+/// kept byte for byte, so an older wallet never drops what a newer one wrote.
 ///
 /// **Type 1, outgoing payment** (immutable; merged by union on txid):
 ///
@@ -50,9 +50,29 @@ import 'crypto.dart';
 /// | 5 | lamport, uint |
 /// | 6 | device_id, 16-byte bstr |
 /// | 7 | `true` when this version is a deletion |
+///
+/// **Type 4, address label** (mutable; last writer wins on
+/// `(lamport, device_id)`, as contacts do). One per address per coin: the
+/// identity is `(coin, address)`, so two devices labelling the same address
+/// converge on one label.
+///
+/// | key | value |
+/// |---|---|
+/// | 0 | 4 |
+/// | 1 | coin symbol, upper case, tstr |
+/// | 2 | address, tstr, as the wallet writes it |
+/// | 3 | label, tstr (absent when deleted) |
+/// | 5 | lamport, uint |
+/// | 6 | device_id, 16-byte bstr |
+/// | 7 | `true` when this version is a deletion (the label was removed) |
+///
+/// A new type rather than a field on another: a wallet that predates labels
+/// keeps type 4 byte for byte, where a field it does not know on a record it
+/// does would be lost the first time it wrote that record.
 abstract final class RecordType {
   static const outgoingPayment = 1;
   static const contact = 3;
+  static const addressLabel = 4;
 }
 
 /// Thrown when a record of a known type is missing a field or has one of the
@@ -84,6 +104,7 @@ sealed class BackupRecord {
     return switch (type) {
       RecordType.outgoingPayment => OutgoingPaymentRecord._parse(raw, value),
       RecordType.contact => ContactRecord._parse(raw, value),
+      RecordType.addressLabel => AddressLabelRecord._parse(raw, value),
       _ => UnknownRecord(raw, type),
     };
   }
@@ -316,14 +337,8 @@ class ContactRecord extends BackupRecord {
 
   /// Whether this version beats [other] under last-writer-wins: the higher
   /// `(lamport, device_id)`.
-  bool beats(ContactRecord other) {
-    if (lamport != other.lamport) return lamport > other.lamport;
-    final byDevice = compareBytes(deviceId, other.deviceId);
-    if (byDevice != 0) return byDevice > 0;
-    // Same writer and clock: the same version, unless a writer misbehaved.
-    // Order on the bytes so every reader still picks the same one.
-    return compareBytes(raw, other.raw) > 0;
-  }
+  bool beats(ContactRecord other) =>
+      _beats(lamport, deviceId, raw, other.lamport, other.deviceId, other.raw);
 
   /// Ids from [newContactId] travel as their 16 bytes; anything else (the
   /// millisecond timestamps earlier builds used) as text.
@@ -337,6 +352,129 @@ class ContactRecord extends BackupRecord {
     final String s => s,
     _ => throw const RecordFormatException('contact id'),
   };
+}
+
+class AddressLabelRecord extends BackupRecord {
+  AddressLabelRecord._(
+    super.raw, {
+    required this.coin,
+    required this.address,
+    required this.label,
+    required this.lamport,
+    required this.deviceId,
+    required this.deleted,
+  });
+
+  factory AddressLabelRecord({
+    required String coin,
+    required String address,
+    required String label,
+    required int lamport,
+    required Uint8List deviceId,
+  }) {
+    final symbol = coin.toUpperCase();
+    final raw = cborEncode({
+      0: RecordType.addressLabel,
+      1: symbol,
+      2: address,
+      3: label,
+      5: lamport,
+      6: deviceId,
+    });
+    return AddressLabelRecord._(
+      raw,
+      coin: symbol,
+      address: address,
+      label: label,
+      lamport: lamport,
+      deviceId: deviceId,
+      deleted: false,
+    );
+  }
+
+  factory AddressLabelRecord.deletion({
+    required String coin,
+    required String address,
+    required int lamport,
+    required Uint8List deviceId,
+  }) {
+    final symbol = coin.toUpperCase();
+    final raw = cborEncode({
+      0: RecordType.addressLabel,
+      1: symbol,
+      2: address,
+      5: lamport,
+      6: deviceId,
+      7: true,
+    });
+    return AddressLabelRecord._(
+      raw,
+      coin: symbol,
+      address: address,
+      label: '',
+      lamport: lamport,
+      deviceId: deviceId,
+      deleted: true,
+    );
+  }
+
+  static AddressLabelRecord _parse(Uint8List raw, Map<Object, Object?> v) {
+    final deleted = v[7] == true;
+    final coin = v[1];
+    final address = v[2];
+    final label = v[3];
+    if (coin is! String || coin.isEmpty) throw const RecordFormatException('label coin');
+    if (address is! String || address.isEmpty) {
+      throw const RecordFormatException('label address');
+    }
+    if (!deleted && label is! String) throw const RecordFormatException('label text');
+    return AddressLabelRecord._(
+      raw,
+      coin: coin.toUpperCase(),
+      address: address,
+      label: deleted ? '' : label as String,
+      lamport: _int(v[5], 'lamport'),
+      deviceId: _bytes(v[6], 16, 'device id'),
+      deleted: deleted,
+    );
+  }
+
+  @override
+  int get type => RecordType.addressLabel;
+
+  final String coin;
+  final String address;
+  final String label;
+  final int lamport;
+  final Uint8List deviceId;
+  final bool deleted;
+
+  /// `COIN:address`, the label's identity: the same key the app stores it
+  /// under (`addressLabelKey`).
+  String get key => '$coin:$address';
+
+  /// Whether this version beats [other] under last-writer-wins, as
+  /// [ContactRecord.beats].
+  bool beats(AddressLabelRecord other) =>
+      _beats(lamport, deviceId, raw, other.lamport, other.deviceId, other.raw);
+}
+
+/// Last-writer-wins between two versions of one mutable record: the higher
+/// `(lamport, device_id)`.
+bool _beats(
+  int lamport,
+  Uint8List device,
+  Uint8List raw,
+  int otherLamport,
+  Uint8List otherDevice,
+  Uint8List otherRaw,
+) {
+  if (lamport != otherLamport) return lamport > otherLamport;
+  final byDevice = compareBytes(device, otherDevice);
+  if (byDevice != 0) return byDevice > 0;
+  // Same writer and clock: the same version, unless a writer misbehaved.
+  // Order on the bytes so every reader still picks the same one.
+  return compareBytes(raw, otherRaw) > 0;
 }
 
 int _int(Object? v, String what) {

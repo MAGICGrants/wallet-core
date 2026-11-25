@@ -49,9 +49,10 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
   TextStyle get monospaceStyle => TextStyle(fontSize: 13, fontFamily: 'Ubuntu Mono', height: 1.4);
 
+  // A heading, so a screen reader can jump from section to section.
   Widget sectionHeading(String text) => Padding(
     padding: EdgeInsets.only(top: 18.0, bottom: 6.0),
-    child: Text(text, style: subheadingStyle),
+    child: Semantics(container: true, header: true, child: Text(text, style: subheadingStyle)),
   );
 
   Widget paragraph(String text) => Padding(

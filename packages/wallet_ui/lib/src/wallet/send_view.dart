@@ -12,6 +12,7 @@ import '../design/brand_screen_header.dart';
 import '../design/brand_segmented.dart';
 import '../design/mini_action_button.dart';
 import '../design/section_header.dart';
+import '../l10n/ui_strings.dart';
 import 'amount_entry_controller.dart';
 import 'format.dart';
 
@@ -176,7 +177,7 @@ class SendView extends StatelessWidget {
                     children: [
                       if (assetSection != null) ...[assetSection!, const SizedBox(height: 14)],
                       _sectionLabel(labels.toLabel),
-                      _toCard(),
+                      _toCard(context),
                       if (addressError.isNotEmpty) _errorText(addressError),
                       const SizedBox(height: 14),
                       _sectionLabel(labels.amount),
@@ -220,59 +221,73 @@ class SendView extends StatelessWidget {
   Widget _sectionLabel(String text) =>
       SectionHeader(label: text, padding: const EdgeInsets.only(left: 4, bottom: 8));
 
+  /// Spoken as it appears or changes (an invalid address, too little
+  /// balance, an OpenAlias that would not resolve).
   Widget _errorText(String text) => Padding(
     padding: const EdgeInsets.only(top: 6, left: 4),
-    child: Text(text, style: BrandText.caption.copyWith(color: BrandColors.error)),
+    child: Semantics(
+      container: true,
+      liveRegion: true,
+      child: Text(text, style: BrandText.caption.copyWith(color: BrandColors.error)),
+    ),
   );
 
-  Widget _toCard() {
+  Widget _toCard(BuildContext context) {
+    final strings = uiStringsOf(context);
     if (contactName != null) {
       return BrandCard(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
         child: Row(
           children: [
-            Container(
-              width: 34,
-              height: 34,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: BrandColors.primaryDeep, shape: BoxShape.circle),
-              child: Text(
-                contactName!.isNotEmpty ? contactName![0].toUpperCase() : '?',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: BrandColors.onPrimary,
+            // The initial only repeats the name beside it.
+            ExcludeSemantics(
+              child: Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: BrandColors.primaryDeep, shape: BoxShape.circle),
+                child: Text(
+                  contactName!.isNotEmpty ? contactName![0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: BrandColors.onPrimary,
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 11),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    contactName!,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: BrandColors.ink,
+              child: MergeSemantics(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      contactName!,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: BrandColors.ink,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    contactAddressShort ?? '',
-                    style: TextStyle(
-                      fontFamily: 'Ubuntu Mono',
-                      fontSize: 11,
-                      color: BrandColors.inkMuted,
+                    const SizedBox(height: 3),
+                    Text(
+                      contactAddressShort ?? '',
+                      style: TextStyle(
+                        fontFamily: 'Ubuntu Mono',
+                        fontSize: 11,
+                        color: BrandColors.inkMuted,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             Tappable(
               behavior: HitTestBehavior.opaque,
               onTap: onClearContact,
+              semanticLabel: strings?.a11yClear,
+              focusRadius: BorderRadius.circular(17),
               child: Container(
                 width: 34,
                 height: 34,
@@ -297,41 +312,47 @@ class SendView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: addressController,
-            focusNode: addressFocusNode,
-            maxLines: null,
-            textInputAction: TextInputAction.done,
-            style: TextStyle(
-              fontFamily: 'Ubuntu Mono',
-              fontSize: 13.5,
-              height: 1.5,
-              color: BrandColors.ink,
-            ),
-            decoration: InputDecoration(
-              isCollapsed: true,
-              border: InputBorder.none,
-              hintText: labels.addressHint,
-              hintStyle: TextStyle(
+          // Named like the section above it; the hint alone leaves the field
+          // nameless once it holds an address.
+          Semantics(
+            label: labels.toLabel,
+            child: TextField(
+              controller: addressController,
+              focusNode: addressFocusNode,
+              maxLines: null,
+              textInputAction: TextInputAction.done,
+              style: TextStyle(
                 fontFamily: 'Ubuntu Mono',
                 fontSize: 13.5,
                 height: 1.5,
-                color: BrandColors.inkMuted,
+                color: BrandColors.ink,
               ),
-              suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-              suffixIcon: openAliasResolving
-                  ? Padding(
-                      padding: EdgeInsets.only(left: 8),
-                      child: SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.8,
-                          color: BrandColors.primary,
+              decoration: InputDecoration(
+                isCollapsed: true,
+                border: InputBorder.none,
+                hintText: labels.addressHint,
+                hintStyle: TextStyle(
+                  fontFamily: 'Ubuntu Mono',
+                  fontSize: 13.5,
+                  height: 1.5,
+                  color: BrandColors.inkMuted,
+                ),
+                suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                suffixIcon: openAliasResolving
+                    ? Padding(
+                        padding: EdgeInsets.only(left: 8),
+                        child: SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.8,
+                            color: BrandColors.primary,
+                            semanticsLabel: strings?.a11yLoading,
+                          ),
                         ),
-                      ),
-                    )
-                  : null,
+                      )
+                    : null,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -402,12 +423,18 @@ class SendView extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 11, 4, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(labels.networkFee, style: TextStyle(fontSize: 12, color: BrandColors.inkMuted)),
-              feeValue,
-            ],
+          // The fee read with its label.
+          child: MergeSemantics(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  labels.networkFee,
+                  style: TextStyle(fontSize: 12, color: BrandColors.inkMuted),
+                ),
+                feeValue,
+              ],
+            ),
           ),
         ),
       ],
@@ -465,6 +492,7 @@ class SendAmountCard extends StatelessWidget {
             Expanded(
               child: _AmountField(
                 amount: amount,
+                name: _fieldName(context, fiatEntry ? quote.currency.code : amount.coinSymbol),
                 prefix: fiatEntry ? quote.currency.symbol : '',
                 hint: fiatEntry
                     ? (fiatDecimals == 0 ? '0' : '0.${'0' * fiatDecimals}')
@@ -481,6 +509,9 @@ class SendAmountCard extends StatelessWidget {
             Tappable(
               behavior: HitTestBehavior.opaque,
               onTap: onMax,
+              semanticLabel: _spokenMax,
+              excludeSemantics: true,
+              focusRadius: BorderRadius.circular(8),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 12),
                 decoration: BoxDecoration(
@@ -507,6 +538,7 @@ class SendAmountCard extends StatelessWidget {
           Tappable(
             behavior: HitTestBehavior.opaque,
             onTap: amount.swap,
+            semanticLabel: switchUnitLabel,
             child: SizedBox(
               width: double.infinity,
               height: 17,
@@ -538,6 +570,17 @@ class SendAmountCard extends StatelessWidget {
     );
   }
 
+  /// [maxLabel] as a word: shown in capitals, which a screen reader can spell
+  /// out letter by letter.
+  String get _spokenMax =>
+      maxLabel.isEmpty ? maxLabel : maxLabel[0] + maxLabel.substring(1).toLowerCase();
+
+  /// The amount field's name, with the unit being typed: "Amount, XMR".
+  String? _fieldName(BuildContext context, String unit) {
+    final name = uiStringsOf(context)?.amount;
+    return name == null ? null : '$name, $unit';
+  }
+
   TextStyle get _unitStyle => TextStyle(
     fontFamily: 'Ubuntu Mono',
     fontSize: 13,
@@ -547,27 +590,26 @@ class SendAmountCard extends StatelessWidget {
 
   /// The unit being typed, tappable to swap to the other one.
   Widget _unitChip(String label) {
-    return Semantics(
-      button: true,
-      label: switchUnitLabel,
-      child: Tappable(
-        behavior: HitTestBehavior.opaque,
-        onTap: amount.swap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 10),
-          decoration: BoxDecoration(
-            color: BrandColors.surfaceSunken,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: BrandColors.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label, style: _unitStyle),
-              const SizedBox(width: 4),
-              Icon(Icons.swap_vert, size: 15, color: BrandColors.inkMuted),
-            ],
-          ),
+    // Named for what it does, then the unit it shows.
+    return Tappable(
+      behavior: HitTestBehavior.opaque,
+      onTap: amount.swap,
+      semanticLabel: switchUnitLabel,
+      focusRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 10),
+        decoration: BoxDecoration(
+          color: BrandColors.surfaceSunken,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: BrandColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: _unitStyle),
+            const SizedBox(width: 4),
+            Icon(Icons.swap_vert, size: 15, color: BrandColors.inkMuted),
+          ],
         ),
       ),
     );
@@ -595,16 +637,22 @@ class SendAmountCard extends StatelessWidget {
 
     Widget availableLine = Row(
       children: [
-        if (availableLeading != null) ...[availableLeading!, const SizedBox(width: 6)],
+        // A coin glyph beside the amount: decoration.
+        if (availableLeading != null) ...[
+          ExcludeSemantics(child: availableLeading!),
+          const SizedBox(width: 6),
+        ],
         Flexible(
           child: Text(availableText!, overflow: TextOverflow.ellipsis, style: style),
         ),
       ],
     );
     if (onAvailableTap != null) {
+      // A button that sends the whole balance (MAX), read with the balance.
       availableLine = Tappable(
         behavior: HitTestBehavior.opaque,
         onTap: onAvailableTap,
+        semanticLabel: _spokenMax,
         child: availableLine,
       );
     }
@@ -623,12 +671,17 @@ class SendAmountCard extends StatelessWidget {
 class _AmountField extends StatelessWidget {
   const _AmountField({
     required this.amount,
+    required this.name,
     required this.prefix,
     required this.hint,
     required this.decimals,
   });
 
   final AmountEntryController amount;
+
+  /// What a screen reader calls the field, unit included; the prefix symbol
+  /// and the placeholder do not name it.
+  final String? name;
 
   /// The fiat symbol while typing fiat; empty for the coin.
   final String prefix;
@@ -667,23 +720,26 @@ class _AmountField extends StatelessWidget {
           final style = _style(size, BrandColors.ink);
           return Row(
             children: [
-              if (prefix.isNotEmpty) Text(prefix, style: style),
+              if (prefix.isNotEmpty) ExcludeSemantics(child: Text(prefix, style: style)),
               Expanded(
-                child: TextField(
-                  controller: amount.field,
-                  keyboardType: TextInputType.numberWithOptions(decimal: decimals > 0),
-                  textInputAction: TextInputAction.done,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                      RegExp(decimals > 0 ? '^\\d+(\\.\\d{0,$decimals})?' : r'^\d+'),
+                child: Semantics(
+                  label: name,
+                  child: TextField(
+                    controller: amount.field,
+                    keyboardType: TextInputType.numberWithOptions(decimal: decimals > 0),
+                    textInputAction: TextInputAction.done,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(decimals > 0 ? '^\\d+(\\.\\d{0,$decimals})?' : r'^\d+'),
+                      ),
+                    ],
+                    style: style,
+                    decoration: InputDecoration(
+                      isCollapsed: true,
+                      border: InputBorder.none,
+                      hintText: hint,
+                      hintStyle: _style(size, BrandColors.inkFaint),
                     ),
-                  ],
-                  style: style,
-                  decoration: InputDecoration(
-                    isCollapsed: true,
-                    border: InputBorder.none,
-                    hintText: hint,
-                    hintStyle: _style(size, BrandColors.inkFaint),
                   ),
                 ),
               ),

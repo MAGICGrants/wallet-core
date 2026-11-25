@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:bitcoin_base/bitcoin_base.dart' show BitcoinNetwork, P2wpkhAddress;
+
 import 'bitcoin_txid.dart';
 import 'electrum_api.dart';
 
@@ -251,4 +253,52 @@ abstract final class ElectrumFixtures {
     required int valueSats,
     int height = 0,
   }) => {'tx_hash': txHash, 'tx_pos': vout, 'value': valueSats, 'height': height};
+
+  /// A well-formed transaction whose output [vout] pays [valueSats] to the
+  /// P2WPKH [address], with its txid.
+  ///
+  /// The wallet checks every coin it is about to spend against the transaction
+  /// that created it, so a [utxo] that a test will spend needs a `tx_hash` that
+  /// really is the hash of a parent like this one, and the parent's [rawHex]
+  /// served from `blockchain.transaction.get`. Outputs before [vout] are empty
+  /// `OP_RETURN`s. [nonce] tells otherwise identical parents apart.
+  static ({String txid, String rawHex}) fundingTx({
+    required String address,
+    required int valueSats,
+    int vout = 0,
+    int nonce = 0,
+    BitcoinNetwork network = BitcoinNetwork.mainnet,
+  }) {
+    RangeError.checkValueInInterval(vout, 0, 0xfb, 'vout'); // one-byte output count
+    final script = P2wpkhAddress.fromAddress(
+      address: address,
+      network: network,
+    ).toScriptPubKey().toHex();
+    final sb = StringBuffer()
+      ..write(_le(2, 4)) // version
+      ..write('01') // one input
+      ..write('11' * 32) // previous txid: nobody's
+      ..write(_le(nonce, 4)) // previous index
+      ..write('00') // empty scriptSig
+      ..write('ffffffff') // nSequence
+      ..write(_le(vout + 1, 1)); // output count
+    for (var i = 0; i < vout; i++) {
+      sb.write('${_le(0, 8)}016a');
+    }
+    sb
+      ..write(_le(valueSats, 8))
+      ..write(_le(script.length ~/ 2, 1))
+      ..write(script)
+      ..write(_le(0, 4)); // nLockTime
+    final rawHex = sb.toString();
+    return (txid: computeTxid(rawHex), rawHex: rawHex);
+  }
+
+  static String _le(int value, int bytes) {
+    final sb = StringBuffer();
+    for (var i = 0; i < bytes; i++) {
+      sb.write(((value >> (8 * i)) & 0xff).toRadixString(16).padLeft(2, '0'));
+    }
+    return sb.toString();
+  }
 }

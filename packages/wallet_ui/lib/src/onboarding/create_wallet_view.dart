@@ -63,7 +63,13 @@ class CreateWalletView extends StatelessWidget {
                     center: StepDots(count: stepCount, index: stepIndex),
                   ),
                   const SizedBox(height: BrandSpacing.lg),
-                  Text(labels.title, style: BrandText.title),
+                  // The step dots name only the step: this is the screen's title.
+                  Semantics(
+                    container: true,
+                    header: true,
+                    namesRoute: true,
+                    child: Text(labels.title, style: BrandText.title),
+                  ),
                   const SizedBox(height: BrandSpacing.sm),
                   Text(labels.subtitle, style: BrandText.bodyMuted),
                   const SizedBox(height: BrandSpacing.xl),

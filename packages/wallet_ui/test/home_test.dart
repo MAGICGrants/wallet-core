@@ -116,6 +116,7 @@ const _labels = HomeLabels(
   incomingMore: _incomingMore,
   unlocksIn: _unlocksIn,
   confirmations: _confirmations,
+  change: _change,
   chartTitle: 'Balance · 90 days',
   chartToday: 'Today',
   chartEachCoin: "Each coin's balance",
@@ -125,6 +126,7 @@ const _labels = HomeLabels(
 String _incomingMore(int others) => 'Incoming (+$others)';
 String _unlocksIn(int minutes, int done, int needed) => 'unlocks $minutes min $done/$needed';
 String _confirmations(int done, int needed) => '$done/$needed confirmations';
+String _change(String asset) => '$asset Change';
 
 void main() {
   group('HomeActivity.compute', () {
@@ -309,10 +311,114 @@ void main() {
       final a = HomeActivity.compute(coin, history, BigInt.zero, _now);
       expect([for (final t in a.pendingIncoming) t.hash], ['new', 'older']);
     });
+
+    test('locked change is what the balance holds back beyond the receipts listed', () {
+      final coin = _Coin('XMR');
+      final history = [
+        _tx(daysAgo: 0, amount: 200, confirmations: 3, direction: txDirectionOutgoing, hash: 'out'),
+        _tx(daysAgo: 0, amount: 300, confirmations: 4, hash: 'in'),
+        // In the total for a light wallet, not for a local node: taken off
+        // either way, so a receipt is never called change.
+        _tx(daysAgo: 0, amount: 50, confirmations: 0, height: -1, hash: 'pool'),
+        _tx(daysAgo: 5, amount: 9, direction: txDirectionOutgoing, hash: 'old-out'),
+      ];
+      final a = HomeActivity.compute(
+        coin,
+        history,
+        BigInt.from(1300),
+        _now,
+        unlockedNow: BigInt.from(500),
+      );
+      final change = a.lockedChange!;
+      expect(change.amount, BigInt.from(450));
+      expect(change.send.hash, 'out');
+      expect(change.sends, 1, reason: 'a confirmed send has nothing left to unlock');
+    });
+
+    test('no locked change without a send still locking, or once it unlocks', () {
+      final coin = _Coin('XMR');
+      final send = _tx(daysAgo: 0, amount: 200, confirmations: 3, direction: txDirectionOutgoing);
+      CoinActivity of(List<TxDetails> history, {int total = 1000, int? unlocked = 400}) =>
+          HomeActivity.compute(
+            coin,
+            history,
+            BigInt.from(total),
+            _now,
+            unlockedNow: unlocked == null ? null : BigInt.from(unlocked),
+          );
+
+      expect(of([send]).lockedChange, isNotNull);
+      expect(of([send], unlocked: 1000).lockedChange, isNull, reason: 'all of it unlocked');
+      expect(of([send], unlocked: null).lockedChange, isNull, reason: 'balance not loaded');
+      expect(
+        of([_tx(daysAgo: 0, amount: 200, direction: txDirectionOutgoing)]).lockedChange,
+        isNull,
+        reason: 'the send is past its ten blocks',
+      );
+      expect(
+        of([
+          _tx(
+            daysAgo: 0,
+            amount: 200,
+            confirmations: 0,
+            height: -1,
+            direction: txDirectionOutgoing,
+            status: TxStatus.failed,
+          ),
+        ]).lockedChange,
+        isNull,
+        reason: 'a failed send leaves no change',
+      );
+      expect(
+        of([send, _tx(daysAgo: 0, amount: 600, confirmations: 2)]).lockedChange,
+        isNull,
+        reason: 'the receipt accounts for all that is held back',
+      );
+    });
+
+    test('of several sends, the one that unlocks last stands for the change', () {
+      final coin = _Coin('XMR');
+      TxDetails send(String hash, int confirmations, {int height = 3000000}) => _tx(
+        daysAgo: 0,
+        amount: 1,
+        confirmations: confirmations,
+        height: height,
+        direction: txDirectionOutgoing,
+        hash: hash,
+      );
+      LockedChange? of(List<TxDetails> history) => HomeActivity.compute(
+        coin,
+        history,
+        BigInt.from(100),
+        _now,
+        unlockedNow: BigInt.from(10),
+      ).lockedChange;
+
+      expect(of([send('a', 7), send('b', 2)])?.send.hash, 'b');
+      expect(of([send('a', 7), send('b', 2)])?.sends, 2);
+      expect(of([send('a', 7), send('b', 2), send('c', 0, height: -1)])?.send.hash, 'c');
+    });
+
+    test('a coin that spends its pending balance never holds change back', () {
+      final btc = _Coin(
+        'BTC',
+        baseUnitDecimals: 8,
+        requiredConfirmations: 1,
+        canSpendPendingBalance: true,
+      );
+      final a = HomeActivity.compute(
+        btc,
+        [_tx(daysAgo: 0, amount: 5, confirmations: 0, height: -1, direction: txDirectionOutgoing)],
+        BigInt.from(100),
+        _now,
+        unlockedNow: BigInt.from(40),
+      );
+      expect(a.lockedChange, isNull);
+    });
   });
 
   group('HomeActivity.of', () {
-    test('reads the history once until it, the balance or the day changes', () {
+    test('reads the history once until it, either balance or the day changes', () {
       final activity = HomeActivity();
       final coin = _Coin('XMR')
         ..total = BigInt.from(10)
@@ -333,6 +439,11 @@ void main() {
 
       final third = activity.of(coin, now: _now);
       expect(identical(activity.of(coin, now: _now.add(const Duration(days: 1))), third), isFalse);
+
+      // Change unlocking moves the unlocked balance alone.
+      final fourth = activity.of(coin, now: _now);
+      coin.unlocked = BigInt.from(15);
+      expect(identical(activity.of(coin, now: _now), fourth), isFalse);
     });
 
     test('mostRecent is the coin with the newest transaction', () {
@@ -347,7 +458,12 @@ void main() {
 
   group('HomeSections', () {
     test('a locked Monero receipt shows when it unlocks; elsewhere, confirmations', () {
-      final sections = HomeSections(activity: HomeActivity(), labels: _labels);
+      // Trim Decimals at 5 digits: XMR near $150 below one cent.
+      final sections = HomeSections(
+        activity: HomeActivity(),
+        labels: _labels,
+        trimDigitsOf: (_) => 5,
+      );
       final xmr = _Coin('XMR')
         ..total = BigInt.from(2000000000000)
         ..unlocked = BigInt.from(1000000000000)
@@ -395,6 +511,49 @@ void main() {
       final monero = card.items.firstWhere((i) => i.title == 'Monero');
       expect(monero.amount, '+0.66180 XMR');
       expect(monero.progress, closeTo(0.6, 1e-9));
+    });
+
+    test('change from a send shows like a receipt, titled as change', () {
+      // Trim Decimals at 5 digits: XMR near $150 below one cent.
+      final sections = HomeSections(
+        activity: HomeActivity(),
+        labels: _labels,
+        trimDigitsOf: (_) => 5,
+      );
+      final xmr = _Coin('XMR')
+        ..total = BigInt.from(2000000000000)
+        ..unlocked = BigInt.from(500000000000)
+        ..history = [
+          _tx(
+            daysAgo: 1,
+            amount: 1000000000000,
+            confirmations: 4,
+            direction: txDirectionOutgoing,
+            hash: 'out',
+          ),
+          _tx(daysAgo: 30, amount: 3000000000000, hash: 'in'),
+        ];
+      final card = sections.incoming([(wallet: xmr, tokens: const <CryptoWallet>[])], now: _now)!;
+      expect(card.title, 'Incoming');
+      expect(card.items, hasLength(1));
+      final change = card.items.single;
+      expect(change.title, 'Monero Change');
+      expect(change.detail, 'unlocks 12 min 4/10');
+      expect(change.amount, '+1.50000 XMR');
+      expect(change.progress, closeTo(0.4, 1e-9));
+
+      // A receipt still locking alongside: both rows, newest first, and the
+      // change is only what the receipt does not account for.
+      xmr
+        ..total = BigInt.from(2200000000000)
+        ..history = [
+          _tx(daysAgo: 0, amount: 200000000000, confirmations: 1, hash: 'new-in'),
+          ...xmr.txHistory.where((t) => t.hash != 'in'),
+          _tx(daysAgo: 30, amount: 3000000000000, hash: 'in'),
+        ];
+      final both = sections.incoming([(wallet: xmr, tokens: const <CryptoWallet>[])], now: _now)!;
+      expect([for (final i in both.items) i.title], ['Monero', 'Monero Change']);
+      expect(both.items.last.amount, '+1.50000 XMR');
     });
 
     test('lists the two newest and counts the rest in the title', () {

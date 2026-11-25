@@ -11,6 +11,7 @@ import 'app_config.dart';
 import 'background_sync_mode.dart';
 import 'metadata_backup.dart';
 import 'payment_uri.dart';
+import 'receive/used_receive_address.dart';
 import 'seed/seed.dart';
 import 'stores/tx_notification_store.dart';
 import 'stores/wallet_cache_store.dart';
@@ -628,6 +629,11 @@ abstract class CryptoWallet with ChangeNotifier {
 
   Future<void> deleteFiles();
 
+  /// Removes the wallet file that failed to open as corrupt, before the
+  /// wallet manager rebuilds it from the stored seed. [deleteFiles] by default;
+  /// Monero keeps the other mode's file, which is not the one that failed.
+  Future<void> deleteCorruptFiles() => deleteFiles();
+
   // ----- Daemon hooks (subclass) -----
 
   Future<void> connectToDaemonImpl({required String address, String? proxyPort});
@@ -656,6 +662,17 @@ abstract class CryptoWallet with ChangeNotifier {
   String getPrimaryAddress();
 
   String? getReceiveAddress() => getPrimaryAddress();
+
+  /// What this wallet calls the receive addresses it hands out one after
+  /// another, or null when it keeps a single address (Ethereum and its
+  /// tokens). Only a wallet with a kind lists its used addresses on Receive.
+  RotatingAddressKind? get rotatingAddressKind => null;
+
+  /// Every receive address handed out by [getReceiveAddress] that has received
+  /// a transaction, most recently used first ([summarizeReceipts]). Change
+  /// addresses, and Monero's primary address, are not among them. Empty for a
+  /// wallet with no [rotatingAddressKind].
+  Future<List<UsedReceiveAddress>> loadUsedReceiveAddresses() async => const [];
 
   bool isAddressValid(String address);
 
@@ -695,7 +712,14 @@ abstract class CryptoWallet with ChangeNotifier {
   ///
   /// Server-supplied fee inputs reach the signed transaction as given. Show
   /// [PendingTransaction.feeBaseUnits] and warn on its ratio to the amount
-  /// before calling [commitTx].
+  /// before calling [commitTx]. The values of the coins being spent are not a
+  /// fee input: [PendingTransaction.feeBaseUnits] is only true if they are, so a
+  /// wallet whose signatures commit to them checks them before signing
+  /// (Bitcoin does, against each coin's parent transaction).
+  ///
+  /// A wallet that can tell why a build failed throws [TxBuildFailure] (Monero
+  /// does, and Bitcoin when that input check fails); other wallets throw
+  /// whatever their backend raised.
   Future<PendingTransaction> createTx(
     String destinationAddress,
     BigInt amountBaseUnits,

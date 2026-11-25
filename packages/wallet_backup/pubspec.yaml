@@ -5,8 +5,8 @@ version: 0.1.0
 resolution: workspace
 
 environment:
-  sdk: 3.13.5
-  flutter: 3.47.7
+  sdk: 3.13.7
+  flutter: 3.47.9
 
 dependencies:
   flutter:
@@ -26,7 +26,7 @@ dependencies:
   fhse_native:
     git:
       url: https://github.com/MAGICGrants/fhse_native
-      ref: 7aad37cb20b9cc7a545e0e3d044d18664a99d636 # main
+      ref: 4c04becbf4d46032f097bc6a7f49a7cd8eb94a69 # main
 
 dev_dependencies:
   flutter_test:

@@ -1,7 +1,7 @@
 /// Store screenshots: a fixed sample balance and history, the [SampleWallet]
 /// mixin that shows them in place of a server's, and the handshake through
-/// which an app's screenshot test asks `scripts/store-screenshots.sh` for each
-/// picture.
+/// which an app's screenshot test asks the host for each picture. Makes it
+/// easier to take promotional screenshots and recordings.
 ///
 /// A separate entry point, like `package:wallet_monero/testing.dart`: the
 /// figures are invented, so application code must never import it.

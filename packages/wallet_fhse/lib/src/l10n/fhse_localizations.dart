@@ -1028,6 +1028,18 @@ abstract class FhseLocalizations {
   /// In en, this message translates to:
   /// **'You can access your wallet with your recovery phrase. This is only recommended as a recovery mechanism. It is not supposed to be the normal way to access your wallet.'**
   String get appLockUseRecoveryPhraseBody;
+
+  /// Name of the eye button on a security-key PIN field while the PIN is hidden; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Show PIN'**
+  String get showPin;
+
+  /// Name of the eye button on a security-key PIN field while the PIN shows; read by screen readers. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide PIN'**
+  String get hidePin;
 }
 
 class _FhseLocalizationsDelegate extends LocalizationsDelegate<FhseLocalizations> {

@@ -24,6 +24,11 @@ class FakeMoneroBackend extends MoneroBackend {
   /// test, matching monero_c's behaviour closely enough for the retry paths.
   final Map<int, String> errorStrings = {};
 
+  /// The error an [openWallet] of an existing path leaves, or null for none.
+  /// Asked on every such open, so a test can answer from the files on disk
+  /// (lwsf's unfinished `<path>.new`, say), the way the real library does.
+  String? Function(String path, String password)? openError;
+
   /// Queued failures for the next `recoveryWallet` / `createWalletFromPolyseed`
   /// call, e.g. `'file already exists'`.
   final List<String> queuedRestoreErrors = [];
@@ -41,7 +46,10 @@ class FakeMoneroBackend extends MoneroBackend {
   /// restore of the same seed reproduces the same address.
   final Map<String, String> addressesBySeed = {};
 
-  String defaultAddress = '4-e';
+  /// The form of a Monero address, base58 and 95 characters, like every
+  /// address this fake hands out: the wallet refuses anything else before it
+  /// asks the validator.
+  String defaultAddress = '4${'F' * 94}';
 
   /// Stands in for monero_c's base58-and-checksum validator.
   ///
@@ -154,6 +162,7 @@ class FakeMoneroBackend extends MoneroBackend {
   void reset() {
     existingWalletPaths.clear();
     errorStrings.clear();
+    openError = null;
     queuedRestoreErrors.clear();
     queuedRestoreStatuses.clear();
     _walletStatuses.clear();
@@ -225,6 +234,8 @@ class FakeMoneroBackend extends MoneroBackend {
     walletPasswords[handle.id] = password;
     if (!existingWalletPaths.contains(path)) {
       errorStrings[handle.id] = 'failed to open wallet: no such file';
+    } else if (openError?.call(path, password) case final error?) {
+      errorStrings[handle.id] = error;
     }
     if (backgroundWalletPaths.contains(path)) {
       // wallet2 recognises a background keys file by which key decrypts it, and
@@ -608,7 +619,11 @@ class FakeMoneroBackend extends MoneroBackend {
       // Stable per seed, so "restoring the same seed gives the same address"
       // is a property the fake actually exhibits.
       return _issue(
-        addressesBySeed.putIfAbsent(seed, () => '4${seed.hashCode.abs()}'.padRight(95, 'B')),
+        addressesBySeed.putIfAbsent(
+          seed,
+          // No 0: it is not in base58.
+          () => '4${seed.hashCode.abs()}'.replaceAll('0', 'B').padRight(95, 'B'),
+        ),
       );
     }
     return _issue(defaultAddress);

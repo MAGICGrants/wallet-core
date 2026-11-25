@@ -6,6 +6,7 @@ import '../design/click_cursor.dart';
 import '../design/brand_button.dart';
 import '../design/radio_dot.dart';
 import '../design/sheet.dart';
+import '../l10n/ui_strings.dart';
 
 /// Translated strings for [showScanFromSheet]. Injected so the sheet stays
 /// localization-agnostic — each app passes its own generated l10n. Month names
@@ -53,38 +54,43 @@ class ScanFromCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const radius = BrandRadii.rField;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: BrandColors.surfaceSunken,
-        borderRadius: radius,
-        border: Border.all(color: BrandColors.border),
-      ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            mouseCursor: WidgetStateMouseCursor.clickable,
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 15),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(label, style: BrandText.listTitle),
-                        const SizedBox(height: 2),
-                        Text(reason, style: BrandText.caption),
-                      ],
+    // One button: its label, reason and value read together.
+    return Semantics(
+      container: true,
+      button: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: BrandColors.surfaceSunken,
+          borderRadius: radius,
+          border: Border.all(color: BrandColors.border),
+        ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              mouseCursor: WidgetStateMouseCursor.clickable,
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 15),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label, style: BrandText.listTitle),
+                          const SizedBox(height: 2),
+                          Text(reason, style: BrandText.caption),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: BrandSpacing.md),
-                  Text(value, style: valueStyle),
-                  const SizedBox(width: BrandSpacing.xs),
-                  Icon(Icons.chevron_right, size: 18, color: BrandColors.inkFaint),
-                ],
+                    const SizedBox(width: BrandSpacing.md),
+                    Text(value, style: valueStyle),
+                    const SizedBox(width: BrandSpacing.xs),
+                    Icon(Icons.chevron_right, size: 18, color: BrandColors.inkFaint),
+                  ],
+                ),
               ),
             ),
           ),
@@ -148,6 +154,7 @@ class _ScanFromSheetState extends State<_ScanFromSheet> {
     final labels = widget.labels;
     final locale = labels.locale;
     final now = DateTime.now();
+    final strings = uiStringsOf(context);
     // Desktop: centered modal card (no drag handle; the card owns the padding).
     final desktop = isDesktopModal;
 
@@ -156,7 +163,12 @@ class _ScanFromSheetState extends State<_ScanFromSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (!desktop) const SheetHandle(),
-        Text(labels.title, style: BrandText.sheetTitle),
+        Semantics(
+          container: true,
+          header: true,
+          namesRoute: true,
+          child: Text(labels.title, style: BrandText.sheetTitle),
+        ),
         const SizedBox(height: BrandSpacing.sm),
         Text(labels.description, style: BrandText.bodyMuted),
         const SizedBox(height: BrandSpacing.lg),
@@ -168,6 +180,7 @@ class _ScanFromSheetState extends State<_ScanFromSheet> {
             children: [
               Expanded(
                 child: _ScanDropdown<int>(
+                  semanticLabel: strings?.a11yMonth,
                   value: _month,
                   items: [for (var m = 1; m <= 12; m++) m],
                   label: (m) => DateFormat.MMMM(locale).format(DateTime(2000, m)),
@@ -177,6 +190,7 @@ class _ScanFromSheetState extends State<_ScanFromSheet> {
               const SizedBox(width: BrandSpacing.sm),
               Expanded(
                 child: _ScanDropdown<int>(
+                  semanticLabel: strings?.a11yYear,
                   value: _year,
                   items: [for (var y = now.year; y >= 2014; y--) y],
                   label: (y) => '$y',
@@ -246,6 +260,9 @@ class _SheetOption extends StatelessWidget {
     return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      checked: selected,
+      inMutuallyExclusiveGroup: true,
+      focusRadius: BrandRadii.rField,
       child: AnimatedContainer(
         duration: BrandMotion.transition,
         curve: Curves.easeInOut,
@@ -282,7 +299,11 @@ class _SheetOption extends StatelessWidget {
                 ),
               ],
             ),
-            if (selected && expanded != null) ...[const SizedBox(height: 12), expanded!],
+            // Its own controls, not part of the option's name.
+            if (selected && expanded != null) ...[
+              const SizedBox(height: 12),
+              Semantics(container: true, explicitChildNodes: true, child: expanded!),
+            ],
           ],
         ),
       ),
@@ -297,7 +318,11 @@ class _ScanDropdown<T> extends StatelessWidget {
   final String Function(T) label;
   final ValueChanged<T> onChanged;
 
+  /// What the picker sets ("Month"), read before its current value.
+  final String? semanticLabel;
+
   const _ScanDropdown({
+    this.semanticLabel,
     required this.value,
     required this.items,
     required this.label,
@@ -306,25 +331,29 @@ class _ScanDropdown<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13),
-      decoration: BoxDecoration(
-        color: BrandColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: BrandColors.border),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<T>(
-          value: value,
-          isExpanded: true,
-          icon: Icon(Icons.keyboard_arrow_down, color: BrandColors.inkFaint),
-          borderRadius: BrandRadii.rField,
-          dropdownColor: BrandColors.card,
-          style: TextStyle(fontFamily: 'Ubuntu', fontSize: 14, color: BrandColors.ink),
-          items: [for (final it in items) DropdownMenuItem<T>(value: it, child: Text(label(it)))],
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
+    return Semantics(
+      container: true,
+      label: semanticLabel,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13),
+        decoration: BoxDecoration(
+          color: BrandColors.surfaceSunken,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: BrandColors.border),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<T>(
+            value: value,
+            isExpanded: true,
+            icon: Icon(Icons.keyboard_arrow_down, color: BrandColors.inkFaint),
+            borderRadius: BrandRadii.rField,
+            dropdownColor: BrandColors.card,
+            style: TextStyle(fontFamily: 'Ubuntu', fontSize: 14, color: BrandColors.ink),
+            items: [for (final it in items) DropdownMenuItem<T>(value: it, child: Text(label(it)))],
+            onChanged: (v) {
+              if (v != null) onChanged(v);
+            },
+          ),
         ),
       ),
     );

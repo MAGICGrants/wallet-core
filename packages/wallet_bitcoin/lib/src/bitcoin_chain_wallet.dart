@@ -171,6 +171,12 @@ class BitcoinChainWallet extends CryptoWallet {
   /// by [loadTxHistory].
   final Map<String, _TxCacheEntry> _txCache = {};
 
+  /// What each coin this wallet has tried to spend really is, by outpoint
+  /// (`txid:vout`): the output as its own parent transaction states it. Only
+  /// parents whose bytes hash to the txid are read, so an entry is a fact about
+  /// that transaction rather than a server's claim, and never goes stale.
+  final Map<String, ParsedBtcOutput> _checkedPrevouts = {};
+
   /// Block timestamps keyed by height, from header subscription or
   /// `blockchain.block.header`.
   final Map<int, int> _blockTimeByHeight = {};
@@ -1683,6 +1689,34 @@ class BitcoinChainWallet extends CryptoWallet {
   }
 
   @override
+  RotatingAddressKind get rotatingAddressKind => RotatingAddressKind.address;
+
+  /// Every address on the external (receive) chain that has received a
+  /// transaction, by its index there. Change addresses are left out, even one
+  /// paid directly: [getReceiveAddress] never hands one out. So are this
+  /// wallet's own sends to itself, which are outgoing.
+  @override
+  Future<List<UsedReceiveAddress>> loadUsedReceiveAddresses() async {
+    final receiveIndex = {
+      for (final a in _addresses)
+        if (!a.isChange) a.address: a.index,
+    };
+    return summarizeReceipts([
+      for (final tx in txHistory)
+        if (tx.direction == txDirectionIncoming)
+          for (final r in tx.recipients)
+            if (receiveIndex[r.address] case final index? when !r.isChange)
+              (
+                address: r.address,
+                index: index,
+                amountBaseUnits: r.amountBaseUnits,
+                txHash: tx.hash,
+                timestamp: tx.timestamp,
+              ),
+    ]);
+  }
+
+  @override
   bool isAddressValid(String address) => _tryDecodeAddress(address) != null;
 
   /// Every address form this wallet will pay to, or null.
@@ -1739,6 +1773,11 @@ class BitcoinChainWallet extends CryptoWallet {
       selection = r.inputs;
       useChange = r.useChange;
     }
+
+    // Every value below is signed. Check each against the coin's own parent
+    // transaction first: see [_checkSelectedCoins] for why the server's word is
+    // not enough.
+    await _checkSelectedCoins(selection);
 
     final changeAddress = _nextChangeAddress();
     final outputs = <BitcoinOutput>[];
@@ -1916,6 +1955,88 @@ class BitcoinChainWallet extends CryptoWallet {
       );
     }
   }
+
+  /// Throws [TxBuildFailure] unless every coin in [selection] is what the
+  /// server's `listunspent` said: that value, paid to that address's P2WPKH
+  /// script, as read from the parent transaction the coin's outpoint names.
+  ///
+  /// The value a coin is signed with is the one the server reported, and a
+  /// SegWit v0 signature (BIP143) commits to its own input's value and no other.
+  /// So a server could under-report one coin, reject that broadcast, and
+  /// under-report a different coin when the user sends again. With the same
+  /// claimed total the two attempts are the same transaction apart from the
+  /// signatures, and the honest signature from each joins into one valid
+  /// transaction whose real fee is the hidden difference; both confirm screens
+  /// showed the small one. Checking against the parent stops that at the first
+  /// lie. The parent is fetched by the txid the input commits to and used only
+  /// if its bytes hash to it.
+  ///
+  /// The balance stays the server's figure; only the values that get signed
+  /// are checked. A server that withholds a parent blocks the sends that need
+  /// that coin, which it could already do by not listing the coin at all.
+  Future<void> _checkSelectedCoins(List<_SpendableUtxo> selection) async {
+    final missing = <String>{
+      for (final u in selection)
+        if (!_checkedPrevouts.containsKey(_outpointKey(u.txHash, u.vout))) u.txHash,
+    };
+    if (missing.isNotEmpty) {
+      final raws = <String, String>{};
+      try {
+        await _fetchParentRawsByTxid(missing, raws);
+      } catch (e) {
+        if (isElectrumDisconnectError(e)) {
+          throw const TxBuildFailure(
+            TxBuildProblem.notConnected,
+            detail: 'connection lost while checking inputs against their transactions',
+          );
+        }
+        walletLog(LogLevel.warn, 'input check fetch failed: ${e.runtimeType}');
+        throw TxBuildFailure(
+          TxBuildProblem.coinsNotVerified,
+          detail: 'could not fetch the inputs\' transactions (${e.runtimeType})',
+        );
+      }
+      for (final MapEntry(key: txid, value: raw) in raws.entries) {
+        final ParsedBtcTx parent;
+        try {
+          parent = parseBtcTx(raw);
+        } catch (_) {
+          continue; // Hashed to its txid, so not expected; reported below as missing.
+        }
+        for (final u in selection) {
+          if (u.txHash == txid && u.vout >= 0 && u.vout < parent.outputs.length) {
+            _checkedPrevouts[_outpointKey(txid, u.vout)] = parent.outputs[u.vout];
+          }
+        }
+      }
+    }
+
+    for (final u in selection) {
+      final prevout = _checkedPrevouts[_outpointKey(u.txHash, u.vout)];
+      // The outpoint, like the rest of this wallet's logging, by fingerprint.
+      final where = '${Redact.id(u.txHash)}:${u.vout}';
+      if (prevout == null) {
+        walletLog(LogLevel.warn, 'input $where has no verifiable parent; not signing');
+        throw const TxBuildFailure(
+          TxBuildProblem.coinsNotVerified,
+          detail: 'an input\'s transaction was unavailable, or has no such output',
+        );
+      }
+      final script = P2wpkhAddress.fromAddress(
+        address: u.address,
+        network: _network,
+      ).toScriptPubKey().toHex();
+      if (prevout.valueSats != u.value || prevout.scriptHex != script.toLowerCase()) {
+        walletLog(LogLevel.warn, 'server misreported input $where; not signing');
+        throw const TxBuildFailure(
+          TxBuildProblem.coinsNotVerified,
+          detail: 'the server misreported an input\'s value or script',
+        );
+      }
+    }
+  }
+
+  static String _outpointKey(String txHash, int vout) => '$txHash:$vout';
 
   // ----- Coin selection -----
 

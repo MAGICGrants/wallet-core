@@ -6,6 +6,7 @@ import '../design/brand_screen_header.dart';
 import '../design/icon_circle_button.dart';
 import '../design/seed_grid.dart';
 import '../design/step_dots.dart';
+import '../l10n/ui_strings.dart';
 
 /// Translated strings for [GenerateSeedView]. Injected so the view stays
 /// localization-agnostic — each app passes its own generated l10n.
@@ -87,11 +88,21 @@ class _GenerateSeedViewState extends State<GenerateSeedView> {
               ? IconCircleButton(
                   icon: Icons.visibility_off_outlined,
                   onPressed: () => setState(() => _revealed = false),
+                  semanticLabel: uiStringsOf(context)?.a11yHide,
                 )
               : null,
         ),
         const SizedBox(height: BrandSpacing.lg),
-        Text(_revealed ? labels.titleRevealed : labels.titleCovered, style: BrandText.title),
+        // The step dots name only the step: this is the screen's title.
+        Semantics(
+          container: true,
+          header: true,
+          namesRoute: true,
+          child: Text(
+            _revealed ? labels.titleRevealed : labels.titleCovered,
+            style: BrandText.title,
+          ),
+        ),
         const SizedBox(height: BrandSpacing.sm),
         Text(
           _revealed ? labels.subtitleRevealed : labels.subtitleCovered,
@@ -100,7 +111,11 @@ class _GenerateSeedViewState extends State<GenerateSeedView> {
         const SizedBox(height: BrandSpacing.xl),
         Expanded(
           child: !_ready
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(
+                  child: CircularProgressIndicator(
+                    semanticsLabel: uiStringsOf(context)?.a11yLoading,
+                  ),
+                )
               : ListView(
                   children: [
                     SeedGrid(
@@ -161,23 +176,28 @@ class _ConfirmCheck extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      mouseCursor: WidgetStateMouseCursor.clickable,
-      onTap: () => onChanged(!value),
-      borderRadius: BrandRadii.rTile,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: BrandSpacing.sm),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              value ? Icons.check_box : Icons.check_box_outline_blank,
-              color: value ? BrandColors.primary : BrandColors.inkFaint,
-              size: 22,
-            ),
-            const SizedBox(width: BrandSpacing.md),
-            Expanded(child: Text(label, style: BrandText.body)),
-          ],
+    // The row is the checkbox: one node named by its text, and one tab stop.
+    return Semantics(
+      container: true,
+      checked: value,
+      child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
+        onTap: () => onChanged(!value),
+        borderRadius: BrandRadii.rTile,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: BrandSpacing.sm),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                value ? Icons.check_box : Icons.check_box_outline_blank,
+                color: value ? BrandColors.primary : BrandColors.inkFaint,
+                size: 22,
+              ),
+              const SizedBox(width: BrandSpacing.md),
+              Expanded(child: Text(label, style: BrandText.body)),
+            ],
+          ),
         ),
       ),
     );

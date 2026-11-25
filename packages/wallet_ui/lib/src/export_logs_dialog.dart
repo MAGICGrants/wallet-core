@@ -7,6 +7,7 @@ import 'design/brand_button.dart';
 import 'design/share_anchor.dart';
 import 'design/sheet.dart';
 import 'design/toast.dart';
+import 'l10n/ui_strings.dart';
 
 /// Translated strings for [ExportLogsDialog]. The app builds this from its own
 /// l10n and passes it in; the package carries no localization of its own.
@@ -52,7 +53,13 @@ class ExportLogsDialog {
                           color: BrandColors.primary,
                         ),
                         const SizedBox(width: 11),
-                        Expanded(child: Text(labels.title, style: BrandText.sheetTitle)),
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            namesRoute: true,
+                            child: Text(labels.title, style: BrandText.sheetTitle),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -119,8 +126,10 @@ class ExportLogsDialog {
           },
           leading: const Icon(Icons.description_outlined),
           title: Text(file.name),
-          subtitle: Text('$dateStr • $sizeKb KB'),
-          trailing: const Icon(Icons.ios_share),
+          // Read without the bullet.
+          subtitle: Text('$dateStr • $sizeKb KB', semanticsLabel: '$dateStr, $sizeKb KB'),
+          // Says what a tap on the row does.
+          trailing: Icon(Icons.ios_share, semanticLabel: uiStringsOf(context)?.a11yShare),
         ),
       );
     },

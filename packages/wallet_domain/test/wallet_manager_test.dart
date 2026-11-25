@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -62,9 +63,12 @@ void main() {
     SharedPreferencesService.store = prefs;
     secrets = MemorySecretStore();
     WalletSecrets.store = secrets;
+    // Every manager hands the label store its password; none may carry over.
+    AddressLabelKey.resetForTesting();
   });
 
   tearDown(() {
+    AddressLabelKey.resetForTesting();
     WalletAppConfig.resetForTesting();
     SharedPreferencesService.resetForTesting();
     WalletSecrets.resetForTesting();
@@ -429,6 +433,40 @@ void main() {
       m.dispose();
     });
 
+    test('labels an earlier install left in the keystore are cleared', () async {
+      // iOS keeps the keystore through an uninstall: without this, restoring
+      // the same seed after a reinstall shows the old labels again, from the
+      // device rather than the metadata backup.
+      installSpice();
+      // An earlier install's labels, as an older build kept them: in the
+      // keystore, which outlives an uninstall on iOS.
+      await secrets.write(
+        'addressLabels',
+        json.encode([
+          const AddressLabel(coin: 'BTC', address: 'bc1q', label: 'Donations').toJson(),
+        ]),
+      );
+      final labels = AddressLabelModel();
+      addTearDown(labels.dispose);
+      // Unlocked under some earlier password, which reads them.
+      AddressLabelKey.password = 'earlier';
+      for (var i = 0; i < 200 && labels.count == 0; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(labels.labelFor('BTC', 'bc1q'), 'Donations');
+      expect(await readAddressLabels(), hasLength(1));
+      final m = manager([FakeWallet('BTC')])..setWalletPassword('pw');
+
+      await m.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+      );
+
+      expect(await readAddressLabels(), isEmpty);
+      expect(labels.count, 0, reason: 'the open model would save them back');
+      m.dispose();
+    });
+
     test('a keystore that refuses the password stops it before any file is written', () async {
       installSpice();
       WalletSecrets.holdsWalletPassword = true;
@@ -695,6 +733,27 @@ void main() {
 
       expect(btc.deleteFileCount, 1);
       expect(btc.restores, hasLength(1), reason: 're-bootstrapped from the stored seed');
+      m.dispose();
+    });
+
+    test('a corrupt-file rebuild removes only what the wallet says is corrupt', () async {
+      // Monero keeps its other mode's file: it opened fine last time and holds
+      // that mode's own transaction keys. Wholesale deletion would lose them.
+      installSpice();
+      final xmr = _DeletesCorruptOnly('XMR', existing: true);
+      final m = manager([xmr])..setWalletPassword('pw');
+      await m.restoreAll(
+        seed: const Bip39Seed(_bip39),
+        from: RestorePoint.date(DateTime.utc(2026)),
+      );
+
+      xmr.openError = const FormatException('LWS wallet file is corrupt or unreadable: x');
+      xmr.restores.clear();
+      await m.openAll();
+
+      expect(xmr.corruptDeletes, 1);
+      expect(xmr.deleteFileCount, 0);
+      expect(xmr.restores, hasLength(1));
       m.dispose();
     });
 
@@ -972,5 +1031,19 @@ class _LockableWallet extends FakeWallet {
   Future<bool> leaveViewOnlyMode(String password) async {
     events.add('leave $password');
     return leaveSucceeds;
+  }
+}
+
+/// A wallet whose corrupt-file cleanup is narrower than [deleteFiles], as
+/// Monero's is.
+class _DeletesCorruptOnly extends FakeWallet {
+  _DeletesCorruptOnly(super.symbol, {super.existing});
+
+  int corruptDeletes = 0;
+
+  @override
+  Future<void> deleteCorruptFiles() async {
+    corruptDeletes++;
+    existing = false;
   }
 }

@@ -59,7 +59,14 @@ class SubPageScaffold extends StatelessWidget {
                   onTap: back,
                 ),
                 const SizedBox(height: 12),
-                Text(title, style: desktopTitleStyle),
+                // The page's heading, and the name screen readers give it (the
+                // phone header's centre is, through BrandScreenHeader).
+                Semantics(
+                  container: true,
+                  header: true,
+                  namesRoute: true,
+                  child: Text(title, style: desktopTitleStyle),
+                ),
               ],
             ),
           )

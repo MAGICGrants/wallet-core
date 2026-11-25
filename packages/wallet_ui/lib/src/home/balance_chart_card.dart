@@ -82,9 +82,14 @@ class BalanceChartCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: SectionHeader(label: title, padding: EdgeInsets.zero),
+              // Its own node: in a list, a heading that is not one takes in
+              // the text around it.
+              child: Semantics(
+                container: true,
+                child: SectionHeader(label: title, padding: EdgeInsets.zero),
+              ),
             ),
-            if (note != null) Text(note!, style: noteStyle),
+            if (note != null) Semantics(container: true, child: Text(note!, style: noteStyle)),
           ],
         ),
         if (emptyText != null)
@@ -100,6 +105,7 @@ class BalanceChartCard extends StatelessWidget {
                 spacing: 12,
                 children: [
                   Semantics(
+                    container: true,
                     label: [for (final s in series) '${s.label} ${s.change}'].join(', '),
                     child: SizedBox(
                       height: 96,
@@ -107,12 +113,15 @@ class BalanceChartCard extends StatelessWidget {
                       child: CustomPaint(painter: _BalanceChartPainter(series)),
                     ),
                   ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(startLabel, style: homeMonoCaption.copyWith(fontSize: 12)),
-                      Text(endLabel, style: homeMonoCaption.copyWith(fontSize: 12)),
-                    ],
+                  // The window's ends read together, after the chart.
+                  MergeSemantics(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(startLabel, style: homeMonoCaption.copyWith(fontSize: 12)),
+                        Text(endLabel, style: homeMonoCaption.copyWith(fontSize: 12)),
+                      ],
+                    ),
                   ),
                 ],
               );
@@ -166,24 +175,27 @@ class _LegendRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mono = BrandText.amount.copyWith(fontWeight: FontWeight.w400);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 24),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 22,
-            height: 8,
-            child: CustomPaint(painter: _SwatchPainter(series.color, dash)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: Text(series.label, style: mono)),
-          Text(
-            series.change,
-            style: BrandText.amount.copyWith(
-              color: series.up ? BrandColors.success : BrandColors.ink,
+    // The amount and its change read as one.
+    return MergeSemantics(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 24),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 8,
+              child: CustomPaint(painter: _SwatchPainter(series.color, dash)),
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            Expanded(child: Text(series.label, style: mono)),
+            Text(
+              series.change,
+              style: BrandText.amount.copyWith(
+                color: series.up ? BrandColors.success : BrandColors.ink,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

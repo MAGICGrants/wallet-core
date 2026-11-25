@@ -484,7 +484,7 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
   String get receiveSubaddressTab => 'Subendereço';
 
   @override
-  String get receivePrimaryTab => 'Endereço Primário';
+  String get receivePrimaryTab => 'Primário';
 
   @override
   String get receiveCopyAddress => 'Copiar Endereço';
@@ -654,6 +654,19 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
   String get settingsAddressBookDeleted => 'Lista de contatos excluída';
 
   @override
+  String get settingsDeleteAddressLabelsButton => 'Excluir Rótulos de Endereço';
+
+  @override
+  String get settingsDeleteAddressLabelsDialogText =>
+      'Tem certeza que deseja excluir seus rótulos de endereço? Se o backup automático estiver ligado, eles também serão excluídos desses backups automáticos.';
+
+  @override
+  String get settingsDeleteAddressLabelsDialogDeleteButton => 'Excluir';
+
+  @override
+  String get settingsAddressLabelsDeleted => 'Rótulos de endereço excluídos';
+
+  @override
   String get txDetailsTitle => 'Detalhes da Transação';
 
   @override
@@ -811,6 +824,10 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
       'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.';
 
   @override
+  String get sendCoinsNotVerifiedError =>
+      'Não foi possível verificar seus fundos com este servidor, então nada foi enviado. Tente novamente ou use outro servidor.';
+
+  @override
   String get torSettingsTitle => 'Configurações do Tor';
 
   @override
@@ -893,12 +910,17 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
       other: '$minutes minutos',
       one: '1 minuto',
     );
-    return 'Desbloqueia em cerca de $_temp0 · $done de $needed';
+    return 'Desbloqueia em cerca de $_temp0\n$done de $needed';
   }
 
   @override
   String homeIncomingConfirmations(int done, int needed) {
     return '$done de $needed confirmações';
+  }
+
+  @override
+  String homeIncomingChange(String asset) {
+    return 'Troco em $asset';
   }
 
   @override
@@ -939,6 +961,41 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
 
   @override
   String get homeChecklistSecurityKeys => 'Configure uma Chave de Segurança';
+
+  @override
+  String get securityChecklistLabel => 'Lista de Verificação de Segurança';
+
+  @override
+  String get securityChecklistShown => 'Mostrada na tela inicial';
+
+  @override
+  String get securityChecklistHidden => 'Oculta da tela inicial';
+
+  @override
+  String get securityChecklistSheetSubtitle =>
+      'Escolha se a tela inicial mostra esta lista e de quais etapas ela lembra você.';
+
+  @override
+  String get securityChecklistHomeSection => 'Tela Inicial';
+
+  @override
+  String get securityChecklistShowOnHome => 'Mostrar na Tela Inicial';
+
+  @override
+  String get securityChecklistShowOnHomeDesc =>
+      'Até que todas as etapas que você mantiver abaixo estejam concluídas';
+
+  @override
+  String get securityChecklistStepsSection => 'Lembretes';
+
+  @override
+  String get securityChecklistStepDone => 'Concluída';
+
+  @override
+  String get securityChecklistStepNotDone => 'Não concluída';
+
+  @override
+  String get securityChecklistSeedDone => 'Concluída · pedida novamente a cada 6 meses';
 
   @override
   String verifySeedSubtitle(int first, int second, int third) {
@@ -993,4 +1050,267 @@ class WalletUiLocalizationsPt extends WalletUiLocalizations {
   String generateSeedPasswordNote(String appName) {
     return 'A $appName Wallet pede sua senha antes de mostrar estas palavras novamente.';
   }
+
+  @override
+  String get receiveAddressTab => 'Endereço';
+
+  @override
+  String get receiveLabeledTab => 'Rotulados';
+
+  @override
+  String get labeledCaption =>
+      'Rotule endereços, se quiser, para encontrar facilmente as transações que os envolvem.';
+
+  @override
+  String labeledUsedHeader(String kind, int count) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Subendereços Usados',
+      'other': 'Endereços Usados',
+    });
+    return '$_temp0 · $count';
+  }
+
+  @override
+  String labeledOnlyHeader(String kind, int count) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Subendereços Rotulados',
+      'other': 'Endereços Rotulados',
+    });
+    return '$_temp0 · $count';
+  }
+
+  @override
+  String get labeledHideUnlabeled => 'Ocultar sem Rótulo';
+
+  @override
+  String labeledAddressTitle(String kind, int index) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Subendereço #$index',
+      'other': 'Endereço #$index',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String labeledTransactionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transações',
+      one: '1 transação',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String labeledLastUsed(String time) {
+    return 'Usado pela última vez $time';
+  }
+
+  @override
+  String get labeledLabelButton => 'Rotular';
+
+  @override
+  String labeledEmptyTitle(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Nenhum subendereço usado ainda',
+      'other': 'Nenhum endereço usado ainda',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String labeledEmptyBody(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Um subendereço aparece aqui após sua primeira transação.',
+      'other': 'Um endereço aparece aqui após sua primeira transação.',
+    });
+    return 'Rotule endereços, se quiser, para encontrar facilmente as transações que os envolvem. $_temp0';
+  }
+
+  @override
+  String labelSheetTitle(String kind, int index) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'subaddress': 'Rotular Subendereço #$index',
+      'other': 'Rotular Endereço #$index',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get labelSheetField => 'Rótulo';
+
+  @override
+  String get labelSheetSave => 'Salvar Rótulo';
+
+  @override
+  String get addressDetailTransactions => 'Transações';
+
+  @override
+  String get addressDetailLastTransaction => 'Última Transação';
+
+  @override
+  String get addressDetailEditLabel => 'Editar Rótulo';
+
+  @override
+  String get addressDetailAddLabel => 'Adicionar Rótulo';
+
+  @override
+  String get historyFilterLabeledAddresses => 'Seus Endereços Rotulados';
+
+  @override
+  String get timeAgoMoment => 'há alguns segundos';
+
+  @override
+  String get timeAgoMinute => 'há cerca de um minuto';
+
+  @override
+  String timeAgoMinutes(int count) {
+    return 'há $count minutos';
+  }
+
+  @override
+  String get timeAgoHour => 'há cerca de uma hora';
+
+  @override
+  String timeAgoHours(int count) {
+    return 'há $count horas';
+  }
+
+  @override
+  String get timeAgoDay => 'há um dia';
+
+  @override
+  String timeAgoDays(int count) {
+    return 'há $count dias';
+  }
+
+  @override
+  String get timeAgoMonth => 'há cerca de um mês';
+
+  @override
+  String timeAgoMonths(int count) {
+    return 'há $count meses';
+  }
+
+  @override
+  String get timeAgoYear => 'há cerca de um ano';
+
+  @override
+  String timeAgoYears(int count) {
+    return 'há $count anos';
+  }
+
+  @override
+  String get a11yShare => 'Compartilhar';
+
+  @override
+  String get a11yScanQrCode => 'Escanear Código QR';
+
+  @override
+  String get a11yFlashlight => 'Lanterna';
+
+  @override
+  String get a11ySwitchCamera => 'Trocar Câmera';
+
+  @override
+  String get a11yShowPassword => 'Mostrar Senha';
+
+  @override
+  String get a11yHidePassword => 'Ocultar Senha';
+
+  @override
+  String get a11yClear => 'Limpar';
+
+  @override
+  String get a11yRemove => 'Remover';
+
+  @override
+  String get a11yHide => 'Ocultar';
+
+  @override
+  String a11yCopyValue(String label) {
+    return 'Copiar $label';
+  }
+
+  @override
+  String a11yWordOfCount(int index, int count) {
+    return 'Palavra $index de $count';
+  }
+
+  @override
+  String a11yStepOfCount(int step, int count) {
+    return 'Etapa $step de $count';
+  }
+
+  @override
+  String get a11yLoading => 'Carregando';
+
+  @override
+  String get a11yRecoveryPhrase => 'Frase de Recuperação';
+
+  @override
+  String get a11ySearch => 'Pesquisar';
+
+  @override
+  String get a11yMonth => 'Mês';
+
+  @override
+  String get a11yYear => 'Ano';
+
+  @override
+  String get a11yTxFailed => 'Falhou';
+
+  @override
+  String get a11yTxUnknown => 'Não confirmada como enviada';
+
+  @override
+  String a11yAddressEnds(String start, String end) {
+    return '$start, terminando em $end';
+  }
+
+  @override
+  String get a11yAddressQr => 'Código QR deste endereço';
+
+  @override
+  String get a11yOverTor => 'Via Tor';
+
+  @override
+  String get a11yOverHttps => 'Via HTTPS';
+
+  @override
+  String get trimDecimalsLabel => 'Reduzir Casas Decimais';
+
+  @override
+  String get trimDecimalsSheetSubtitle =>
+      'Oculta os últimos dígitos dos valores em moeda quando valem menos que isto. Envio, confirmação e detalhes da transação sempre mostram todos os dígitos.';
+
+  @override
+  String get trimDecimalsOff => 'Desativado';
+
+  @override
+  String trimDecimalsBelow(String amount) {
+    return 'Abaixo de $amount';
+  }
+
+  @override
+  String get trimDecimalsEveryDigit => 'Todos os dígitos';
+
+  @override
+  String get trimDecimalsWaiting => 'Começa quando os preços carregarem';
+
+  @override
+  String get trimDecimalsPreviewSection => 'Nesta Configuração';
+
+  @override
+  String trimDecimalsRateNote(String coin, String price) {
+    return 'Com 1 $coin ≈ $price. Os dígitos acompanham o preço.';
+  }
+
+  @override
+  String get trimDecimalsEachCoinNote => 'Cada moeda é reduzida conforme seu próprio preço.';
+
+  @override
+  String get trimDecimalsLoadingNote =>
+      'Os preços ainda estão carregando. Até lá, os valores usam os dígitos salvos do último preço, ou mostram todos os dígitos.';
 }

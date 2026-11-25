@@ -26,6 +26,7 @@ export 'src/home/home_sections.dart';
 export 'src/home/incoming_card.dart';
 export 'src/home/security_checklist.dart';
 export 'src/home/security_checklist_card.dart';
+export 'src/home/security_checklist_sheet.dart';
 export 'src/home/wallet_home_view.dart';
 
 // Legal pages both apps show, in each app's own chrome (SubPageChrome).
@@ -52,6 +53,7 @@ export 'src/routing/payment_links.dart';
 export 'src/routing/route_policy.dart';
 
 // Wallet-coupled widgets (depend on wallet_domain / wallet_fiat).
+export 'src/wallet/address_detail_view.dart';
 export 'src/wallet/amount_entry_controller.dart';
 export 'src/wallet/coin_badge.dart';
 export 'src/wallet/coin_mark.dart';
@@ -62,12 +64,15 @@ export 'src/wallet/contact_picker_sheet.dart';
 export 'src/wallet/connection_pills.dart';
 export 'src/wallet/format.dart';
 export 'src/wallet/key_reveal_view.dart';
+export 'src/wallet/labeled_addresses.dart';
 export 'src/wallet/lws_keys_view.dart';
 export 'src/wallet/open_alias_settings_sheet.dart';
 export 'src/wallet/receive_view.dart';
 export 'src/wallet/seed_verify_view.dart';
+export 'src/wallet/send_failure.dart';
 export 'src/wallet/send_view.dart';
 export 'src/wallet/sync_frequency_sheet.dart';
+export 'src/wallet/time_ago.dart';
 export 'src/wallet/tor_status_pill.dart';
 export 'src/wallet/tx_activity_row.dart';
 export 'src/wallet/tx_details_sheet.dart';

@@ -224,5 +224,26 @@ void main() {
       expect(utxo['value'], 5000);
       expect(utxo.containsKey('vout'), isFalse);
     });
+
+    test('fundingTx is a real transaction paying the address at vout', () {
+      // BIP84's first receive address for the all-"abandon" mnemonic.
+      const address = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
+      final parent = ElectrumFixtures.fundingTx(address: address, valueSats: 123456, vout: 2);
+
+      expect(computeTxid(parent.rawHex), parent.txid);
+      final outputs = parseBtcTx(parent.rawHex).outputs;
+      expect(outputs, hasLength(3));
+      expect(outputs[2].valueSats, 123456);
+      // OP_0 <20-byte key hash>: the P2WPKH script for that address.
+      expect(outputs[2].scriptHex, '0014c0cebcd6c3d3ca8c75dc5ec62ebe55330ef910e2');
+
+      final other = ElectrumFixtures.fundingTx(
+        address: address,
+        valueSats: 123456,
+        vout: 2,
+        nonce: 1,
+      );
+      expect(other.txid, isNot(parent.txid), reason: 'the nonce tells parents apart');
+    });
   });
 }

@@ -131,6 +131,7 @@ class RestoreReport {
     required this.filesRead,
     required this.payments,
     required this.contactsRestored,
+    this.labelsRestored = 0,
     required this.failed,
     required this.gaps,
     required this.missingTails,
@@ -141,6 +142,9 @@ class RestoreReport {
   final int filesRead;
   final int payments;
   final int contactsRestored;
+
+  /// Address labels added or changed from the backup.
+  final int labelsRestored;
   final List<FailedFile> failed;
 
   /// Device (hex) → missing seqs.
@@ -164,8 +168,8 @@ class ImportResult {
 }
 
 /// Persisted per wallet: the device id, the next seq, the Lamport clock, and
-/// the address book as of the last sync, which is the base the next sync
-/// compares against to tell a local edit from a remote one.
+/// the address book and address labels as of the last sync, which are the
+/// bases the next sync compares against to tell a local edit from a remote one.
 class _DeviceState {
   _DeviceState({
     required this.deviceId,
@@ -173,15 +177,20 @@ class _DeviceState {
     required this.lamport,
     required this.contactBase,
     required this.contactsJoined,
+    required this.labelBase,
+    required this.labelsJoined,
   });
 
-  /// A device that has not synced its address book yet: it joins first.
+  /// A device that has not synced its address book or labels yet: both join
+  /// first.
   factory _DeviceState.fresh() => _DeviceState(
     deviceId: randomBytes(16),
     nextSeq: 1,
     lamport: 0,
     contactBase: {},
     contactsJoined: false,
+    labelBase: {},
+    labelsJoined: false,
   );
 
   Uint8List deviceId;
@@ -196,6 +205,12 @@ class _DeviceState {
   /// [MetadataBackupService._syncContacts]).
   bool contactsJoined;
 
+  /// `COIN:address` → fingerprint of the label this device last had.
+  Map<String, String> labelBase;
+
+  /// Whether [labelBase] is this device's own last sync, as [contactsJoined].
+  bool labelsJoined;
+
   Map<String, Object?> toJson() => {
     'v': 1,
     'device': toHex(deviceId),
@@ -203,6 +218,8 @@ class _DeviceState {
     'lamport': lamport,
     'contacts': contactBase,
     'joined': contactsJoined,
+    'labels': labelBase,
+    'labelsJoined': labelsJoined,
   };
 
   static _DeviceState? fromJson(Object? j) {
@@ -216,6 +233,10 @@ class _DeviceState {
         // A state written before joining existed comes from a device that was
         // already syncing.
         contactsJoined: j['joined'] as bool? ?? true,
+        // A state written before labels existed has synced none: they join,
+        // so the backup's labels win over whatever this device holds.
+        labelBase: (j['labels'] as Map<String, dynamic>?)?.cast<String, String>() ?? {},
+        labelsJoined: j['labelsJoined'] as bool? ?? false,
       );
     } catch (_) {
       return null;
@@ -224,8 +245,8 @@ class _DeviceState {
 }
 
 /// The seed-keyed metadata backup: payment destinations and
-/// transaction keys of Monero sends, and the address book, as many small
-/// sealed files in every chosen location.
+/// transaction keys of Monero sends, the address book and the address labels,
+/// as many small sealed files in every chosen location.
 ///
 /// Opt-in: off until the user turns it on ([setEnabled]), and then each
 /// location is off until the user turns that on too. While it is off nothing is
@@ -251,12 +272,16 @@ class MetadataBackupService extends ChangeNotifier
     this.observeLifecycle = true,
     Future<List<String>?> Function()? readContacts,
     Future<void> Function(Map<String, Contact?> changes)? applyContactChanges,
+    Future<List<AddressLabel>?> Function()? readLabels,
+    Future<void> Function(Map<String, AddressLabel?> changes)? applyLabelChanges,
     DateTime Function()? clock,
     Random? random,
   }) : _localRoot = localRoot,
        _stateRoot = stateRoot ?? localRoot,
        _readContacts = readContacts ?? readEncodedContacts,
        _applyContacts = applyContactChanges ?? ContactsSync.applyRemote,
+       _readLabels = readLabels ?? readAddressLabels,
+       _applyLabels = applyLabelChanges ?? AddressLabelsSync.applyRemote,
        _clock = clock ?? DateTime.now,
        _random = random ?? Random.secure();
 
@@ -288,6 +313,8 @@ class MetadataBackupService extends ChangeNotifier
   final bool observeLifecycle;
   final Future<List<String>?> Function() _readContacts;
   final Future<void> Function(Map<String, Contact?>) _applyContacts;
+  final Future<List<AddressLabel>?> Function() _readLabels;
+  final Future<void> Function(Map<String, AddressLabel?>) _applyLabels;
   final DateTime Function() _clock;
   final Random _random;
 
@@ -363,6 +390,9 @@ class MetadataBackupService extends ChangeNotifier
   /// The contacts a file saved now would carry: the backup's, or with no
   /// location on (when the address book is not recorded), the address book's.
   int get contactCount => _contactsSyncing ? _merged.contacts.length : _addressBookSize;
+
+  /// The address labels a file saved now would carry, as [contactCount].
+  int get addressLabelCount => _contactsSyncing ? _merged.labels.length : _labelStoreSize;
   List<FailedFile> get failedFiles => List.unmodifiable(_failed);
   RestoreReport? get lastRestoreReport => _lastRestore;
 
@@ -661,6 +691,11 @@ class MetadataBackupService extends ChangeNotifier
   }
 
   @override
+  void addressLabelsChanged() {
+    if (_active) unawaited(sync());
+  }
+
+  @override
   void historyChanged(CryptoWallet wallet) {
     if (!_active || !_eligible(wallet)) return;
     _historyDebounce?.cancel();
@@ -745,12 +780,27 @@ class MetadataBackupService extends ChangeNotifier
     }
     await _checkDeviceIdClash();
 
+    // Both merges apply an imported file the same way, so the flag is read
+    // once for both.
+    final imported = _importToApply;
+    _importToApply = false;
     var contactsRestored = 0;
     try {
-      contactsRestored = await _syncContacts(backupRead: readAll, syncing: syncing);
+      contactsRestored = await _syncContacts(
+        backupRead: readAll,
+        syncing: syncing,
+        imported: imported,
+      );
     } catch (e) {
       _lastError = 'Address book: $e';
       log(LogLevel.warn, '[Backup] Address book sync failed: $e');
+    }
+    var labelsRestored = 0;
+    try {
+      labelsRestored = await _syncLabels(backupRead: readAll, syncing: syncing, imported: imported);
+    } catch (e) {
+      _lastError ??= 'Address labels: $e';
+      log(LogLevel.warn, '[Backup] Address label sync failed: $e');
     }
     try {
       await _recordPaymentsFromHistory();
@@ -767,6 +817,7 @@ class MetadataBackupService extends ChangeNotifier
         filesRead: _merged.fileCount,
         payments: _merged.paymentCount,
         contactsRestored: contactsRestored,
+        labelsRestored: labelsRestored,
         failed: _failed.sublist(failedBefore),
         gaps: _merged.gaps,
         missingTails: _merged.missingTails,
@@ -894,10 +945,12 @@ class MetadataBackupService extends ChangeNotifier
   /// A file imported meanwhile is applied as a join applies the backup.
   ///
   /// Returns how many contacts were added or changed from the backup.
-  Future<int> _syncContacts({required bool backupRead, required bool syncing}) async {
+  Future<int> _syncContacts({
+    required bool backupRead,
+    required bool syncing,
+    required bool imported,
+  }) async {
     final state = _state!;
-    final imported = _importToApply;
-    _importToApply = false;
     _contactsSyncing = syncing;
     if (!syncing) {
       await _leaveContactSync(state);
@@ -994,13 +1047,20 @@ class MetadataBackupService extends ChangeNotifier
     };
   }
 
-  /// No location left to sync with: the base goes, and the next sync with one
-  /// joins.
+  /// No location left to sync with: the bases go, the address book's and the
+  /// labels', and the next sync with one joins.
   Future<void> _leaveContactSync(_DeviceState state) async {
-    if (!state.contactsJoined && state.contactBase.isEmpty) return;
+    if (!state.contactsJoined &&
+        state.contactBase.isEmpty &&
+        !state.labelsJoined &&
+        state.labelBase.isEmpty) {
+      return;
+    }
     state
       ..contactsJoined = false
-      ..contactBase = {};
+      ..contactBase = {}
+      ..labelsJoined = false
+      ..labelBase = {};
     await _saveState();
   }
 
@@ -1047,6 +1107,160 @@ class MetadataBackupService extends ChangeNotifier
   String _fingerprint(String name, Map<String, String> addresses) {
     final encoded = cborEncode({0: name, 1: Map<Object, Object?>.from(addresses)});
     return toHex(SHA256Digest().process(encoded).sublist(0, 16));
+  }
+
+  /// The address-label merge: the address book's ([_syncContacts]) rule for
+  /// rule, over labels keyed by `COIN:address` instead of contact ids. A
+  /// device that has synced labels before merges three ways against its base;
+  /// one that joins (first sync, restore, a location turned back on, or a
+  /// device state from before labels) lets the backup win for every address it
+  /// knows and adds only labels it has never seen. With no location on, labels
+  /// do not sync, and an imported file is applied as a join applies it.
+  ///
+  /// Returns how many labels were added or changed from the backup.
+  Future<int> _syncLabels({
+    required bool backupRead,
+    required bool syncing,
+    required bool imported,
+  }) async {
+    final state = _state!;
+    if (!syncing) {
+      // The base went with the address book's ([_leaveContactSync]).
+      final local = await _localLabels();
+      if (local == null) return 0;
+      if (!imported) {
+        _labelStoreSize = local.length;
+        return 0;
+      }
+      final changes = _mergedLabelChanges(local);
+      final applied = await _storeLabelChanges(changes)
+          ? changes.values.whereType<AddressLabel>().length
+          : 0;
+      _labelStoreSize = (await _localLabels())?.length ?? local.length;
+      return applied;
+    }
+    final joining = !state.labelsJoined;
+    if (joining && !backupRead) return 0; // join against the whole backup, later
+    final local = await _localLabels();
+    if (local == null) return 0; // unreadable: change nothing, try next time
+    final lastSeen = state.labelBase;
+
+    final writes = <BackupRecord Function(int lamport)>[];
+    final deviceId = state.deviceId;
+    BackupRecord version(AddressLabel l, int lamport) => AddressLabelRecord(
+      coin: l.coin,
+      address: l.address,
+      label: l.label,
+      lamport: lamport,
+      deviceId: deviceId,
+    );
+    if (joining) {
+      for (final l in local.values) {
+        if (!_merged.labelVersions.containsKey(l.key)) writes.add((lamport) => version(l, lamport));
+      }
+    } else {
+      for (final l in local.values) {
+        final fp = _labelFingerprint(l.label);
+        final merged = _merged.labelVersions[l.key];
+        final mergedFp = merged == null || merged.deleted ? null : _labelFingerprint(merged.label);
+        if (lastSeen[l.key] != fp && mergedFp != fp) writes.add((lamport) => version(l, lamport));
+      }
+      for (final key in lastSeen.keys) {
+        if (local.containsKey(key)) continue;
+        final merged = _merged.labelVersions[key];
+        if (merged != null && merged.deleted) continue;
+        final (coin, address) = _splitLabelKey(key);
+        writes.add(
+          (lamport) => AddressLabelRecord.deletion(
+            coin: coin,
+            address: address,
+            lamport: lamport,
+            deviceId: deviceId,
+          ),
+        );
+      }
+    }
+    if (writes.isNotEmpty) await _writeChange(writes);
+    final changes = _mergedLabelChanges(local);
+    final stored = await _storeLabelChanges(changes);
+
+    // As for the address book: the new base is the merged state, except where
+    // changes were not stored, where it stays what the labels still hold.
+    final base = {for (final v in _merged.labels) v.key: _labelFingerprint(v.label)};
+    if (!stored) {
+      for (final key in changes.keys) {
+        final mine = local[key];
+        if (mine == null) {
+          base.remove(key);
+        } else {
+          base[key] = _labelFingerprint(mine.label);
+        }
+      }
+    }
+    // The address book's merge has just saved the state, so it is saved again
+    // only when the labels changed it: most syncs have no label news.
+    final changed = !state.labelsJoined || !mapEquals(state.labelBase, base);
+    state
+      ..labelBase = base
+      ..labelsJoined = true;
+    if (changed) await _saveState();
+    return stored ? changes.values.whereType<AddressLabel>().length : 0;
+  }
+
+  /// The label store's size when the last sync had no location ([addressLabelCount]).
+  int _labelStoreSize = 0;
+
+  /// The labels, by `COIN:address`; null when they cannot be read.
+  Future<Map<String, AddressLabel>?> _localLabels() async {
+    final stored = await _readLabels();
+    if (stored == null) return null;
+    return {for (final l in stored) l.key: l};
+  }
+
+  /// Stores [changes] in the labels; false when they were not stored, as
+  /// [_storeChanges].
+  Future<bool> _storeLabelChanges(Map<String, AddressLabel?> changes) async {
+    if (changes.isEmpty) return true;
+    try {
+      await _applyLabels(changes);
+      return true;
+    } catch (e) {
+      unawaited(log(LogLevel.warn, 'Address label changes from the backup not stored: $e'));
+      return false;
+    }
+  }
+
+  /// What the merged state says and the labels ([local]) do not: a label's new
+  /// text, or null where it was removed. A label longer than the app saves is
+  /// cut to [maxAddressLabelLength]; the next sync then records the cut one,
+  /// and a blank one is not applied, so the next sync records its removal.
+  Map<String, AddressLabel?> _mergedLabelChanges(Map<String, AddressLabel> local) {
+    final changes = <String, AddressLabel?>{};
+    for (final v in _merged.labelVersions.values) {
+      final mine = local[v.key];
+      if (v.deleted) {
+        if (mine != null) changes[v.key] = null;
+        continue;
+      }
+      final trimmed = v.label.trim();
+      final label = trimmed.length > maxAddressLabelLength
+          ? trimmed.substring(0, maxAddressLabelLength).trimRight()
+          : trimmed;
+      if (label.isEmpty) continue;
+      if (mine == null || mine.label != label) {
+        changes[v.key] = AddressLabel(coin: v.coin, address: v.address, label: label);
+      }
+    }
+    return changes;
+  }
+
+  String _labelFingerprint(String label) =>
+      toHex(SHA256Digest().process(Uint8List.fromList(utf8.encode(label))).sublist(0, 16));
+
+  /// A `COIN:address` key back into its parts. Symbols hold no colon.
+  (String, String) _splitLabelKey(String key) {
+    final at = key.indexOf(':');
+    return (key.substring(0, at), key.substring(at + 1));
   }
 
   /// Records every outgoing Monero payment in history that this wallet built
@@ -1350,13 +1564,15 @@ class MetadataBackupService extends ChangeNotifier
     return false;
   }
 
-  /// How the address book differs from the backup's, as change files for
-  /// [exportBundle] only: never written to the local copy, so they cannot
-  /// reach a location this device later turns on. They carry a device id of
-  /// their own, so this device's own sequence has no gap where they would be.
+  /// How the address book and the address labels differ from the backup's, as
+  /// change files for [exportBundle] only: never written to the local copy, so
+  /// they cannot reach a location this device later turns on. They carry a
+  /// device id of their own, so this device's own sequence has no gap where
+  /// they would be.
   Future<List<Uint8List>> _addressBookSnapshot() async {
     final local = await _localContacts();
-    if (local == null) return const [];
+    final labels = await _localLabels();
+    if (local == null && labels == null) return const [];
     final state = _state!;
     final deviceId = randomBytes(16);
     // Kept, so the next file's snapshot is the newer one. Also in the
@@ -1368,21 +1584,43 @@ class MetadataBackupService extends ChangeNotifier
     await _saveState();
     await SharedPreferencesService.set<int>(exportLamportPrefKey, lamport);
     final records = <BackupRecord>[
-      for (final c in local.values)
-        if (_merged.contactVersions[c.id] case final v
-            when v == null ||
-                v.deleted ||
-                _fingerprint(v.name, v.addresses) != _fingerprint(c.name, c.addresses))
-          ContactRecord(
-            id: c.id,
-            name: c.name,
-            addresses: c.addresses,
-            lamport: lamport,
-            deviceId: deviceId,
-          ),
-      for (final v in _merged.contactVersions.values)
-        if (!v.deleted && !local.containsKey(v.id))
-          ContactRecord.deletion(id: v.id, lamport: lamport, deviceId: deviceId),
+      if (local != null) ...[
+        for (final c in local.values)
+          if (_merged.contactVersions[c.id] case final v
+              when v == null ||
+                  v.deleted ||
+                  _fingerprint(v.name, v.addresses) != _fingerprint(c.name, c.addresses))
+            ContactRecord(
+              id: c.id,
+              name: c.name,
+              addresses: c.addresses,
+              lamport: lamport,
+              deviceId: deviceId,
+            ),
+        for (final v in _merged.contactVersions.values)
+          if (!v.deleted && !local.containsKey(v.id))
+            ContactRecord.deletion(id: v.id, lamport: lamport, deviceId: deviceId),
+      ],
+      if (labels != null) ...[
+        for (final l in labels.values)
+          if (_merged.labelVersions[l.key] case final v
+              when v == null || v.deleted || v.label != l.label)
+            AddressLabelRecord(
+              coin: l.coin,
+              address: l.address,
+              label: l.label,
+              lamport: lamport,
+              deviceId: deviceId,
+            ),
+        for (final v in _merged.labelVersions.values)
+          if (!v.deleted && !labels.containsKey(v.key))
+            AddressLabelRecord.deletion(
+              coin: v.coin,
+              address: v.address,
+              lamport: lamport,
+              deviceId: deviceId,
+            ),
+      ],
     ];
     final files = <Uint8List>[];
     // Room for the body's own fields, generously, as in [_writeChange].

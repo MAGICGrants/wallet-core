@@ -83,6 +83,36 @@ void main() {
     expect(s.contacts.map((v) => v.id), ['x']);
   });
 
+  test('address labels: one per (coin, address), last writer wins, removals too', () {
+    AddressLabelRecord l(String address, String label, int lamport, int device) =>
+        AddressLabelRecord(
+          coin: 'xmr',
+          address: address,
+          label: label,
+          lamport: lamport,
+          deviceId: dev(device),
+        );
+    final s = BackupState()
+      ..add('a1', file(1, 1, [l('8one', 'Rent', 1, 1), l('8two', 'Tips', 1, 1)]))
+      ..add('b1', file(2, 1, [l('8one', 'Rent B', 1, 2)]))
+      ..add(
+        'a2',
+        file(1, 2, [
+          AddressLabelRecord.deletion(coin: 'XMR', address: '8two', lamport: 2, deviceId: dev(1)),
+        ]),
+      );
+    // Same lamport: device 2 is higher. The coin is upper-cased into the key.
+    expect(s.labelVersions['XMR:8one']!.label, 'Rent B');
+    expect(s.labelVersions['XMR:8two']!.deleted, isTrue);
+    expect(s.labels.map((v) => v.key), ['XMR:8one']);
+    expect(s.maxLamport, 2);
+
+    // A record reads back as what was written.
+    final parsed = BackupRecord.parse(l('8one', 'Rent', 7, 3).raw) as AddressLabelRecord;
+    expect((parsed.coin, parsed.address, parsed.label, parsed.lamport), ('XMR', '8one', 'Rent', 7));
+    expect(parsed.type, RecordType.addressLabel);
+  });
+
   test('payments: identical copies collapse, differing ones are reported', () {
     final s = BackupState();
     for (final (n, f) in files) {

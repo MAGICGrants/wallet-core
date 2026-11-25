@@ -2,7 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:wallet_domain/wallet_domain.dart' show OpenAliasMode, SeedCheckStore;
 import 'package:wallet_fiat/wallet_fiat.dart' show FiatApiMode, FiatRateModel;
-import 'package:wallet_infra/wallet_infra.dart' show TorMode, TorSettingsService, log, LogLevel;
+import 'package:wallet_infra/wallet_infra.dart'
+    show LogLevel, SettingsKeys, SharedPreferencesService, TorMode, TorSettingsService, log;
 
 import 'security_checklist_card.dart';
 
@@ -27,11 +28,65 @@ enum SecurityStep {
   securityKeys,
 }
 
-/// Where each [SecurityStep] stands, read from the settings behind it.
+/// What the user chose for the checklist in Settings: whether the home shows
+/// it at all, and the steps it leaves out. Kept on this device, like the
+/// app's other settings.
 ///
-/// None of those settings notifies on change, so the home calls [refresh] when
-/// it opens, when the app comes back to the foreground, and after the user
-/// returns from a step. The two platform-bound steps are asked through
+/// A step left out stays out whatever its setting does later: turning off a
+/// feature the user set up does not bring the card back for it.
+@immutable
+class SecurityChecklistSettings {
+  const SecurityChecklistSettings({this.showOnHome = true, this.stepsOff = const {}});
+
+  final bool showOnHome;
+  final Set<SecurityStep> stepsOff;
+
+  /// Tells every [SecurityChecklist] a save happened, so a home already on
+  /// screen (beside Settings on desktop) updates without being reopened.
+  static final Listenable changes = _changes;
+  static final _changes = ValueNotifier<int>(0);
+
+  static Future<SecurityChecklistSettings> load() async {
+    final shown = await SharedPreferencesService.get<bool>(SettingsKeys.securityChecklistShown);
+    final off = await SharedPreferencesService.get<List<String>>(
+      SettingsKeys.securityChecklistStepsOff,
+    );
+    return SecurityChecklistSettings(
+      showOnHome: shown ?? true,
+      // A name this version does not know (a step since removed) is dropped.
+      stepsOff: {
+        for (final step in SecurityStep.values)
+          if (off?.contains(step.name) ?? false) step,
+      },
+    );
+  }
+
+  Future<void> save() async {
+    await SharedPreferencesService.set<bool>(SettingsKeys.securityChecklistShown, showOnHome);
+    await SharedPreferencesService.set<List<String>>(SettingsKeys.securityChecklistStepsOff, [
+      for (final step in SecurityStep.values)
+        if (stepsOff.contains(step)) step.name,
+    ]);
+    _changes.value++;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is SecurityChecklistSettings &&
+      other.showOnHome == showOnHome &&
+      setEquals(other.stepsOff, stepsOff);
+
+  @override
+  int get hashCode => Object.hash(showOnHome, Object.hashAllUnordered(stepsOff));
+}
+
+/// Where each [SecurityStep] stands, read from the settings behind it, and
+/// what the user chose to see of it ([SecurityChecklistSettings]).
+///
+/// The steps' own settings do not notify on change, so the home calls
+/// [refresh] when it opens, when the app comes back to the foreground, and
+/// after the user returns from a step; a saved [SecurityChecklistSettings]
+/// refreshes it by itself. The two platform-bound steps are asked through
 /// [autoBackupOn] and [securityKeysOn], which the app supplies from the
 /// packages that own them; either answers null where its step does not apply,
 /// and the step is left out.
@@ -41,7 +96,9 @@ class SecurityChecklist extends ChangeNotifier {
     required this.securityKeysOn,
     this.canVerifySeed,
     DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now;
+  }) : _clock = clock ?? DateTime.now {
+    SecurityChecklistSettings.changes.addListener(_settingsSaved);
+  }
 
   final Future<bool?> Function() autoBackupOn;
   final Future<bool?> Function() securityKeysOn;
@@ -53,16 +110,36 @@ class SecurityChecklist extends ChangeNotifier {
   final DateTime Function() _clock;
 
   Map<SecurityStep, bool>? _steps;
+  SecurityChecklistSettings _settings = const SecurityChecklistSettings();
   Future<void>? _refreshing;
   bool _again = false;
   bool _disposed = false;
 
-  /// The steps that apply here and whether each is done; null until the first
-  /// [refresh] finishes.
+  /// Every step that applies here and whether each is done, the ones the user
+  /// left out of the home included; null until the first [refresh] finishes.
   Map<SecurityStep, bool>? get steps => _steps;
 
-  /// Whether there is nothing left to do (and so nothing to show).
-  bool get allDone => _steps != null && _steps!.values.every((done) => done);
+  /// What the user chose in Settings, as of the last [refresh].
+  SecurityChecklistSettings get settings => _settings;
+
+  /// The steps the home lists: [steps] without the ones the user left out.
+  Map<SecurityStep, bool>? get homeSteps {
+    final steps = _steps;
+    if (steps == null) return null;
+    return {
+      for (final MapEntry(key: step, value: done) in steps.entries)
+        if (!_settings.stepsOff.contains(step)) step: done,
+    };
+  }
+
+  /// Whether the home's steps are all done (or all left out), so there is
+  /// nothing left to do.
+  bool get allDone => homeSteps?.values.every((done) => done) ?? false;
+
+  /// Whether the home shows the card: read, wanted, and something left to do.
+  bool get shownOnHome => _steps != null && _settings.showOnHome && !allDone;
+
+  void _settingsSaved() => refresh();
 
   /// Re-reads every step. A call while one is running runs once more after it,
   /// so a change made in between is never missed.
@@ -78,16 +155,19 @@ class SecurityChecklist extends ChangeNotifier {
     do {
       _again = false;
       final Map<SecurityStep, bool> next;
+      final SecurityChecklistSettings settings;
       try {
         next = await _read();
+        settings = await SecurityChecklistSettings.load();
       } catch (e) {
         // A setting that cannot be read leaves the card as it was.
         log(LogLevel.warn, 'Security checklist could not be read: ${e.runtimeType}');
         return;
       }
       if (_disposed) return;
-      if (!mapEquals(next, _steps)) {
+      if (!mapEquals(next, _steps) || settings != _settings) {
         _steps = next;
+        _settings = settings;
         notifyListeners();
       }
     } while (_again && !_disposed);
@@ -126,6 +206,7 @@ class SecurityChecklist extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    SecurityChecklistSettings.changes.removeListener(_settingsSaved);
     super.dispose();
   }
 }
@@ -159,16 +240,17 @@ class SecurityChecklistLabels {
   };
 }
 
-/// The home's checklist card for [checklist], or null while it is loading and
-/// once every step is done, so the home leaves the slot out. Tapping an open
-/// step runs [onStep] and reads the checklist again when it returns.
+/// The home's checklist card for [checklist], or null while it is loading,
+/// once every step it lists is done, and when the user turned it off, so the
+/// home leaves the slot out. Tapping an open step runs [onStep] and reads the
+/// checklist again when it returns.
 Widget? securityChecklistCard({
   required SecurityChecklist checklist,
   required SecurityChecklistLabels labels,
   required Future<void> Function(SecurityStep step) onStep,
 }) {
-  final steps = checklist.steps;
-  if (steps == null || checklist.allDone) return null;
+  final steps = checklist.homeSteps;
+  if (steps == null || !checklist.shownOnHome) return null;
   return SecurityChecklistCard(
     title: labels.title,
     progressLabel: labels.progress,

@@ -50,7 +50,28 @@ class _FileWallet extends FakeWallet {
   Completer<void>? hold;
   final moving = Completer<void>();
 
+  /// Holds the open, when set, until it completes (a Monero open takes
+  /// seconds); [opening] says it began.
+  Completer<void>? openGate;
+  final opening = Completer<void>();
+  String? openedWith;
+
   Future<File> file() async => File('${(await getAppDir()).path}/xmr_keys');
+
+  /// What a save in this session writes: the wallet's own state, under the
+  /// password it was opened with.
+  Future<void> save(String content) async =>
+      writeStringAtomic(await file(), await WalletFileCrypto.encryptToBase64(content, openedWith!));
+
+  @override
+  Future<void> openExisting({required String password}) async {
+    if (!opening.isCompleted) opening.complete();
+    await openGate?.future;
+    openedWith = password;
+    // Opens only under the password its file is under, as a real coin does.
+    await WalletFileCrypto.decryptFromBase64(await (await file()).readAsString(), password);
+    await super.openExisting(password: password);
+  }
 
   @override
   Future<List<String>> walletPasswordFilePaths() async => [
@@ -68,8 +89,28 @@ class _FileWallet extends FakeWallet {
   }
 }
 
+/// Counts what the manager asks of the metadata backup.
+class _Backup implements MetadataBackup {
+  int opens = 0;
+
+  @override
+  Future<void> open(
+    SeedSource seed, {
+    required List<CryptoWallet> wallets,
+    bool restored = false,
+  }) async => opens++;
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 /// The security-key upgrade: a wallet made before the guard moves onto it at
 /// its first unlock, and one cut short is kept or put back.
+const _labels = [AddressLabel(coin: 'XMR', address: '8a', label: 'Donations')];
+
 void main() {
   late Directory tmp;
   late _Guard guard;
@@ -85,9 +126,11 @@ void main() {
     WalletSecrets.holdsWalletPassword = true;
     guard = _Guard();
     WalletManager.passwordGuard = guard;
+    AddressLabelKey.resetForTesting();
   });
 
   tearDown(() {
+    AddressLabelKey.resetForTesting();
     WalletManager.passwordGuard = null;
     WalletAppConfig.resetForTesting();
     SharedPreferencesService.resetForTesting();
@@ -107,7 +150,11 @@ void main() {
         password: 'old',
       );
     }
+    await writeAddressLabels(_labels, password: 'old');
   }
+
+  Future<String?> labelUnder(String password) async =>
+      (await readAddressLabels(password: password))?.single.label;
 
   Future<String> fileUnder(_FileWallet w, String password) async =>
       WalletFileCrypto.decryptFromBase64(await (await w.file()).readAsString(), password);
@@ -128,6 +175,8 @@ void main() {
     expect(guard.kept, 'from-guard');
     expect(await SeedStore.load('from-guard'), isNotNull);
     expect(await fileUnder(w, 'from-guard'), 'keys');
+    expect(await labelUnder('from-guard'), 'Donations');
+    expect(await labelUnder('old'), isNull, reason: 'the labels moved with the other files');
     expect(await GuardUpgradeFiles.inProgress(), isFalse);
     expect(leftovers(), isEmpty, reason: 'no copy under the old password may outlast it');
     m.dispose();
@@ -144,6 +193,7 @@ void main() {
     expect(guard.kept, isNull);
     expect(await SeedStore.load('old'), isNotNull);
     expect(await fileUnder(w, 'old'), 'keys');
+    expect(await labelUnder('old'), 'Donations');
     expect(w.isLoaded, isTrue, reason: 'opened again under the old password');
     expect(await GuardUpgradeFiles.inProgress(), isFalse);
     expect(leftovers(), isEmpty);
@@ -210,6 +260,110 @@ void main() {
     m.dispose();
   });
 
+  group('a lock while the wallets open, before the upgrade begins', () {
+    /// Opens [w] with the open held, runs [lock] once it is under way, then
+    /// lets the open finish.
+    Future<void> lockWhileOpening(
+      WalletManager m,
+      _FileWallet w,
+      Future<void> Function() lock,
+    ) async {
+      w.openGate = Completer<void>();
+      final open = m.openAll();
+      await w.opening.future;
+      await lock();
+      w.openGate!.complete();
+      await open;
+    }
+
+    test('cancels it, and the next launch keeps what the session wrote', () async {
+      final w = _FileWallet();
+      await olderWallet(w);
+      final m = WalletManager(coins: () => [w]);
+      // What App Lock does with security keys off.
+      await lockWhileOpening(m, w, m.lockSpend);
+
+      expect(await GuardUpgradeFiles.inProgress(), isFalse);
+      expect(leftovers(), isEmpty);
+      expect(guard.kept, isNull);
+      expect(await readKeystoreWalletPassword(), 'old');
+
+      // The user comes back and sends: the wallet saves under the password
+      // it opened with.
+      expect(await m.loadStoredPassword(), isTrue);
+      if (m.isSpendLocked) await m.unlockSpend();
+      await w.save('keys-after-a-send');
+      m.dispose();
+
+      // The next launch upgrades, from the files as the session left them.
+      final next = _FileWallet();
+      final m2 = WalletManager(coins: () => [next]);
+      await m2.openAll();
+      expect(await readKeystoreWalletPassword(), 'from-guard');
+      expect(await fileUnder(next, 'from-guard'), 'keys-after-a-send');
+      expect(await labelUnder('from-guard'), 'Donations');
+      expect(await GuardUpgradeFiles.inProgress(), isFalse);
+      expect(leftovers(), isEmpty);
+      m2.dispose();
+    });
+
+    test('a full lock cancels it too', () async {
+      final w = _FileWallet();
+      await olderWallet(w);
+      final m = WalletManager(coins: () => [w]);
+      await lockWhileOpening(m, w, m.fullyLock);
+
+      expect(m.hasPassword, isFalse);
+      expect(await GuardUpgradeFiles.inProgress(), isFalse);
+      expect(leftovers(), isEmpty);
+      expect(guard.kept, isNull);
+      expect(await readKeystoreWalletPassword(), 'old');
+      expect(await fileUnder(w, 'old'), 'keys');
+      expect(await labelUnder('old'), 'Donations');
+      m.dispose();
+    });
+
+    test('an unlock again before the open ends does not undo the cancel', () async {
+      final w = _FileWallet();
+      await olderWallet(w);
+      final m = WalletManager(coins: () => [w]);
+      await lockWhileOpening(m, w, () async {
+        await m.lockSpend();
+        expect(await m.loadStoredPassword(), isTrue);
+      });
+
+      expect(m.hasPassword, isTrue);
+      expect(w.isLoaded, isTrue);
+      expect(await GuardUpgradeFiles.inProgress(), isFalse);
+      expect(leftovers(), isEmpty);
+      expect(guard.kept, isNull);
+      expect(await readKeystoreWalletPassword(), 'old');
+      m.dispose();
+    });
+
+    test('the backup opens again only once the password is back', () async {
+      final backup = _Backup();
+      MetadataBackup.instance = backup;
+      addTearDown(() => MetadataBackup.instance = null);
+
+      final w = _FileWallet();
+      await olderWallet(w);
+      final m = WalletManager(coins: () => [w]);
+      await lockWhileOpening(m, w, m.lockSpend);
+      expect(backup.opens, 0, reason: 'still locked');
+      m.dispose();
+
+      final again = _FileWallet();
+      final m2 = WalletManager(coins: () => [again]);
+      await lockWhileOpening(m2, again, () async {
+        await m2.lockSpend();
+        expect(await m2.loadStoredPassword(), isTrue);
+      });
+      expect(backup.opens, 1, reason: 'unlocked again before the open ended');
+      m2.dispose();
+    });
+  });
+
   test('a wallet with no seed to read back keeps its password', () async {
     final w = _FileWallet();
     await olderWallet(w, storedSeed: false);
@@ -237,6 +391,22 @@ void main() {
 
     expect(kept.readAsStringSync(), 'before');
     expect(made.existsSync(), isFalse);
+    expect(await GuardUpgradeFiles.inProgress(), isFalse);
+    expect(leftovers(), isEmpty);
+  });
+
+  test('cancelling leaves every file as it is now and unmarks the set', () async {
+    final dir = await getAppDir();
+    final kept = File('${dir.path}/kept')..writeAsStringSync('before');
+    final made = File('${dir.path}/made');
+    await GuardUpgradeFiles.backUp([kept.path, made.path]);
+
+    kept.writeAsStringSync('after');
+    made.writeAsStringSync('new');
+    await GuardUpgradeFiles.cancel();
+
+    expect(kept.readAsStringSync(), 'after');
+    expect(made.readAsStringSync(), 'new');
     expect(await GuardUpgradeFiles.inProgress(), isFalse);
     expect(leftovers(), isEmpty);
   });

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wallet_infra/wallet_infra.dart' show SecureScreenMixin;
 import 'package:wallet_ui/wallet_ui.dart';
 
 import '../fhse_vault.dart' show KeyVerification, SecurityKeyAuthenticator;
@@ -27,7 +28,8 @@ class HmacParityScreen extends StatefulWidget {
   State<HmacParityScreen> createState() => _HmacParityScreenState();
 }
 
-class _HmacParityScreenState extends State<HmacParityScreen> {
+// A key's PIN is typed here (SecureScreenMixin, as in SecurityKeyFlow).
+class _HmacParityScreenState extends State<HmacParityScreen> with SecureScreenMixin {
   final _pin = TextEditingController();
   final _credential = TextEditingController();
   late final HmacParity _parity;
@@ -177,6 +179,7 @@ class _HmacParityScreenState extends State<HmacParityScreen> {
                               label: 'Security key PIN',
                               obscureText: true,
                               keyboardType: TextInputType.visiblePassword,
+                              sensitive: true,
                             ),
                         ],
                         const SizedBox(height: BrandSpacing.md),
@@ -191,6 +194,7 @@ class _HmacParityScreenState extends State<HmacParityScreen> {
                           controller: _credential,
                           label: 'Credential id (base64 or hex)',
                           maxLines: 3,
+                          sensitive: true,
                         ),
                         const SizedBox(height: BrandSpacing.md),
                         BrandButton.outline(
@@ -201,7 +205,16 @@ class _HmacParityScreenState extends State<HmacParityScreen> {
                         ),
                         if (_busy) ...[
                           const SizedBox(height: BrandSpacing.md),
-                          Text(_statusText, style: BrandText.body, textAlign: TextAlign.center),
+                          // Spoken as the key's state changes ("Touch the security key.").
+                          Semantics(
+                            container: true,
+                            liveRegion: true,
+                            child: Text(
+                              _statusText,
+                              style: BrandText.body,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                           TextButton(
                             onPressed: () => SecurityKeyService.instance.cancel(),
                             child: const Text('Cancel'),
@@ -209,7 +222,14 @@ class _HmacParityScreenState extends State<HmacParityScreen> {
                         ],
                         if (_error != null) ...[
                           const SizedBox(height: BrandSpacing.md),
-                          Text(_error!, style: BrandText.body.copyWith(color: BrandColors.error)),
+                          Semantics(
+                            container: true,
+                            liveRegion: true,
+                            child: Text(
+                              _error!,
+                              style: BrandText.body.copyWith(color: BrandColors.error),
+                            ),
+                          ),
                         ],
                         if (result != null) ...[
                           const SizedBox(height: BrandSpacing.lg),

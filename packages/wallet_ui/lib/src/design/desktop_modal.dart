@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'brand.dart';
 import 'icon_circle_button.dart';
+import '../l10n/ui_strings.dart';
 
 /// A centered desktop modal: a paper card with a top-right close (X) button
 /// stacked over [child]. Used in place of a bottom sheet on desktop, where the X
@@ -40,7 +41,11 @@ class DesktopModalCard extends StatelessWidget {
             Positioned(
               top: 10,
               right: 10,
-              child: IconCircleButton(icon: Icons.close, onPressed: () => Navigator.pop(context)),
+              child: IconCircleButton(
+                icon: Icons.close,
+                onPressed: () => Navigator.pop(context),
+                semanticLabel: uiStringsOf(context)?.close,
+              ),
             ),
           ],
         ),

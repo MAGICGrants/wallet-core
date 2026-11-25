@@ -216,8 +216,8 @@ packages:
     dependency: transitive
     description:
       path: "."
-      ref: "7aad37cb20b9cc7a545e0e3d044d18664a99d636"
-      resolved-ref: "7aad37cb20b9cc7a545e0e3d044d18664a99d636"
+      ref: "4c04becbf4d46032f097bc6a7f49a7cd8eb94a69"
+      resolved-ref: "4c04becbf4d46032f097bc6a7f49a7cd8eb94a69"
       url: "https://github.com/MAGICGrants/fhse_native"
     source: git
     version: "0.1.0"
@@ -725,8 +725,8 @@ packages:
     dependency: transitive
     description:
       path: "impls/monero.dart"
-      ref: c210839a278a16382e1e23bef7f23b915569e2a8
-      resolved-ref: c210839a278a16382e1e23bef7f23b915569e2a8
+      ref: "97e2331a7eed215cea62017a2b686eab092a401e"
+      resolved-ref: "97e2331a7eed215cea62017a2b686eab092a401e"
       url: "https://github.com/magicgrants/monero_c"
     source: git
     version: "0.0.0"
@@ -1067,8 +1067,8 @@ packages:
     dependency: transitive
     description:
       path: "."
-      ref: "72e455ffe1faecd5884bea7ec1da666f757a8f0e"
-      resolved-ref: "72e455ffe1faecd5884bea7ec1da666f757a8f0e"
+      ref: "609b2ddf794694fefd88306ee3a9329190d4499f"
+      resolved-ref: "609b2ddf794694fefd88306ee3a9329190d4499f"
       url: "https://github.com/MAGICGrants/tor"
     source: git
     version: "0.2.0"
@@ -1266,5 +1266,5 @@ packages:
     source: hosted
     version: "3.1.3"
 sdks:
-  dart: "3.13.5"
-  flutter: "3.47.7"
+  dart: "3.13.7"
+  flutter: "3.47.9"

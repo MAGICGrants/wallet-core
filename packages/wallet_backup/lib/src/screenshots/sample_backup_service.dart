@@ -6,7 +6,8 @@ import '../backup_service.dart';
 
 /// A metadata backup that reports a running backup without keeping one, for
 /// store screenshots: the places in [on] switched on and up to date, holding
-/// [payments] payments and [contacts] contacts as of [lastSync].
+/// [payments] payments, [contacts] contacts and [labels] address labels as of
+/// [lastSync].
 ///
 /// It writes nothing and reads nothing: every call that would touch a backup
 /// file, the address book or a wallet's payment records does nothing, so the
@@ -17,12 +18,14 @@ class SampleMetadataBackupService extends MetadataBackupService {
     required this.on,
     required this.payments,
     required this.contacts,
+    this.labels = 0,
     required this._lastSync,
   }) : super(localRoot: () async => Directory.systemTemp, observeLifecycle: false);
 
   final Set<String> on;
   final int payments;
   final int contacts;
+  final int labels;
   final DateTime _lastSync;
 
   @override
@@ -42,6 +45,9 @@ class SampleMetadataBackupService extends MetadataBackupService {
 
   @override
   int get contactCount => contacts;
+
+  @override
+  int get addressLabelCount => labels;
 
   @override
   RestoreReport? get lastRestoreReport => null;
@@ -97,6 +103,9 @@ class SampleMetadataBackupService extends MetadataBackupService {
 
   @override
   void contactsChanged() {}
+
+  @override
+  void addressLabelsChanged() {}
 
   @override
   void historyChanged(CryptoWallet wallet) {}

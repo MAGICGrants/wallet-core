@@ -36,12 +36,15 @@ class Install {
       observeLifecycle: false,
       readContacts: () async => contacts,
       applyContactChanges: (changes) async => contacts = applyContactChanges(contacts, changes),
+      readLabels: () async => labels,
+      applyLabelChanges: (changes) async => labels = applyAddressLabelChanges(labels, changes),
     );
   }
 
   final Directory root;
   late final MetadataBackupService service;
   List<String> contacts = [];
+  List<AddressLabel> labels = [];
 
   List<String> get names => [
     for (final c in contacts) Contact.fromJson(json.decode(c) as Map<String, dynamic>).name,
@@ -172,7 +175,7 @@ void main() {
     await tester.tap(find.text('From iCloud'));
     await settle(tester, () => shows('Wallet Data Imported'));
 
-    expect(shows('Restored 0 payments and 1 contact'), isTrue);
+    expect(shows('Restored 0 payments, 1 contact and 0 address labels'), isTrue);
     expect(shows('Backup to iCloud is on'), isTrue);
     expect(b.names, ['Alice']);
     expect(b.service.enabled, isTrue);
@@ -219,7 +222,7 @@ void main() {
     await tester.tap(find.text('From a Sync Folder'));
     await settle(tester, () => shows('Wallet Data Imported'));
     expect(folder.picks, 1);
-    expect(shows('Restored 0 payments and 1 contact'), isTrue);
+    expect(shows('Restored 0 payments, 1 contact and 0 address labels'), isTrue);
     expect(shows('Backup to Documents/Skylight Backup is on'), isTrue);
     expect(b.names, ['Alice']);
     expect(await tester.runAsync(() => b.service.isLocationEnabled(folder.id)), isTrue);

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../l10n/ui_strings.dart';
+
 enum RoutePillIcon { tor, https, proxy, local, server, electrum }
 
 /// Small route/security pill (TOR · HTTPS · PROXY · LOCAL · ELECTRUM · NODE/LWS).
@@ -59,29 +61,42 @@ class RoutePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final glyph = SvgPicture.string(_svg(), width: 10.5, height: 10.5);
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: compact ? 5 : 7, vertical: 4.5),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6.5)),
-      child: compact
-          ? glyph
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                glyph,
-                const SizedBox(width: 4.5),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: 'Ubuntu Mono',
-                    fontSize: 9,
-                    height: 1,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.74,
-                    color: color,
+    // Said as what it means, compact or not: the compact pill is only a glyph,
+    // and an upper-case word can be spelled out letter by letter.
+    final strings = uiStringsOf(context);
+    final spoken = switch (icon) {
+      RoutePillIcon.tor => strings?.a11yOverTor ?? label,
+      RoutePillIcon.https => strings?.a11yOverHttps ?? label,
+      RoutePillIcon.server => label,
+      _ => label.isEmpty ? label : label[0] + label.substring(1).toLowerCase(),
+    };
+    return Semantics(
+      label: spoken,
+      excludeSemantics: true,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: compact ? 5 : 7, vertical: 4.5),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6.5)),
+        child: compact
+            ? glyph
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  glyph,
+                  const SizedBox(width: 4.5),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: 'Ubuntu Mono',
+                      fontSize: 9,
+                      height: 1,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.74,
+                      color: color,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 }

@@ -24,8 +24,13 @@ import '../logging.dart';
 ///    a build signed by an Apple team with a provisioning profile can use it;
 ///    see [_Keystore] for debug builds that are not. The files it opens are
 ///    kept out of Time Machine, as on iOS.
-///  - **Windows**: values are AES-GCM files on disk; only a 16-byte key lives
-///    in Credential Manager. Readable by any process running as that user.
+///  - **Windows**: every key shares one JSON map in
+///    `flutter_secure_storage.dat`, encrypted with DPAPI at user scope and no
+///    extra entropy, in the roaming application-support folder (`%APPDATA%`),
+///    so a roaming profile carries it. Any process running as that user
+///    decrypts it without a prompt. Writes are read-modify-write and race, as
+///    on Linux. Entries an older plugin left in Credential Manager are moved
+///    into the file the first time they are read.
 ///  - **Linux**: libsecret's default login keyring, which is normally unlocked
 ///    automatically at session login; worth roughly file permissions against
 ///    a same-user attacker. Every key shares one JSON blob, so writes are

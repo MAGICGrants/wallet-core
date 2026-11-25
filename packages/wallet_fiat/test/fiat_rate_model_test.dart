@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -66,6 +67,10 @@ void main() {
     });
     return model;
   }
+
+  /// Where the model saves [coin]'s rate in [fiat].
+  String rateKey(String coin, String fiat) =>
+      '${SettingsKeys.fiatRate}_${coin.toLowerCase()}_${fiat.toLowerCase()}';
 
   WalletManager managerWith(List<CryptoWallet> wallets) => WalletManager(coins: () => wallets);
 
@@ -250,7 +255,7 @@ void main() {
     test('a persisted rate survives a restart', () async {
       // The reason rates are persisted: a launch with no network still shows the
       // last known price rather than blanking the balance screen.
-      await SharedPreferencesService.set<double>('${SettingsKeys.fiatRate}_btc', 61234.5);
+      await SharedPreferencesService.set<double>(rateKey('BTC', 'USD'), 61234.5);
       await FiatRateModel.saveFiatApiMode(FiatApiMode.disabled);
 
       final restarted = FiatRateModel();
@@ -267,7 +272,7 @@ void main() {
 
   group('quoteFor', () {
     test('carries the rate with the currency from the shared table', () async {
-      await SharedPreferencesService.set<double>('${SettingsKeys.fiatRate}_btc', 61234.5);
+      await SharedPreferencesService.set<double>(rateKey('BTC', 'GBP'), 61234.5);
       await SharedPreferencesService.set<String>(SettingsKeys.fiatCurrency, 'GBP');
 
       final model = pollingModel();
@@ -284,7 +289,7 @@ void main() {
     test('offers nothing while fiat is disabled, even with a rate in memory', () async {
       // rateFor keeps answering from persisted rates when disabled; quoteFor is
       // the check for anywhere a user acts on a price.
-      await SharedPreferencesService.set<double>('${SettingsKeys.fiatRate}_btc', 61234.5);
+      await SharedPreferencesService.set<double>(rateKey('BTC', 'USD'), 61234.5);
       await FiatRateModel.saveFiatApiMode(FiatApiMode.disabled);
 
       final model = FiatRateModel();
@@ -300,26 +305,23 @@ void main() {
   });
 
   group('clearPersistedRates', () {
-    test('removes every coin, so a currency change cannot show a stale price', () async {
-      // Without this, switching USD → EUR shows yesterday's dollar figure under a
-      // euro sign until the next fetch lands.
-      for (final coin in FiatRateModel.supportedCoins) {
-        await SharedPreferencesService.set<double>(
+    test('removes every coin in every currency, and the old untagged keys', () async {
+      // Without this, going back to a currency shows the rate saved the last
+      // time it was chosen, however old, until the next fetch lands.
+      final keys = [
+        for (final coin in FiatRateModel.supportedCoins) ...[
           '${SettingsKeys.fiatRate}_${coin.toLowerCase()}',
-          42,
-        );
+          for (final currency in FiatCurrency.all) rateKey(coin, currency.code),
+        ],
+      ];
+      for (final key in keys) {
+        await SharedPreferencesService.set<double>(key, 42);
       }
 
       await FiatRateModel.clearPersistedRates();
 
-      for (final coin in FiatRateModel.supportedCoins) {
-        expect(
-          await SharedPreferencesService.get<double>(
-            '${SettingsKeys.fiatRate}_${coin.toLowerCase()}',
-          ),
-          isNull,
-          reason: coin,
-        );
+      for (final key in keys) {
+        expect(await SharedPreferencesService.get<double>(key), isNull, reason: key);
       }
     });
 
@@ -413,7 +415,7 @@ void main() {
     });
 
     test('a connection change keeps the last rate on screen while it refetches', () async {
-      await SharedPreferencesService.set<double>('${SettingsKeys.fiatRate}_btc', 61234.5);
+      await SharedPreferencesService.set<double>(rateKey('BTC', 'USD'), 61234.5);
       await FiatRateModel.saveFiatApiMode(FiatApiMode.torOnly);
       final wallet = FakeFiatWallet('BTC');
       final manager = await configuredManager([wallet]);
@@ -445,6 +447,98 @@ void main() {
       expect(seen, everyElement(61234.5), reason: 'the rate went blank during the switch');
       expect(model.rateFor('BTC'), 61234.5, reason: 'a failed refetch dropped the last rate');
       expect(model.quoteFor('BTC'), isNotNull);
+    });
+  });
+
+  group('a rate is only shown in the currency it was fetched in', () {
+    tearDown(() => FiatRateModel.requestPairForTesting = null);
+
+    test('a fetch that ends after a currency change is neither shown nor saved', () async {
+      // The reported race: CAD is chosen, its fetch is still out (CAD is
+      // bridged, so it waits on USDTCAD too), the user switches to USD, the
+      // USD fetch lands first, and the CAD one lands after it.
+      final usdtCad = Completer<double>();
+      FiatRateModel.requestPairForTesting = (pair) => switch (pair) {
+        'XXBTZUSD' => Future.value(60000),
+        'USDTCAD' => usdtCad.future,
+        _ => Future.error('unexpected pair $pair'),
+      };
+      await SharedPreferencesService.set<String>(SettingsKeys.fiatCurrency, 'CAD');
+      final manager = await configuredManager([FakeFiatWallet('BTC')]);
+      addTearDown(manager.dispose);
+      final model = pollingModel();
+      await model.startService(walletManager: manager);
+      await pumpEventQueue();
+      expect(model.rateFor('BTC'), isNull, reason: 'the CAD fetch is still out');
+
+      // What the currency setting does on saving.
+      await SharedPreferencesService.set<String>(SettingsKeys.fiatCurrency, 'USD');
+      await FiatRateModel.clearPersistedRates();
+      await model.startService();
+      await pumpEventQueue();
+      expect(model.rateFor('BTC'), 60000);
+
+      usdtCad.complete(1.4);
+      await pumpEventQueue();
+
+      expect(model.rateFor('BTC'), 60000, reason: 'the CAD rate took the place of the USD one');
+      expect(model.quoteFor('BTC'), (currency: FiatCurrency.usd, rate: 60000.0));
+      expect(model.isLoading, isFalse);
+      expect(await SharedPreferencesService.get<double>(rateKey('BTC', 'USD')), 60000);
+      expect(await SharedPreferencesService.get<double>(rateKey('BTC', 'CAD')), isNull);
+    });
+
+    test('an older fetch that ends last does not replace a newer rate', () async {
+      final first = Completer<double>();
+      var calls = 0;
+      FiatRateModel.requestPairForTesting = (pair) =>
+          ++calls == 1 ? first.future : Future.value(60000);
+      final manager = await configuredManager([FakeFiatWallet('BTC')]);
+      addTearDown(manager.dispose);
+      final model = pollingModel();
+      await model.startService(walletManager: manager);
+      await pumpEventQueue();
+
+      await model.startService();
+      await pumpEventQueue();
+      expect(model.rateFor('BTC'), 60000);
+
+      first.complete(59000);
+      await pumpEventQueue();
+
+      expect(model.rateFor('BTC'), 60000);
+      expect(await SharedPreferencesService.get<double>(rateKey('BTC', 'USD')), 60000);
+    });
+
+    test('a rate saved in another currency is not read', () async {
+      await SharedPreferencesService.set<double>(rateKey('BTC', 'CAD'), 84000);
+      await FiatRateModel.saveFiatApiMode(FiatApiMode.disabled);
+      final manager = await configuredManager([FakeFiatWallet('BTC')]);
+      addTearDown(manager.dispose);
+      final model = FiatRateModel();
+      addTearDown(model.dispose);
+
+      await model.startService(walletManager: manager);
+      expect(model.rateFor('BTC'), isNull);
+
+      await SharedPreferencesService.set<String>(SettingsKeys.fiatCurrency, 'CAD');
+      await model.startService();
+      expect(model.rateFor('BTC'), 84000);
+    });
+
+    test('a rate an older build saved, with no currency, is dropped', () async {
+      final legacyKey = '${SettingsKeys.fiatRate}_btc';
+      await SharedPreferencesService.set<double>(legacyKey, 84000);
+      await FiatRateModel.saveFiatApiMode(FiatApiMode.disabled);
+      final manager = await configuredManager([FakeFiatWallet('BTC')]);
+      addTearDown(manager.dispose);
+      final model = FiatRateModel();
+      addTearDown(model.dispose);
+
+      await model.startService(walletManager: manager);
+
+      expect(model.rateFor('BTC'), isNull);
+      expect(await SharedPreferencesService.get<double>(legacyKey), isNull);
     });
   });
 
@@ -509,6 +603,128 @@ void main() {
       ]) {
         expect(() => krakenLastTradePrice(bad, 'XXMRZUSD'), throwsException, reason: '$bad');
       }
+    });
+  });
+
+  group('Trim Decimals', () {
+    tearDown(() => FiatRateModel.requestPairForTesting = null);
+
+    /// A model priced by [rates] (Kraken pair to price), started on [wallets].
+    Future<FiatRateModel> pricedModel(
+      Map<String, Future<double> Function()> rates, {
+      List<FakeFiatWallet>? wallets,
+    }) async {
+      FiatRateModel.requestPairForTesting = (pair) =>
+          rates[pair]?.call() ?? Future.error('unexpected pair $pair');
+      final manager = await configuredManager(wallets ?? [FakeFiatWallet('XMR')]);
+      addTearDown(manager.dispose);
+      final model = pollingModel();
+      await model.startService(walletManager: manager);
+      await pumpEventQueue();
+      return model;
+    }
+
+    test('defaults to below one cent, and loads what was saved', () async {
+      expect(await FiatRateModel.loadTrimDecimals(), TrimDecimals.belowOne);
+      await SharedPreferencesService.set<String>(SettingsKeys.trimDecimals, '100');
+      final model = await pricedModel({'XXMRZUSD': () async => 152.37});
+      expect(model.trimDecimals, TrimDecimals.belowHundred);
+    });
+
+    test('works the digits out from the live rate, capped at the coin', () async {
+      final model = await pricedModel({'XXMRZUSD': () async => 152.37});
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 5);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 4), 4);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12, level: TrimDecimals.belowHundred), 3);
+    });
+
+    test('setTrimDecimals saves the level and redraws', () async {
+      final model = await pricedModel({'XXMRZUSD': () async => 152.37});
+      var notified = 0;
+      model.addListener(() => notified++);
+
+      await model.setTrimDecimals(TrimDecimals.belowTen);
+
+      expect(notified, 1);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 4);
+      expect(await SharedPreferencesService.get<String>(SettingsKeys.trimDecimals), '10');
+    });
+
+    test('off, or fiat disabled, is every digit', () async {
+      final model = await pricedModel({'XXMRZUSD': () async => 152.37});
+      await model.setTrimDecimals(TrimDecimals.off);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), isNull);
+
+      await model.setTrimDecimals(TrimDecimals.belowOne);
+      await FiatRateModel.saveFiatApiMode(FiatApiMode.disabled);
+      await model.startService();
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), isNull);
+    });
+
+    test('with no price and nothing saved, every digit', () async {
+      final never = Completer<double>();
+      final model = await pricedModel({'XXMRZUSD': () => never.future});
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), isNull);
+    });
+
+    test('an accepted rate saves the digits of every level', () async {
+      await pricedModel({'XXMRZUSD': () async => 152.37});
+      final saved = SavedTrimDigits.decode(
+        await SharedPreferencesService.get<String>(SettingsKeys.trimDigits),
+      );
+      expect(saved.digitsFor('XMR', TrimDecimals.belowOne), 5);
+      expect(saved.digitsFor('XMR', TrimDecimals.belowTen), 4);
+      expect(saved.digitsFor('XMR', TrimDecimals.belowHundred), 3);
+    });
+
+    test('saved digits keep amounts trimmed while the next price loads', () async {
+      // A launch with the saved rate already gone (the user changed currency
+      // last session) and Kraken not answering yet.
+      await SharedPreferencesService.set<String>(
+        SettingsKeys.trimDigits,
+        SavedTrimDigits.empty.withRate('XMR', 152.37, FiatCurrency.usd).encode(),
+      );
+      final never = Completer<double>();
+      final model = await pricedModel({'XXMRZUSD': () => never.future});
+
+      expect(model.rateFor('XMR'), isNull);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 5);
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12, level: TrimDecimals.belowTen), 4);
+    });
+
+    test('a currency change wipes the rates but not the saved digits', () async {
+      final jpy = Completer<double>();
+      final model = await pricedModel({
+        'XXMRZUSD': () async => 152.37,
+        'USDTJPY': () => jpy.future,
+      });
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 5);
+
+      // What the Fiat API sheet does on saving.
+      await SharedPreferencesService.set<String>(SettingsKeys.fiatCurrency, 'JPY');
+      await FiatRateModel.clearPersistedRates();
+      await model.startService();
+      await pumpEventQueue();
+
+      expect(model.rateFor('XMR'), isNull, reason: 'the yen rate is still loading');
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 5);
+
+      jpy.complete(154);
+      await pumpEventQueue();
+      // ¥23,465 a coin: one yen is about two thirds of a cent, the same digits.
+      expect(model.trimDigitsFor('XMR', baseUnitDecimals: 12), 5);
+      final saved = SavedTrimDigits.decode(
+        await SharedPreferencesService.get<String>(SettingsKeys.trimDigits),
+      );
+      expect(saved.digitsFor('XMR', TrimDecimals.belowOne), 5);
+    });
+
+    test('a testnet coin trims at its mainnet price', () async {
+      final model = await pricedModel(
+        {'XXBTZUSD': () async => 91240},
+        wallets: [FakeFiatWallet('TBTC', fiatBase: 'BTC')],
+      );
+      expect(model.trimDigitsFor('TBTC', baseUnitDecimals: 8), 7);
     });
   });
 }

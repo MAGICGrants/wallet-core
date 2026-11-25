@@ -10,6 +10,7 @@ import '../design/icon_circle_button.dart';
 import '../design/seed_grid.dart';
 import '../design/section_header.dart';
 import '../design/step_dots.dart';
+import '../l10n/ui_strings.dart';
 import 'seed_word_slot.dart';
 
 /// One selectable seed format in the restore screen. Drives how many word slots
@@ -286,6 +287,7 @@ class _RestoreWalletViewState extends State<RestoreWalletView> {
     return SeedWordSlot(
       key: ValueKey(i),
       index: i + 1,
+      count: _count,
       controller: _controllers[i],
       focusNode: _nodes[i],
       validate: _valid,
@@ -440,12 +442,23 @@ class _RestoreWalletViewState extends State<RestoreWalletView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.onScan != null) ...[
-                IconCircleButton(icon: Icons.qr_code_scanner_rounded, onPressed: widget.onScan!),
+                IconCircleButton(
+                  icon: Icons.qr_code_scanner_rounded,
+                  onPressed: widget.onScan!,
+                  semanticLabel: uiStringsOf(context)?.a11yScanQrCode,
+                ),
                 const SizedBox(width: 6),
               ],
+              // The tooltip shows on hover; the button itself carries the name,
+              // since the tooltip's lands on a node of its own.
               Tooltip(
                 message: labels.paste,
-                child: IconCircleButton(icon: Icons.content_paste_rounded, onPressed: _paste),
+                excludeFromSemantics: true,
+                child: IconCircleButton(
+                  icon: Icons.content_paste_rounded,
+                  onPressed: _paste,
+                  semanticLabel: labels.paste,
+                ),
               ),
             ],
           ),
@@ -524,6 +537,8 @@ class _SeedLengthSelector extends StatelessWidget {
             Tappable(
               behavior: HitTestBehavior.opaque,
               onTap: () => onSelect(n),
+              selected: n == selected,
+              focusRadius: BorderRadius.circular(7),
               child: AnimatedContainer(
                 duration: BrandMotion.transition,
                 curve: Curves.easeInOut,
@@ -567,18 +582,42 @@ class _BadWordNotice extends StatelessWidget {
         Icon(Icons.error_outline, size: 16, color: BrandColors.error),
         const SizedBox(width: BrandSpacing.sm),
         Expanded(
-          child: Text.rich(
-            TextSpan(
-              style: BrandText.caption.copyWith(color: BrandColors.error),
-              children: [
-                TextSpan(text: message),
-                if (suggestion != null)
-                  TextSpan(
-                    text: ' ${suggestionText(suggestion!)}',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+          // Two parts to screen readers over the one paragraph: the error is
+          // spoken as it appears, while the suggestion, a likely seed word, is
+          // read only when the user moves to it, never announced.
+          child: Stack(
+            // The paragraph keeps the constraints it had alone.
+            fit: StackFit.passthrough,
+            children: [
+              Semantics(
+                container: true,
+                liveRegion: true,
+                label: message,
+                child: ExcludeSemantics(
+                  child: Text.rich(
+                    TextSpan(
+                      style: BrandText.caption.copyWith(color: BrandColors.error),
+                      children: [
+                        TextSpan(text: message),
+                        if (suggestion != null)
+                          TextSpan(
+                            text: ' ${suggestionText(suggestion!)}',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                      ],
+                    ),
                   ),
-              ],
-            ),
+                ),
+              ),
+              if (suggestion != null)
+                Positioned.fill(
+                  child: Semantics(
+                    container: true,
+                    label: suggestionText(suggestion!),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+            ],
           ),
         ),
       ],

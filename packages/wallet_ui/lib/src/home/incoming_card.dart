@@ -26,8 +26,9 @@ class IncomingItem {
   });
 }
 
-/// Payments that have arrived but cannot be spent yet, each with a progress
-/// bar toward its unlock. The home leaves the card out when there are none.
+/// Payments that have arrived, and change from a send, that cannot be spent
+/// yet, each with a progress bar toward its unlock. The home leaves the card
+/// out when there are none.
 class IncomingCard extends StatelessWidget {
   final String title;
   final List<IncomingItem> items;
@@ -56,37 +57,40 @@ class _IncomingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 8,
-      children: [
-        Row(
-          children: [
-            item.icon,
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: 2,
-                children: [
-                  Text(
-                    item.title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: BrandColors.ink,
+    // One payment reads as one item: what, how far along, how much.
+    return MergeSemantics(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [
+          Row(
+            children: [
+              item.icon,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(
+                      item.title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: BrandColors.ink,
+                      ),
                     ),
-                  ),
-                  Text(item.detail, style: BrandText.caption.copyWith(fontSize: 13)),
-                ],
+                    Text(item.detail, style: BrandText.caption.copyWith(fontSize: 13)),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Text(item.amount, style: BrandText.amount.copyWith(color: BrandColors.success)),
-          ],
-        ),
-        HomeProgressBar(value: item.progress, color: BrandColors.warning),
-      ],
+              const SizedBox(width: 8),
+              Text(item.amount, style: BrandText.amount.copyWith(color: BrandColors.success)),
+            ],
+          ),
+          HomeProgressBar(value: item.progress, color: BrandColors.warning),
+        ],
+      ),
     );
   }
 }

@@ -11,6 +11,7 @@ import '../design/toast.dart';
 import '../design/brand_button.dart';
 import '../design/brand_card.dart';
 import '../design/sheet.dart';
+import '../l10n/ui_strings.dart';
 import 'coin_mark.dart';
 import 'format.dart';
 
@@ -89,17 +90,29 @@ class TxDetailsSheetLabels {
 /// status banner is shown at the top for failed/reverted/unknown txs.
 ///
 /// Presentational: the app injects its translated [labels]; no app l10n here.
+///
+/// [addressLabel] names the wallet's own addresses an incoming transaction
+/// arrived at, from the user's address labels; [onOpenAddress], when given,
+/// makes a label tappable: the sheet closes and the app opens that address.
 void showTxDetailsSheet({
   required BuildContext context,
   required CryptoWallet wallet,
   required TxDetails tx,
   required TxDetailsSheetLabels labels,
+  String? Function(String address)? addressLabel,
+  void Function(String address)? onOpenAddress,
 }) {
   showBrandSheet<void>(
     context: context,
     isScrollControlled: true,
     maxWidth: 460,
-    builder: (context) => _TxDetailsSheet(wallet: wallet, tx: tx, labels: labels),
+    builder: (context) => _TxDetailsSheet(
+      wallet: wallet,
+      tx: tx,
+      labels: labels,
+      addressLabel: addressLabel,
+      onOpenAddress: onOpenAddress,
+    ),
   );
 }
 
@@ -107,8 +120,16 @@ class _TxDetailsSheet extends StatelessWidget {
   final CryptoWallet wallet;
   final TxDetails tx;
   final TxDetailsSheetLabels labels;
+  final String? Function(String address)? addressLabel;
+  final void Function(String address)? onOpenAddress;
 
-  const _TxDetailsSheet({required this.wallet, required this.tx, required this.labels});
+  const _TxDetailsSheet({
+    required this.wallet,
+    required this.tx,
+    required this.labels,
+    this.addressLabel,
+    this.onOpenAddress,
+  });
 
   static TextStyle get _labelStyle =>
       TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: BrandColors.ink);
@@ -122,11 +143,10 @@ class _TxDetailsSheet extends StatelessWidget {
     showCopyToast(context, labels.copied);
   }
 
-  String _fmtAmount(BigInt units) => formatAmount(
-    displayAmount(units, wallet.baseUnitDecimals),
-    wallet.decimals,
-    symbol: wallet.coinSymbol,
-  );
+  /// Every digit: transaction details are the record of what moved, so they
+  /// never trim or round.
+  String _fmtAmount(BigInt units) =>
+      formatExactAmount(units, wallet.baseUnitDecimals, symbol: wallet.coinSymbol);
 
   /// Status-banner text, or null when there is nothing to warn about. Falls
   /// back to English when the app has not supplied a string: see
@@ -146,9 +166,9 @@ class _TxDetailsSheet extends StatelessWidget {
     final incoming = tx.direction == txDirectionIncoming;
     final statusBanner = _statusBanner;
     final date = DateTime.fromMillisecondsSinceEpoch(tx.timestamp * 1000);
-    final feeText = formatAmount(
-      displayAmount(tx.feeBaseUnits, wallet.feeBaseUnitDecimals),
-      wallet.feeDecimals,
+    final feeText = formatExactAmount(
+      tx.feeBaseUnits,
+      wallet.feeBaseUnitDecimals,
       symbol: wallet.feeCoinSymbol,
     );
     // A mempool tx has no block/timestamp; shown raw they read as 0 / 31 Dec 1969.
@@ -158,6 +178,8 @@ class _TxDetailsSheet extends StatelessWidget {
     final dateText = tx.timestamp <= 0
         ? unconfirmed
         : '${DateFormat('HH:mm').format(date)} · ${DateFormat('d MMM yyyy').format(date)}';
+    // Read without the dot.
+    final dateSpoken = dateText.replaceAll(' · ', ', ');
 
     final recipients = tx.recipients.where((r) => !r.isChange).toList();
     final change = tx.recipients.where((r) => r.isChange).toList();
@@ -172,7 +194,7 @@ class _TxDetailsSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!desktop) const SheetHandle(),
-            _header(incoming),
+            _header(context, incoming),
             if (statusBanner != null) ...[const SizedBox(height: 14), _banner(statusBanner)],
             const SizedBox(height: 18),
             Flexible(
@@ -182,7 +204,7 @@ class _TxDetailsSheet extends StatelessWidget {
                   // The fee is only paid by the sender; received txs don't show it.
                   if (!incoming) _row(context, labels.networkFee, feeText),
                   _row(context, labels.hash, shortenMiddle(tx.hash), copyText: tx.hash),
-                  _row(context, labels.timeAndDate, dateText, mono: false),
+                  _row(context, labels.timeAndDate, dateText, mono: false, spoken: dateSpoken),
                   _row(context, labels.confirmationHeight, heightText),
                   _row(context, labels.confirmations, '${tx.confirmations}'),
                   if (tx.key.isNotEmpty)
@@ -197,6 +219,7 @@ class _TxDetailsSheet extends StatelessWidget {
                       context,
                       incoming ? (labels.receivedAt ?? labels.recipients) : labels.recipients,
                       recipients,
+                      ownAddresses: incoming,
                     ),
                   if (change.isNotEmpty) _addressList(context, labels.changeRecipient, change),
                 ]),
@@ -221,36 +244,40 @@ class _TxDetailsSheet extends StatelessWidget {
   /// A reverted transaction is not one more attribute of a successful one:
   /// everything below reads as a receipt, so the warning leads.
   Widget _banner(String text) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: BrandColors.errorBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: BrandColors.error.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.warning_rounded, size: 18, color: BrandColors.error),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                height: 1.35,
-                color: BrandColors.error,
+    // One node, so the warning reads whole before the receipt below it.
+    return Semantics(
+      container: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: BrandColors.errorBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: BrandColors.error.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.warning_rounded, size: 18, color: BrandColors.error),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  height: 1.35,
+                  color: BrandColors.error,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _header(bool incoming) {
+  Widget _header(BuildContext context, bool incoming) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -288,11 +315,21 @@ class _TxDetailsSheet extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(labels.title, style: BrandText.sheetTitle),
+              Semantics(
+                header: true,
+                namesRoute: true,
+                child: Text(labels.title, style: BrandText.sheetTitle),
+              ),
               const SizedBox(height: 3),
-              Text(
-                '${incoming ? labels.received : labels.sent} · ${labels.copyHint}',
-                style: BrandText.caption.copyWith(fontSize: 12.5, color: BrandColors.inkMuted),
+              // Its own node, so the sheet's heading stays the title alone; read
+              // without the dot.
+              Semantics(
+                container: true,
+                child: Text(
+                  '${incoming ? labels.received : labels.sent} · ${labels.copyHint}',
+                  semanticsLabel: '${incoming ? labels.received : labels.sent}, ${labels.copyHint}',
+                  style: BrandText.caption.copyWith(fontSize: 12.5, color: BrandColors.inkMuted),
+                ),
               ),
             ],
           ),
@@ -322,19 +359,28 @@ class _TxDetailsSheet extends StatelessWidget {
     bool mono = true,
     bool bold = false,
     String? copyText,
+    String? spoken,
   }) {
+    // One button named for what it copies ("Copy Hash"), then the value as
+    // shown; the label's own text would only repeat the name.
+    final copyLabel = uiStringsOf(context)?.a11yCopyValue(label);
     return Tappable(
       behavior: HitTestBehavior.opaque,
       onTap: () => _copy(context, copyText ?? value),
+      semanticLabel: copyLabel,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 14),
         child: Row(
           children: [
-            Text(label, style: _labelStyle),
+            ExcludeSemantics(
+              excluding: copyLabel != null,
+              child: Text(label, style: _labelStyle),
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
                 value,
+                semanticsLabel: spoken,
                 textAlign: TextAlign.end,
                 style: mono
                     ? _valueStyle.copyWith(
@@ -355,10 +401,12 @@ class _TxDetailsSheet extends StatelessWidget {
   Widget _copyIcon(
     BuildContext context,
     String text, {
+    required String? semanticLabel,
     EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
   }) => Tappable(
     behavior: HitTestBehavior.opaque,
     onTap: () => _copy(context, text),
+    semanticLabel: semanticLabel,
     child: Padding(
       padding: padding,
       child: Icon(Icons.copy_outlined, size: 15, color: BrandColors.inkFaint),
@@ -366,26 +414,58 @@ class _TxDetailsSheet extends StatelessWidget {
   );
 
   /// gets the same line, rather than an address-only row with no amount.
-  Widget _addressList(BuildContext context, String label, List<TxRecipient> entries) {
+  ///
+  /// [ownAddresses]: the entries are the wallet's own (an incoming
+  /// transaction's), so a label the user gave one is shown above it.
+  Widget _addressList(
+    BuildContext context,
+    String label,
+    List<TxRecipient> entries, {
+    bool ownAddresses = false,
+  }) {
+    final strings = uiStringsOf(context);
+    final copyAddress = strings?.a11yCopyValue(strings.address);
+    final copyAmount = strings?.a11yCopyValue(labels.amount);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(label, style: _labelStyle),
-              const Spacer(),
-              Text('${entries.length}', style: _mutedMono),
-            ],
+          // The list's heading, read with its count.
+          MergeSemantics(
+            child: Semantics(
+              header: true,
+              child: Row(
+                children: [
+                  Text(label, style: _labelStyle),
+                  const Spacer(),
+                  Text('${entries.length}', style: _mutedMono),
+                ],
+              ),
+            ),
           ),
-          for (final r in entries)
+          for (final r in entries) ...[
+            if (ownAddresses ? addressLabel?.call(r.address) : null case final name?)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: _addressLabelChip(context, name, r.address),
+              ),
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Row(
                 children: [
-                  Text(shortenMiddle(r.address, head: 6, tail: 4), style: _mutedMono),
-                  _copyIcon(context, r.address),
+                  Text(
+                    shortenMiddle(r.address, head: 6, tail: 4),
+                    // Its two ends, without the ellipsis between them.
+                    semanticsLabel: r.address.length <= 11 || strings == null
+                        ? null
+                        : strings.a11yAddressEnds(
+                            r.address.substring(0, 6),
+                            r.address.substring(r.address.length - 4),
+                          ),
+                    style: _mutedMono,
+                  ),
+                  _copyIcon(context, r.address, semanticLabel: copyAddress),
                   // Laid out like [_row]'s value: all the spare width, the text at
                   // its end, then a 10px gap and the icon flush right, so the
                   // amount lines up with the column above. A Flexible address
@@ -401,12 +481,55 @@ class _TxDetailsSheet extends StatelessWidget {
                   _copyIcon(
                     context,
                     _fmtAmount(r.amountBaseUnits),
+                    semanticLabel: copyAmount,
                     padding: const EdgeInsets.only(left: 10, top: 6, bottom: 6),
                   ),
                 ],
               ),
             ),
+          ],
         ],
+      ),
+    );
+  }
+
+  /// The label of one of the wallet's own addresses, as a tag chip; tappable
+  /// when the app can open the address.
+  Widget _addressLabelChip(BuildContext context, String name, String address) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(color: BrandColors.surfaceAccent, borderRadius: BrandRadii.rPill),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.sell_outlined, size: 13, color: BrandColors.primaryDeep),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: BrandColors.ink),
+            ),
+          ),
+          if (onOpenAddress != null) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 15, color: BrandColors.inkMuted),
+          ],
+        ],
+      ),
+    );
+    final open = onOpenAddress;
+    if (open == null) return Align(alignment: Alignment.centerLeft, child: chip);
+    return Align(
+      alignment: Alignment.centerLeft,
+      // A button to screen readers and the keyboard (Tappable).
+      child: Tappable(
+        onTap: () {
+          Navigator.pop(context);
+          open(address);
+        },
+        child: chip,
       ),
     );
   }

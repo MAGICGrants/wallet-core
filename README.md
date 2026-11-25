@@ -50,7 +50,7 @@ an order of magnitude. `Redact` in `wallet_infra` is the toolkit.
 
 ## Getting started
 
-Requires Flutter 3.47.7. The packages form a Dart pub workspace, so one command
+Requires Flutter 3.47.9. The packages form a Dart pub workspace, so one command
 at the root resolves all of them.
 
 ```bash
@@ -144,11 +144,13 @@ Copy the values from the root `pubspec.yaml`.
 
 Everything is pinned to a commit to make builds verifiable.
 
-- `monero_c`: `magicgrants/monero_c@757bf8e`, a fork carrying
+- `monero_c`: `magicgrants/monero_c@97e2331`, a Monero-only fork with OpenSSL
+  3.5, no libunbound, polyseed 3 and lwsf, carrying
   `Wallet_estimateTransactionFee`.
-- `tor_ffi_plugin`: `MAGICGrants/tor@72e455f`, a fork of `cypherstack/tor`
-  `native-0.2.0` whose build hook sets a fixed `SOURCE_DATE_EPOCH` and remaps
-  the cargo home, so the Tor library is reproducible.
+- `tor_ffi_plugin`: `MAGICGrants/tor@609b2dd`, a fork of `cypherstack/tor`
+  `native-0.2.0` that uses rustls (ring) instead of OpenSSL, and whose build
+  hook sets a fixed `SOURCE_DATE_EPOCH` and remaps the cargo home, so the Tor
+  library is reproducible.
 - `bip39`: `cypherstack/stack-bip39@0cd6d54`, which fixes an entropy bug
   upstream still has.
 

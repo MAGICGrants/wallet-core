@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'brand.dart';
+import '../l10n/ui_strings.dart';
 
 /// - filled: primary fill, white label (primary CTA)
 /// - outline: transparent, accent border + label
@@ -132,7 +133,13 @@ class BrandButton extends StatelessWidget {
         ? SizedBox(
             height: fontSize,
             width: fontSize,
-            child: CircularProgressIndicator(strokeWidth: 2.2, color: fg),
+            // Still named while it loads, and says it is loading.
+            child: CircularProgressIndicator(
+              strokeWidth: 2.2,
+              color: fg,
+              semanticsLabel: label,
+              semanticsValue: uiStringsOf(context)?.a11yLoading,
+            ),
           )
         : Row(
             mainAxisSize: MainAxisSize.min,
@@ -151,16 +158,21 @@ class BrandButton extends StatelessWidget {
           );
 
     final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius), side: side);
-    final button = Material(
-      color: bg,
-      shape: shape,
-      child: InkWell(
-        mouseCursor: WidgetStateMouseCursor.clickable,
-        onTap: interactive ? onPressed : null,
-        customBorder: shape,
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: vPad, horizontal: hPad),
-          child: Center(widthFactor: expand ? null : 1, child: child),
+    final button = Semantics(
+      container: true,
+      button: true,
+      enabled: interactive,
+      child: Material(
+        color: bg,
+        shape: shape,
+        child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
+          onTap: interactive ? onPressed : null,
+          customBorder: shape,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: vPad, horizontal: hPad),
+            child: Center(widthFactor: expand ? null : 1, child: child),
+          ),
         ),
       ),
     );
